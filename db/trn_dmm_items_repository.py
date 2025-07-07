@@ -2,6 +2,9 @@ from db.storage import upload_image_to_storage
 from db.supabase_client import supabase
 import logging
 
+from openai_api.content_generator import generate_content
+
+
 # ログ設定（ファイル + コンソール出力）
 logging.basicConfig(
     level=logging.INFO,
@@ -24,8 +27,6 @@ def insert_dmm_item(item: dict):
         logging.info(f"[SKIP] 既に登録済: {item.get('title')} : {item.get('URL')}")
         return
 
-    review = item.get("review", {})
-    image_url = item.get("imageURL", {})
     sample_images = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
     uploaded_paths = []
 
@@ -34,33 +35,40 @@ def insert_dmm_item(item: dict):
         if storage_path:
             uploaded_paths.append(storage_path)
 
-    prices = item.get("prices", {})
     iteminfo = item.get("iteminfo", {})
 
     genres_raw = iteminfo.get("genre", [])
     genre_names = [g["name"] for g in genres_raw]
     genre_ids = [g["id"] for g in genres_raw]
 
+    # --- OpenAIで文章生成 ---
+    ai_content = generate_content(item)
+
     data = {
         "content_id": content_id,
         "product_id": item.get("product_id"),
         "title": item.get("title"),
         "volume": item.get("volume"),
-        "review_count": review.get("count"),
-        "review_average": float(review.get("average", 0)),
+        "review_count": item.get("review", {}).get("count"),
+        "review_average": item.get("review", {}).get("average"),
         "item_url": item.get("URL"),
         "affiliate_url": item.get("affiliateURL"),
-        "image_list_url": image_url.get("list"),
-        "image_large_url": image_url.get("large"),
-        "sample_images": uploaded_paths,
-        "price": int(prices.get("price", "0").replace(",", "")),
-        "list_price": int(prices.get("list_price", "0").replace(",", "")),
+        "image_list_url": item.get("imageURL", {}).get("list"),
+        "image_large_url": item.get("imageURL", {}).get("large"),
+        "sample_images": item.get("sampleImageURL", {}).get("sample_l", {}).get("image", []),
+        "price": item.get("prices", {}).get("price"),
+        "list_price": item.get("prices", {}).get("list_price"),
         "release_date": item.get("date"),
         "genres": genre_names,
         "genre_ids": genre_ids,
-        "series": iteminfo.get("series", [{}])[0].get("name"),
-        "maker": iteminfo.get("maker", [{}])[0].get("name"),
-        "raw_json": item
+        "series": item.get("iteminfo", {}).get("series", [{}])[0].get("name"),
+        "maker": item.get("iteminfo", {}).get("maker", [{}])[0].get("name"),
+        "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),
+        "tachiyomi_affiliate_url": item.get("tachiyomi", {}).get("affiliateURL"),
+        "auto_comment": ai_content["auto_comment"],
+        "auto_summary": ai_content["auto_summary"],
+        "auto_point": ai_content["auto_point"],
+        "raw_json": item,
     }
 
     supabase.table("trn_dmm_items").insert(data).execute()

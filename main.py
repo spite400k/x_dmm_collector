@@ -5,10 +5,11 @@ def main():
     site = "FANZA"
     service = "doujin"
     floor = "digital_doujin"
-    items = fetch_items(site=site, service=service, floor=floor, hits=10)
+    items = fetch_items(site=site, service=service, floor=floor, offset=5, hits=10)
 
     for item in items:
-        insert_dmm_item(item, site,service, floor)
+        insert_dmm_item(item)
+
 
 if __name__ == "__main__":
     main()

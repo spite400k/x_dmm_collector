@@ -33,7 +33,7 @@ def generate_content(item: dict) -> dict:
     ### 出力形式（例）:
     ```json
     {{
-        "auto_comment": "60〜100文字の感想文",
+        "auto_comment": "10～20文字の一言感想",
         "auto_summary": "50〜80文字の概要",
         "auto_point": "30〜50文字の買いたくなるポイント"
     }}

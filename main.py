@@ -1,5 +1,9 @@
 from dmm.dmm_api import fetch_items
 from db.trn_dmm_items_repository import insert_dmm_item
+import os
+
+# ログ用ディレクトリを作成（存在しなければ）
+os.makedirs("logs", exist_ok=True)  
 
 def main():
     site = "FANZA"

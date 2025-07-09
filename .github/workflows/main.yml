@@ -32,4 +32,4 @@ jobs:
 
       - name: Run DMM collector
         run: |
-          python dmm_collector/main.py
+          python main.py

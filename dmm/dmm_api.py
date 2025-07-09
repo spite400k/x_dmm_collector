@@ -12,6 +12,9 @@ DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
 API_URL = "https://api.dmm.com/affiliate/v3/ItemList"
 
+# ログ用ディレクトリを作成（存在しなければ）
+os.makedirs("logs", exist_ok=True)  
+
 # ログ設定（ファイル + コンソール出力）
 logging.basicConfig(
     level=logging.INFO,

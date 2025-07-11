@@ -25,34 +25,34 @@ def sync_floor_master():
     }
 
     response = requests.get(url, params=params)
-    print("[DEBUG] API raw response:")
-    print(response.text)  # ← ここ！
     response.raise_for_status()
-
     result = response.json()
-    if response.status_code != 200:
-        logging.error("[FLOOR] APIエラー: %s", result.get("result", {}).get("message"))
-        raise Exception("DMM API Error: " + result.get("result", {}).get("message"))
 
-    floors = result["result"].get("floor", [])
+    sites = result.get("result", {}).get("site", [])
+    floors = []
+
+    for site in sites:
+        site_name = site.get("name")
+        for service in site.get("service", []):
+            service_name = service.get("name")
+            for floor in service.get("floor", []):
+                floors.append({
+                    "floor_id": int(floor.get("id")),
+                    "name": floor.get("name"),
+                    "code": floor.get("code"),
+                    "site_name": site_name,
+                    "service_name": service_name
+                })
+
     logging.info("[FLOOR] フロア件数: %d", len(floors))
+    supabase.table("mst_floor").upsert(floors, on_conflict="floor_id").execute()
 
-    data = []
-    for f in floors:
-        data.append({
-            "floor_id": f["floor_id"],
-            "name": f["name"],
-            "site_name": f["site_name"],
-            "service_name": f["service_name"]
-        })
-
-    supabase.table("mst_floor").upsert(data, on_conflict="floor_id").execute()
 
 # ---------------------------------------------
 def sync_genre_master(floor_id):
     logging.info("[GENRE] ジャンル一覧の取得開始（floor: %s）", floor_id)
 
-    url = "https://api.dmm.com/affiliate/v3/genrelist"
+    url = "https://api.dmm.com/affiliate/v3/GenreSearch"
     params = {
         "api_id": DMM_API_ID,
         "affiliate_id": DMM_AFFILIATE_ID,
@@ -81,7 +81,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     # 1. フロアマスタ登録
-    sync_floor_master()
+    # sync_floor_master()
 
     # 2. 主要 floor に対してジャンルマスタも登録
     floors = supabase.table("mst_floor").select("floor_id").execute().data

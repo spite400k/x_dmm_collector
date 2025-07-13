@@ -115,45 +115,55 @@ def sync_floor_master():
 
 # ---------------------------------------------
 def sync_genre_master(floor_id):
-    logging.info("[GENRE] ジャンル一覧の取得開始（floor_id: %s）", floor_id)
+    logging.info("[GENRE] ジャンル一覧の取得開始（floor: %s）", floor_id)
 
-    try:
-        res = requests.get(
-            "https://api.dmm.com/affiliate/v3/GenreSearch",
-            params={
-                "api_id": DMM_API_ID,
-                "affiliate_id": DMM_AFFILIATE_ID,
-                "floor_id": floor_id,
-                "output": "json"
-            },
-            timeout=10
-        )
-        res.raise_for_status()
-        result = res.json()
-    except requests.exceptions.RequestException as e:
-        logging.error("[GENRE] APIリクエスト失敗（floor_id=%s）: %s", floor_id, str(e))
-        return
+    url = "https://api.dmm.com/affiliate/v3/GenreSearch"
+    limit = 100
+    offset = 1
+    all_genres = []
 
-    genres = result.get("result", {}).get("genre", [])
-    if not genres:
-        logging.warning("[GENRE] ジャンルが空です（floor_id=%s）", floor_id)
-        return
-
-    data = []
-    for g in genres:
-        data.append({
-            "genre_id": int(g["genre_id"]),
-            "genres_name": g["name"],
-            "genre_ruby": g["ruby"],
+    while True:
+        params = {
+            "api_id": DMM_API_ID,
+            "affiliate_id": DMM_AFFILIATE_ID,
             "floor_id": floor_id,
-        })
+            "output": "json",
+            "hits": limit,
+            "offset": offset
+        }
 
-    logging.info("[GENRE] ジャンル件数: %d", len(data))
+        response = requests.get(url, params=params)
+        response.raise_for_status()
 
-    try:
-        supabase.table("mst_genre").upsert(data, on_conflict="genre_id").execute()
-    except Exception as e:
-        logging.error("[GENRE] mst_genre upsert失敗: %s", str(e))
+        data = response.json()
+        genres = data.get("result", {}).get("genre", [])
+
+        if not genres:
+            break
+
+        for g in genres:
+            all_genres.append({
+                "genre_id": int(g["genre_id"]),
+                "genres_name": g["name"],
+                "genre_ruby": g["ruby"],
+                "floor_id": floor_id,
+            })
+
+        logging.info("[GENRE] floor_id=%s offset=%s: %d件取得", floor_id, offset, len(genres))
+
+        if len(genres) < limit:
+            break
+
+        offset += limit  # 次のページへ
+
+    logging.info("[GENRE] floor_id=%s ジャンル件数 合計: %d", floor_id, len(all_genres))
+
+    if all_genres:
+        try:
+            supabase.table("mst_genre").upsert(all_genres, on_conflict="genre_id").execute()
+        except Exception as e:
+            logging.error("[GENRE] mst_genre upsert失敗: %s", str(e))
+
 
 # ---------------------------------------------
 def main():

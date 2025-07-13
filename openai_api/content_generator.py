@@ -4,15 +4,43 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
-import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
-# ログ用ディレクトリを作成（存在しなければ）
+# ログ設定
 os.makedirs("logs", exist_ok=True)
+logging.basicConfig(filename="logs/scraper.log", level=logging.INFO)
 
+# 環境変数読み込み
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+def get_page_source_with_age_verification(url: str) -> str:
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+    try:
+        driver.get(url)
+        driver.implicitly_wait(5)
+
+        # 年齢確認「はい」ボタンが存在する場合はクリック
+        try:
+            yes_button = driver.find_element(By.LINK_TEXT, "はい")
+            yes_button.click()
+            driver.implicitly_wait(5)
+        except Exception:
+            pass
+
+        return driver.page_source
+    finally:
+        driver.quit()
 
 def get_dmm_comment_text(url: str) -> str:
     headers = {
@@ -30,41 +58,37 @@ def get_dmm_comment_text(url: str) -> str:
     else:
         return ""
 
-
 def scrape_product_details(url: str) -> dict:
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+        html = get_page_source_with_age_verification(url)
+        soup = BeautifulSoup(html, "html.parser")
 
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        print(soup.prettify())
-        # 作品概要やコメントの抽出（DMMのHTML構造に応じて調整）
-        summary_el = soup.select_one(".summary__txt")  # 概要
-        
-        comment_el = soup.select_one(".trailer__txt")  # コメント（存在すれば）
+        summary_el = soup.select_one(".summary__txt")
+        comment_el = soup.select_one(".trailer__txt")
+        fallback_el = soup.select_one("div.mg-b20.lh4")
 
         summary = summary_el.get_text(strip=True) if summary_el else ""
         comment = comment_el.get_text(strip=True) if comment_el else ""
 
-        if not summary:
-            # コメントがない場合は、別の場所から取得する
-            # ▼ 商品情報エリアからあらすじを抽出（DMM動画用）
-            # 特定のdiv構造： <div class="mg-b20 lh4"><p>作品説明</p></div>
-            comment_div = get_dmm_comment_text(url)
-            if comment_div:
-                summary = comment_div
+        if not summary and fallback_el:
+            summary = fallback_el.get_text(separator="\n").strip()
+            
+            if not summary:
+                # コメントがない場合は、別の場所から取得する
+                # ▼ 商品情報エリアからあらすじを抽出（DMM動画用）
+                # 特定のdiv構造： <div class="mg-b20 lh4"><p>作品説明</p></div>
+                comment_div = get_dmm_comment_text(url)
+                if comment_div:
+                    summary = comment_div
 
-        return {
-            "html_summary": summary,
-            "html_comment": comment
-        }
+
+        return summary
 
     except Exception as e:
         logging.warning(f"[Scrape Error] URL: {url} → {e}")
-        return {"html_summary": "", "html_comment": ""}
-    
+        return ""
+
+
 def generate_content(item: dict) -> dict:
     title = item.get("title", "")
     genres_raw = item.get("iteminfo", {}).get("genre", [])
@@ -74,12 +98,10 @@ def generate_content(item: dict) -> dict:
     maker = item.get("iteminfo", {}).get("maker", [{}])[0].get("name", "")
     series = item.get("iteminfo", {}).get("series", [{}])[0].get("name", "")
     release_date = item.get("date", "")
-    url = item.get("URL", "")
 
-    # 追加スクレイピング情報
-    extra_info = scrape_product_details(url)
-    html_summary = extra_info["html_summary"]
-    html_comment = extra_info["html_comment"]
+    # HTMLからあらすじを取得
+    url = item.get("URL", "")
+    html_summary = scrape_product_details(url)
 
     prompt = f"""
     以下の情報をもとに、同人作品の紹介文を生成してください。
@@ -107,7 +129,8 @@ def generate_content(item: dict) -> dict:
     テンプレのままではなく、内容を埋めて出力してください。
     """
 
-    logging.info("[OpenAI] Generating JSON content for: %s", title)
+    logging.info("[OpenAI] Generating content for: %s", title)
+    logging.info("[OpenAI] Prompt:\n%s", prompt)
 
     try:
         response = client.chat.completions.create(
@@ -125,9 +148,8 @@ def generate_content(item: dict) -> dict:
             json_str = content.split("```")[1]
             if json_str.startswith("json"):
                 json_str = json_str[4:].strip()
-        
-        result = json.loads(json_str)
 
+        result = json.loads(json_str)
         return {
             "auto_comment": result.get("auto_comment", ""),
             "auto_summary": result.get("auto_summary", ""),

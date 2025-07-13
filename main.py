@@ -21,11 +21,11 @@ def main():
 
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        {"service": "doujin", "floor": "digital_doujin"},
-        {"service": "ebook", "floor": "comic"},
-        {"service": "ebook", "floor": "photo"},
-        {"service": "videoa", "floor": "videoa"},
-        # 必要に応じて追加...
+        {"service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        {"service": "digital", "floor": "videoc"}, # 動画 素人
+        {"service": "digital", "floor": "nikkatsu"}, # 写真
+        {"service": "digital", "floor": "videoa"}, # ビデオ
+        {"service": "digital", "floor": "anime"}, # アニメ
     ]
 
     for target in targets:

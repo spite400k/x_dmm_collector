@@ -4,6 +4,7 @@ import json
 from openai import OpenAI
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -128,6 +129,7 @@ def generate_content(item: dict) -> dict:
     }}
     テンプレのままではなく、内容を埋めて出力してください。
     次の文言は使用禁止「一冊」「作品」「一作」「話」「！」
+    「の末路…」で終えるようにしてください。
     """
 
     logging.info("[OpenAI] Generating content for: %s", title)

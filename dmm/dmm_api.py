@@ -37,6 +37,42 @@ def fetch_items(site, service, floor, hits=10, offset=1, sort="rank"):
         "sort": sort,
         "output": "json"
     }
+    logging.info("DMM APIへリクエスト送信: %s", API_URL)
+    logging.info("送信パラメータ: %s", params)
+
+    try:
+        response = requests.get(API_URL, params=params)
+        response.raise_for_status()
+    except requests.HTTPError as e:
+        logging.error("HTTPエラー: %s", e)
+        raise
+
+    result = response.json()
+
+    # レスポンス全体をログ出力
+    formatted_response = json.dumps(result, ensure_ascii=False, indent=2)
+    logging.info("APIレスポンス全文:\n%s", formatted_response)
+
+    if result["result"]["status"] != 200:
+        logging.error("APIエラー: %s", result["result"].get("message", "unknown error"))
+        raise Exception("API error: " + result["result"].get("message", "unknown error"))
+
+    logging.info("取得件数: %d", len(result["result"]["items"]))
+    return result["result"]["items"]
+
+def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1, sort="rank"):
+    params = {
+        "api_id": DMM_API_ID,
+        "affiliate_id": DMM_AFFILIATE_ID,
+        "site": site,
+        # "service": service,
+        # "floor": floor,
+        "keyword": keyword,
+        "hits": hits,
+        "offset": offset,
+        "sort": sort,
+        "output": "json"
+    }
 
     logging.info("DMM APIへリクエスト送信: %s", API_URL)
     logging.info("送信パラメータ: %s", params)

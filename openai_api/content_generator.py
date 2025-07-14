@@ -127,6 +127,7 @@ def generate_content(item: dict) -> dict:
         "auto_point": "30〜50文字の買いたくなるポイント"
     }}
     テンプレのままではなく、内容を埋めて出力してください。
+    次の文言は使用禁止「一冊」「作品」「一作」「話」「！」
     """
 
     logging.info("[OpenAI] Generating content for: %s", title)

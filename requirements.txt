@@ -4,4 +4,4 @@ supabase>=1.0.3
 openai
 selenium
 webdriver-manager
-bs4beautifulsoup4
+beautifulsoup4

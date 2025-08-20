@@ -2,7 +2,7 @@ import requests
 import logging
 from db.supabase_client import supabase
 
-def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str = "dmm-images") -> str:
+def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str = "dmm-images2") -> str:
     try:
         response = requests.get(url)
         response.raise_for_status()

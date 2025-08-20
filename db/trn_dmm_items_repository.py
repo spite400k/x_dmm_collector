@@ -1,9 +1,8 @@
 from db.storage import upload_image_to_storage
 from db.supabase_client import supabase
 import logging
-
 from openai_api.content_generator import generate_content
-
+import re
 
 # ログ設定（ファイル + コンソール出力）
 logging.basicConfig(
@@ -15,7 +14,7 @@ logging.basicConfig(
     ]
 )
 
-def insert_dmm_item(item: dict):
+def insert_dmm_item(item: dict, site, service, floor):
     content_id = item.get("content_id")
     if not content_id:
         logging.warning("content_id が存在しないためスキップ")
@@ -44,9 +43,25 @@ def insert_dmm_item(item: dict):
     # --- OpenAIで文章生成 ---
     ai_content = generate_content(item)
 
+
+    def parse_price(price_str):
+        if not price_str:
+            return None
+        match = re.search(r'\d+', price_str.replace(',', ''))
+        if match:
+            return int(match.group())
+        return None
+
+    price = parse_price(item.get("prices", {}).get("price"))  # → 4200
+    list_price = parse_price(item.get("prices", {}).get("list_price"))  # → 5000
+
+
     data = {
         "content_id": content_id,
         "product_id": item.get("product_id"),
+        "site": site,
+        "service": service,
+        "floor": floor,
         "title": item.get("title"),
         "volume": item.get("volume"),
         "review_count": item.get("review", {}).get("count"),
@@ -56,8 +71,8 @@ def insert_dmm_item(item: dict):
         "image_list_url": item.get("imageURL", {}).get("list"),
         "image_large_url": item.get("imageURL", {}).get("large"),
         "sample_images": item.get("sampleImageURL", {}).get("sample_l", {}).get("image", []),
-        "price": item.get("prices", {}).get("price"),
-        "list_price": item.get("prices", {}).get("list_price"),
+        "price": price,
+        "list_price": list_price,
         "release_date": item.get("date"),
         "genres": genre_names,
         "genre_ids": genre_ids,

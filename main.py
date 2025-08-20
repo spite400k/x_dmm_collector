@@ -22,10 +22,10 @@ def main():
     # 対象の service/floor の組み合わせ一覧
     targets = [
         {"service": "doujin", "floor": "digital_doujin"}, # 同人誌
-        {"service": "digital", "floor": "videoc"}, # 動画 素人
-        {"service": "digital", "floor": "nikkatsu"}, # 写真
-        {"service": "digital", "floor": "videoa"}, # ビデオ
-        {"service": "digital", "floor": "anime"}, # アニメ
+        # {"service": "digital", "floor": "videoc"}, # 動画 素人
+        # {"service": "digital", "floor": "nikkatsu"}, # 写真
+        # {"service": "digital", "floor": "videoa"}, # ビデオ
+        # {"service": "digital", "floor": "anime"}, # アニメ
     ]
 
     for target in targets:
@@ -36,7 +36,7 @@ def main():
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=10)
             for item in items:
-                insert_dmm_item(item)
+                insert_dmm_item(item, site=site, service=service, floor=floor)
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

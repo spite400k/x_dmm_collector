@@ -71,6 +71,7 @@ def insert_dmm_item(item: dict, site, service, floor):
         "image_list_url": item.get("imageURL", {}).get("list"),
         "image_large_url": item.get("imageURL", {}).get("large"),
         "sample_images": item.get("sampleImageURL", {}).get("sample_l", {}).get("image", []),
+        "sample_movie_url": item.get("sampleMovieURL_highest"),  # 動画URL
         "price": price,
         "list_price": list_price,
         "release_date": item.get("date"),
@@ -84,6 +85,7 @@ def insert_dmm_item(item: dict, site, service, floor):
         "auto_summary": ai_content["auto_summary"],
         "auto_point": ai_content["auto_point"],
         "raw_json": item,
+        "campaign": item.get("campaign_data"),  # ★ 追加
     }
 
     supabase.table("trn_dmm_items").insert(data).execute()

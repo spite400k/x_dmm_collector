@@ -14,6 +14,20 @@ logging.basicConfig(
     ]
 )
 
+# ---------------------------------------------------------------------
+# 価格を整数に変換する関数
+# ---------------------------------------------------------------------
+def parse_price(price_str):
+    if not price_str:
+        return None
+    match = re.search(r'\d+', price_str.replace(',', ''))
+    if match:
+        return int(match.group())
+    return None
+
+# ---------------------------------------------------------------------
+# DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入
+# ---------------------------------------------------------------------
 def insert_dmm_item(item: dict, site, service, floor):
     content_id = item.get("content_id")
     if not content_id:
@@ -42,15 +56,6 @@ def insert_dmm_item(item: dict, site, service, floor):
 
     # --- OpenAIで文章生成 ---
     ai_content = generate_content(item)
-
-
-    def parse_price(price_str):
-        if not price_str:
-            return None
-        match = re.search(r'\d+', price_str.replace(',', ''))
-        if match:
-            return int(match.group())
-        return None
 
     price = parse_price(item.get("prices", {}).get("price"))  # → 4200
     list_price = parse_price(item.get("prices", {}).get("list_price"))  # → 5000
@@ -86,6 +91,7 @@ def insert_dmm_item(item: dict, site, service, floor):
         "auto_point": ai_content["auto_point"],
         "raw_json": item,
         "campaign": item.get("campaign_data"),  # ★ 追加
+
     }
 
     supabase.table("trn_dmm_items").insert(data).execute()

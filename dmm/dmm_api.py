@@ -25,6 +25,9 @@ logging.basicConfig(
     ]
 )
 
+# ---------------------------------------------------------------------
+# sampleMovieURL から最大解像度のURLを取得する関数
+# ---------------------------------------------------------------------
 def get_highest_resolution_movie(movie_info: dict):
     """
     sampleMovieURL 内のキーから最大解像度のURLを返す
@@ -50,18 +53,23 @@ def get_highest_resolution_movie(movie_info: dict):
     return best_url
 
 
-def fetch_items(site, service, floor, hits=10, offset=1, sort="rank", min_sample_count=10):
+# ---------------------------------------------------------------------
+# アイテム取得（サンプル画像枚数でフィルタリング）
+# ---------------------------------------------------------------------
+def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_count=10):
     params = {
         "api_id": DMM_API_ID,
         "affiliate_id": DMM_AFFILIATE_ID,
         "site": site,
         "service": service,
-        "floor": floor,
         "hits": hits,
         "offset": offset,
         "sort": sort,
         "output": "json"
     }
+    # floor が None でなければ追加
+    if floor is not None:
+        params["floor"] = floor
     logging.info("DMM APIへリクエスト送信: %s", API_URL)
     logging.info("送信パラメータ: %s", params)
 
@@ -80,10 +88,13 @@ def fetch_items(site, service, floor, hits=10, offset=1, sort="rank", min_sample
 
     items = result["result"]["items"]
 
+    # logging.info(items)
+
     filtered_items = []
     for item in items:
+        
         sample_images = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
-        if isinstance(sample_images, list) and len(sample_images) >= min_sample_count:
+        if isinstance(sample_images, list) :
             # 最大解像度の動画URLを付与
             item["sampleMovieURL_highest"] = get_highest_resolution_movie(item.get("sampleMovieURL", {}))
             item["campaign_data"] = item.get("campaign", None)  # ★ 追加
@@ -96,14 +107,16 @@ def fetch_items(site, service, floor, hits=10, offset=1, sort="rank", min_sample
 
 
 
-
+# ---------------------------------------------------------------------
+# キーワード検索でアイテム取得 メインでは未使用
+# ---------------------------------------------------------------------
 def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1, sort="rank"):
     params = {
         "api_id": DMM_API_ID,
         "affiliate_id": DMM_AFFILIATE_ID,
         "site": site,
-        # "service": service,
-        # "floor": floor,
+        "service": service,
+        "floor": floor,
         "keyword": keyword,
         "hits": hits,
         "offset": offset,
@@ -134,7 +147,9 @@ def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1,
     logging.info("取得件数: %d", len(result["result"]["items"]))
     return result["result"]["items"]
 
+# ---------------------------------------------------------------------
 # テスト実行（例）
+# ---------------------------------------------------------------------
 if __name__ == "__main__":
     items = fetch_items(site="DMM.R18", service="digital", floor="doujin", hits=50, min_sample_count=10)
     for i, item in enumerate(items, 1):

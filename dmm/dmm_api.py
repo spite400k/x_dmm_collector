@@ -83,7 +83,7 @@ def fetch_items(site, service, floor, hits=10, offset=1, sort="rank", min_sample
     filtered_items = []
     for item in items:
         sample_images = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
-        if isinstance(sample_images, list) and len(sample_images) >= min_sample_count:
+        if isinstance(sample_images, list) :
             # 最大解像度の動画URLを付与
             item["sampleMovieURL_highest"] = get_highest_resolution_movie(item.get("sampleMovieURL", {}))
             item["campaign_data"] = item.get("campaign", None)  # ★ 追加

@@ -22,9 +22,9 @@ def main():
 
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        # {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
-        # {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
-        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # 写真
+        {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
+        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         # {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
     ]
@@ -40,9 +40,9 @@ def main():
             top_items = items[:10]
 
             for item in top_items:
-                sample_urls = fetch_sample_images_from_tachiyomi(item.get("tachiyomi").get("URL"))
-                download_tachiyomi_images(sample_urls)
-                # insert_dmm_item(item, site=site, service=service, floor=floor)
+                # sample_urls = fetch_sample_images_from_tachiyomi(item.get("tachiyomi").get("URL"))
+                # download_tachiyomi_images(sample_urls)
+                insert_dmm_item(item, site=site, service=service, floor=floor)
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

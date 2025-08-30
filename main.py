@@ -37,7 +37,7 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=100, min_sample_count=10)
-            top_items = items[:10]
+            top_items = items[:50]
 
             for item in top_items:
                 # sample_urls = fetch_sample_images_from_tachiyomi(item.get("tachiyomi").get("URL"))

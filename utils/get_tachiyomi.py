@@ -1,64 +1,72 @@
 import os
-import re
-import requests
 import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import time
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-SAVE_DIR = "dmm_samples"
-os.makedirs(SAVE_DIR, exist_ok=True)
-
-
-def fetch_sample_images_from_tachiyomi(cid: str):
+def fetch_sample_images_from_tachiyomi(tachiyomi_url: str):
     """
-    試し読みビューアの内部APIから画像URLリストを取得
+    Tachiyomiの試し読みページをSeleniumで開き、画面キャプチャを保存
     """
-    session = requests.Session()
-    session.cookies.set("age_check_done", "1", domain=".dmm.co.jp")
-    session.cookies.set("ckcy", "1", domain=".dmm.co.jp")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    TEMP_DIR = os.path.join(BASE_DIR, "temp")
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    # os.makedirs(save_dir, exist_ok=True)
 
-    # ビューアの内部API (※ cid が作品ID)
-    api_url = f"https://book.dmm.co.jp/api/publus/viewer/?cid={cid}"
+    # Chromeオプション
+    options = Options()
+    options.add_argument("--headless")  # ヘッドレスモード
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1200,2000")  # 画面サイズ調整
 
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": f"https://book.dmm.co.jp/detail/{cid}/"
-    }
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-    logging.info("API取得: %s", api_url)
-    r = session.get(api_url, headers=headers)
-    # r.raise_for_status()
+    try:
+        logging.info(f"ページを開く: {tachiyomi_url}")
+        driver.get(tachiyomi_url)
+        time.sleep(3)  # ページが完全に読み込まれるまで待機
 
-    data = r.json()
+        # ページ内の画像要素を取得
+        pages = driver.find_elements(By.CSS_SELECTOR, "img")  # 必要に応じてセレクタを変更
+        image_paths = []
 
-    # ページ配列を探索
-    image_urls = []
-    for page in data.get("result", {}).get("pages", []):
-        url = page.get("src")
-        if url and url.endswith(".jpg"):
-            image_urls.append(url)
+        for idx, page in enumerate(pages, start=1):
+            screenshot_path = os.path.join(TEMP_DIR, f"page_{idx}.png")
+            # 画像要素だけをスクリーンショット
+            page.screenshot(screenshot_path)
+            image_paths.append(screenshot_path)
 
-    logging.info("取得したページ画像数: %d", len(image_urls))
-    return image_urls
+        logging.info(f"保存したページ数: {len(image_paths)}")
+        return image_paths
+
+    finally:
+        driver.quit()
 
 
-def download_tachiyomi_images(image_urls):
-    for i, url in enumerate(image_urls, 1):
-        filename = f"page_{i:03}.jpg"
-        path = os.path.join(SAVE_DIR, filename)
-        logging.info("DL: %s → %s", url, path)
-
-        try:
-            r = requests.get(url, stream=True)
-            r.raise_for_status()
-            with open(path, "wb") as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
-        except Exception as e:
-            logging.error("失敗: %s", e)
-
+# def download_tachiyomi_images(image_urls, save_dir=SAVE_DIR):
+#     """
+#     画像をダウンロードして保存
+#     """
+#     for i, url in enumerate(image_urls, 1):
+#         filename = f"page_{i:03}.jpg"
+#         path = os.path.join(save_dir, filename)
+#         logging.info(f"ダウンロード: {url} → {path}")
+#         try:
+#             r = requests.get(url, stream=True)
+#             r.raise_for_status()
+#             with open(path, "wb") as f:
+#                 for chunk in r.iter_content(1024):
+#                     f.write(chunk)
+#         except Exception as e:
+#             logging.error(f"失敗: {e}")
 
 if __name__ == "__main__":
-    cid = "b202aoota01012"  # 作品ID
-    urls = fetch_image_urls_from_tachiyomi(cid)
-    download_images(urls)
+    # ← サンプル用、実際には商品ページから自動で拾ってくる想定
+    tachiyomi_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxTBAJWVhEJRUIAAVQLVk5EDl0VClQMBllNB1o*UFcKWhRHVwVfCBxZW1kEVQ__&lin=1&sd=0"
+    
+    # sample_urls = fetch_sample_images_from_tachiyomi(tachiyomi_url)
+    # download_images(sample_urls)
+    logging.info("試し読み画像ダウンロード完了！")

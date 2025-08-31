@@ -3,7 +3,7 @@ from db.trn_dmm_items_repository import insert_dmm_item
 import os
 import logging
 
-from utils.get_tachiyomi import download_tachiyomi_images, fetch_sample_images_from_tachiyomi
+from utils.get_tachiyomi import fetch_sample_images_from_tachiyomi
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
@@ -18,6 +18,20 @@ logging.basicConfig(
     ]
 )
 
+# ---------------------
+# ファイル削除
+# ---------------------
+def cleanup_file(filepath: str):
+    try:
+        os.remove(filepath)
+        logging.info(f"🧹 削除完了: {filepath}")
+    except FileNotFoundError:
+        pass
+
+
+# ---------------------
+# メイン処理
+# ---------------------
 def main():
 
     # 対象の service/floor の組み合わせ一覧
@@ -37,12 +51,16 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=100, min_sample_count=10)
-            top_items = items[:50]
+            top_items = items[:10]
 
             for item in top_items:
-                # sample_urls = fetch_sample_images_from_tachiyomi(item.get("tachiyomi").get("URL"))
-                # download_tachiyomi_images(sample_urls)
-                insert_dmm_item(item, site=site, service=service, floor=floor)
+                tachiyomi_url = item.get("tachiyomi").get("URL")
+                if tachiyomi_url:
+                    image_paths = fetch_sample_images_from_tachiyomi(tachiyomi_url)
+                # image_paths = fetch_sample_images_from_tachiyomi(sample_urls)
+                # insert_dmm_item(item, image_paths, site=site, service=service, floor=floor)
+                # for image_path in image_paths:
+                #     cleanup_file(image_path)
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

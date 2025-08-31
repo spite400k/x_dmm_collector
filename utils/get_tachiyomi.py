@@ -27,6 +27,9 @@ def fetch_sample_images_from_tachiyomi(tachiyomi_url: str):
     try:
         logging.info(f"ページを開く: {tachiyomi_url}")
         driver.get(tachiyomi_url)
+        driver.add_cookie({"name": "age_check_done", "value": "1"})
+        driver.add_cookie({"name": "over18", "value": "yes"})
+        driver.get(tachiyomi_url)  # 再度アクセスすれば直接読める
         time.sleep(3)  # ページが完全に読み込まれるまで待機
 
         # ページ内の画像要素を取得

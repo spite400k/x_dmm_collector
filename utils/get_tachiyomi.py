@@ -18,6 +18,31 @@ from PIL import Image
 # ---------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+def save_page_source(driver, idx, log_dir="logs"):
+    # ログディレクトリがなければ作成
+    os.makedirs(log_dir, exist_ok=True)
+
+    # ファイル名に idx をつける
+    log_file = os.path.join(log_dir, f"page_source_{idx}.html")
+
+    # ページソースを保存
+    with open(log_file, "w", encoding="utf-8") as f:
+        f.write(driver.page_source)
+
+    print(f"✅ ページソースを保存しました: {log_file}")
+
+# ---------------------
+# 表示中のcanvas取得関数
+# ---------------------
+def get_visible_canvas(driver):
+    # 両方探す
+    candidates = driver.find_elements(By.CSS_SELECTOR, "canvas")
+
+    for c in candidates:
+        if c.is_displayed():  # 実際に表示されているcanvasだけ使う
+            return c
+    raise Exception("表示中のcanvasが見つかりません")
+
 # ---------------------
 # ページカウンタ取得関数
 # ---------------------
@@ -56,7 +81,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     options = Options()
     # options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=530,1000")
+    options.add_argument("--window-size=440,932")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
@@ -91,17 +116,16 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         _, total_page = get_page_counter(driver)
         actions = ActionChains(driver)
 
-        # 総ページ数を取得
+        viewer.click()
         time.sleep(5)  # ページ描画待ち
         # viewer.click()
 
 
         while True:
             try:
+                # save_page_source(driver, idx=page_idx)  # デバッグ用
                 # canvas取得
-                canvas = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#viewport0 canvas"))
-                )
+                canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
                 screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
                 images.append(screenshot_path)

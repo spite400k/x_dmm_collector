@@ -88,13 +88,14 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             EC.presence_of_element_located((By.ID, "viewer"))
         )
         viewer.click()
+        _, total_page = get_page_counter(driver)
         actions = ActionChains(driver)
 
         # 総ページ数を取得
-        _, total_page = get_page_counter(driver)
+        time.sleep(5)  # ページ描画待ち
+        # viewer.click()
 
-        viewer.click()  # ページ番号が消えるのを待つ
-        time.sleep(3)  # ページ描画待ち
+
         while True:
             try:
                 # canvas取得

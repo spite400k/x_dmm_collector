@@ -17,11 +17,11 @@ tachiyomi_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxaAQZUVg4KQ
 # Chrome起動
 # ---------------------
 options = Options()
-options.add_argument("--disable-blink-features=AutomationControlled")  # bot判定回避
+options.add_argument("--disable-blink-features=AutomationControlled")
+# options.add_argument("--headless")
 driver = webdriver.Chrome(options=options)
 
 try:
-    # 1. DMMトップを開く
     logging.info("DMMトップページを開く")
     driver.get("https://www.dmm.co.jp/top/")
 
@@ -33,37 +33,49 @@ try:
         )
         button.click()
         logging.info("年齢認証に成功")
-    except Exception as e:
-        logging.warning("年齢認証ボタンが見つからなかった（すでに認証済みかも）")
+        time.sleep(2)
+    except:
+        logging.info("年齢認証ボタンなし（すでに認証済み）")
 
-    # 3. 試し読みページを開く
+    # 試し読みページへ
     logging.info("試し読みページを開く")
     driver.get(tachiyomi_url)
+    time.sleep(5)
 
-    # 4. iframe / canvas 待機
-    iframe = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.TAG_NAME, "iframe"))
-    )
-    driver.switch_to.frame(iframe)
-    logging.info("iframe に切り替え完了")
+    print(driver.page_source[:100000])  # ページHTMLの先頭2,000文字だけ出す
 
-    # 5. canvas を取得
-    canvas = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.TAG_NAME, "canvas"))
-    )
-    logging.info(f"canvas 見つかった: size={canvas.size}")
+    # iframe を探す
+    iframes = driver.find_elements(By.TAG_NAME, "iframe")
+    if iframes:
+        driver.switch_to.frame(iframes[0])
+        logging.info("iframe に切り替え完了")
+        # print(driver.page_source[:10000])  # ページHTMLの先頭2,000文字だけ出す
+    else:
+        logging.info("iframe は存在しなかった → そのまま進む")
 
-    # スクショ保存
-    driver.save_screenshot("tachiyomi_page.png")
-    logging.info("スクショ保存しました")
+    # canvas が描画されるまで待機
+    canvas = None
+    for _ in range(10):  # 最大10回チェック
+        try:
+            canvas = driver.find_element(By.TAG_NAME, "canvas")
+            if canvas.size["width"] > 0:
+                break
+        except:
+            pass
+        time.sleep(1)
 
-    time.sleep(3)
-
+    if canvas and canvas.size["width"] > 0:
+        logging.info(f"canvas 見つかった: size={canvas.size}")
+        driver.save_screenshot("tachiyomi_page.png")
+        logging.info("スクショ保存しました")
+    else:
+        logging.error("canvas が見つからない or 描画されていない")
 except Exception as e:
     logging.error(f"処理中にエラー: {e}")
 
 finally:
     driver.quit()
+
 
 
 

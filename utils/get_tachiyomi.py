@@ -23,7 +23,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     options = Options()
     # options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1200,2000")
+    options.add_argument("--window-size=600,2000")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
@@ -51,6 +51,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         while True:
             try:
+
                 # canvas取得
                 canvas = WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "#viewport0 canvas"))
@@ -60,12 +61,23 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 images.append(screenshot_path)
                 logging.info(f"保存: {screenshot_path}")
 
-                # 次ページボタン取得
-                next_btn = driver.find_element(By.CSS_SELECTOR, '.css-1jadl3u[data-type="next"]')
-                if next_btn.get_attribute("data-disabled") == "true":
-                    logging.info("最後のページに到達")
-                    break
+                # viewer に cursorInvisibleg がついている場合、削除して cursorLeft を追加
+                driver.execute_script("""
+                var viewer = document.getElementById("viewer");
+                if (viewer) {
+                    viewer.classList.add("cursorLeft");
+                    if (viewer.classList.contains("cursorInvisible")) {
+                        viewer.classList.remove("cursorInvisible");
+                    }
+                }
+                """)
+                # time.sleep(1)
+                print(driver.page_source[:200000])
 
+                # 次ページボタン取得
+                next_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, '.carousel-next-button[data-type="next"]'))
+                )
                 next_btn.click()
                 page_idx += 1
                 time.sleep(1)

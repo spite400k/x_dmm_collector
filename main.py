@@ -3,7 +3,7 @@ from db.trn_dmm_items_repository import insert_dmm_item
 import os
 import logging
 
-from utils.get_tachiyomi import fetch_sample_images_from_tachiyomi
+from utils.get_tachiyomi import capture_all_tachiyomi_pages
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
@@ -36,8 +36,8 @@ def main():
 
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
-        {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
+        # {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        # {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
         {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         # {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
@@ -51,12 +51,12 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=100, min_sample_count=10)
-            top_items = items[:10]
+            top_items = items[:1]
 
             for item in top_items:
                 tachiyomi_url = item.get("tachiyomi").get("URL")
                 if tachiyomi_url:
-                    image_paths = fetch_sample_images_from_tachiyomi(tachiyomi_url)
+                    image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
                 # image_paths = fetch_sample_images_from_tachiyomi(sample_urls)
                 # insert_dmm_item(item, image_paths, site=site, service=service, floor=floor)
                 # for image_path in image_paths:

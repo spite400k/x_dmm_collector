@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, TimeoutException
 
 # ---------------------
 # ログ設定
@@ -31,7 +31,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
 
-        # 2. 年齢認証（「はい、18歳以上です」ボタンを押す）
+        # 年齢認証
         logging.info("年齢認証ボタンを探す")
         try:
             button = WebDriverWait(driver, 10).until(
@@ -40,7 +40,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             button.click()
             logging.info("年齢認証に成功")
             time.sleep(2)
-        except:
+        except TimeoutException:
             logging.info("年齢認証ボタンなし（すでに認証済み）")
 
         # 試し読みページへ
@@ -48,18 +48,29 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         driver.get(tachiyomi_url)
         time.sleep(5)
 
+        print(driver.page_source[:100000])  # ページHTMLの先頭2,000文字だけ出す
+
+
         # iframe をループして canvas があるものを探す
         canvas_frame = None
         iframes = driver.find_elements(By.TAG_NAME, "iframe")
         logging.info(f"iframe の数: {len(iframes)}")
+
         for idx, f in enumerate(iframes):
             driver.switch_to.frame(f)
-            canvases = driver.find_elements(By.TAG_NAME, "canvas")
-            if canvases:
+            print(idx)
+            print(driver.page_source[:100000])  # ページHTMLの先頭2,000文字だけ出す
+
+            try:
+                # canvas が生成されるまで最大10秒待つ
+                canvas = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "canvas"))
+                )
                 logging.info(f"canvas を発見した iframe index: {idx}")
                 canvas_frame = f
                 break
-            driver.switch_to.default_content()
+            except TimeoutException:
+                driver.switch_to.default_content()
 
         if not canvas_frame:
             logging.error("試し読みの canvas がある iframe が見つからない")
@@ -70,14 +81,19 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         page_idx = 1
 
         while True:
-            # canvas を取得
-            canvas = driver.find_element(By.TAG_NAME, "canvas")
-            screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx}.png")
-            canvas.screenshot(screenshot_path)
-            images.append(screenshot_path)
-            logging.info(f"保存: {screenshot_path}")
+            try:
+                canvas = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "canvas"))
+                )
+                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx}.png")
+                canvas.screenshot(screenshot_path)
+                images.append(screenshot_path)
+                logging.info(f"保存: {screenshot_path}")
+            except TimeoutException:
+                logging.warning("canvas が見つからず、処理終了")
+                break
 
-            # 次ページボタンを探してクリック
+            # 次ページボタン
             try:
                 next_btn = driver.find_element(By.CSS_SELECTOR, ".nextButton")  # 要セレクタ調整
                 if "disabled" in next_btn.get_attribute("class"):
@@ -85,7 +101,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                     break
                 next_btn.click()
                 page_idx += 1
-                time.sleep(1)  # ページ描画待機
+                time.sleep(1)
             except NoSuchElementException:
                 logging.info("次ページボタンが見つからないので終了")
                 break

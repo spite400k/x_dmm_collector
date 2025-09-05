@@ -7,8 +7,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException
+from selenium.common.exceptions import NoSuchElementException
 
 # ---------------------
 # ログ設定
@@ -49,42 +51,34 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         images = []
         page_idx = 1
 
+        # viewer要素にフォーカス
+        viewer = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "viewer"))
+        )
+        viewer.click()
+        actions = ActionChains(driver)
+
         while True:
             try:
-
                 # canvas取得
                 canvas = WebDriverWait(driver, 5).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "#viewport0 canvas"))
                 )
-                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx}.png")
+                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
                 images.append(screenshot_path)
                 logging.info(f"保存: {screenshot_path}")
 
-                # viewer に cursorInvisibleg がついている場合、削除して cursorLeft を追加
-                driver.execute_script("""
-                var viewer = document.getElementById("viewer");
-                if (viewer) {
-                    viewer.classList.add("cursorLeft");
-                    if (viewer.classList.contains("cursorInvisible")) {
-                        viewer.classList.remove("cursorInvisible");
-                    }
-                }
-                """)
-                # time.sleep(1)
-                print(driver.page_source[:200000])
-
-                # 次ページボタン取得
-                next_btn = WebDriverWait(driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, '.carousel-next-button[data-type="next"]'))
-                )
-                next_btn.click()
+                # キーボードで次ページへ
+                actions.send_keys(Keys.ARROW_LEFT).perform()
                 page_idx += 1
-                time.sleep(1)
+                time.sleep(1)  # ページ描画待ち
 
-            except (NoSuchElementException, ElementClickInterceptedException):
-                logging.warning("次ページボタン取得失敗 or canvas取得失敗 → 終了")
+            except NoSuchElementException:
+                logging.warning("canvas取得失敗 → 終了")
                 break
+
+            # 適宜、最後のページ判定（例：canvasが変わらなければ終了）を追加可能
 
         logging.info(f"合計 {len(images)} ページを保存しました")
         return images

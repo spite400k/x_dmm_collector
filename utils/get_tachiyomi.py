@@ -10,18 +10,45 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from PIL import Image
 
 # ---------------------
 # ログ設定
 # ---------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+# ---------------------
+# ページカウンタ取得関数
+# ---------------------
+def get_page_counter(driver, timeout=5):
+    """pageSliderCounter から現在/総ページ数を取得する"""
+    try:
+        counter_elem = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.ID, "pageSliderCounter"))
+        )
+        counter_text = counter_elem.text.strip()  # 例: "3/32"
+        if "/" in counter_text:
+            current_page, total_page = map(int, counter_text.split("/"))
+            return current_page, total_page
+        else:
+            logging.warning(f"ページカウンタの形式が不正: '{counter_text}'")
+            return 1, 1
+    except Exception as e:
+        logging.warning(f"ページカウンタ取得失敗: {e} → 仮の値を返す")
+        return 1, 50
+
+
 def capture_all_tachiyomi_pages(tachiyomi_url: str):
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     TEMP_DIR = os.path.join(BASE_DIR, "temp")
     os.makedirs(TEMP_DIR, exist_ok=True)
 
+    output_pdf_path = os.path.join(BASE_DIR, "tachiyomi_pages.pdf")
+
+    # ---------------------
+    # Selenium初期化
+    # ---------------------
     options = Options()
     # options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
@@ -50,6 +77,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         images = []
         page_idx = 1
+        current_page = 0
 
         # viewer要素にフォーカス
         viewer = WebDriverWait(driver, 10).until(
@@ -57,6 +85,9 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         )
         viewer.click()
         actions = ActionChains(driver)
+
+        # 総ページ数を取得
+        _, total_page = get_page_counter(driver)
 
         while True:
             try:
@@ -69,19 +100,33 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 images.append(screenshot_path)
                 logging.info(f"保存: {screenshot_path}")
 
+                # ページ番号更新
+                if current_page == 0:
+                    current_page, _ = get_page_counter(driver)
+
+                if current_page >= total_page:
+                    logging.info("最後のページに到達 → 終了")
+                    break
+
                 # キーボードで次ページへ
                 actions.send_keys(Keys.ARROW_LEFT).perform()
                 page_idx += 1
+                current_page += 1
                 time.sleep(1)  # ページ描画待ち
 
-            except NoSuchElementException:
+            except (TimeoutException, NoSuchElementException):
                 logging.warning("canvas取得失敗 → 終了")
                 break
 
-            # 適宜、最後のページ判定（例：canvasが変わらなければ終了）を追加可能
-
-        logging.info(f"合計 {len(images)} ページを保存しました")
-        return images
+        # ---------------------
+        # 画像をPDF化
+        # ---------------------
+        if images:
+            pil_images = [Image.open(p).convert("RGB") for p in images]
+            pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
+            logging.info(f"PDF保存完了: {output_pdf_path}")
+        else:
+            logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
 
     finally:
         driver.quit()

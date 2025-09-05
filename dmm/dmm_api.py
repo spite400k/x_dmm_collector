@@ -3,6 +3,7 @@ import requests
 import logging
 import json
 from dotenv import load_dotenv
+from db.supabase_client import supabase
 
 # .envファイル読み込み
 load_dotenv()
@@ -92,7 +93,23 @@ def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_
 
     filtered_items = []
     for item in items:
-        
+
+        content_id = item.get("content_id")
+        if not content_id:
+            continue
+
+        # ---------------------------
+        # Supabase で存在確認
+        # ---------------------------
+        try:
+            existing = supabase.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
+            if existing.data and len(existing.data) > 0:
+                logging.info("[SKIP] 既に登録済み: %s", content_id)
+                continue  # 既に登録済みなのでスキップ
+        except Exception as e:
+            logging.warning("[ERROR] Supabase 照会失敗: %s", e)
+            continue
+
         sample_images = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
         if isinstance(sample_images, list) :
             # 最大解像度の動画URLを付与

@@ -51,16 +51,16 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=100, min_sample_count=10)
-            top_items = items[:1]
+            top_items = items[:10]  # 上位10件のみ処理
 
             for item in top_items:
                 tachiyomi_url = item.get("tachiyomi").get("URL")
                 if tachiyomi_url:
-                    image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
+                    tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
                 # image_paths = fetch_sample_images_from_tachiyomi(sample_urls)
-                # insert_dmm_item(item, image_paths, site=site, service=service, floor=floor)
-                # for image_path in image_paths:
-                #     cleanup_file(image_path)
+                insert_dmm_item(item, tachiyomi_image_paths, site=site, service=service, floor=floor)
+                for image_path in tachiyomi_image_paths:
+                    cleanup_file(image_path)
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

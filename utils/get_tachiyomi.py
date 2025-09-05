@@ -50,7 +50,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     # Selenium初期化
     # ---------------------
     options = Options()
-    # options.add_argument("--headless")  # 必要に応じて
+    options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=600,2000")
 
@@ -124,6 +124,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         if images:
             pil_images = [Image.open(p).convert("RGB") for p in images]
             pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
+            images.append(output_pdf_path)
             logging.info(f"PDF保存完了: {output_pdf_path}")
         else:
             logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
@@ -131,6 +132,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     finally:
         driver.quit()
 
+    return images  # ここで返す
 
 if __name__ == "__main__":
     test_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxaBwFUVgMLU1gAClAPVU5EDl0VClQMBllNB1o*UFcKWhRHVwVfCBxZW1kEVQ__&lin=1&sd=0"

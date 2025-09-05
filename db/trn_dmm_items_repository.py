@@ -1,4 +1,4 @@
-from db.storage import upload_image_to_storage
+from db.storage import upload_image_to_storage ,upload_local_image_to_storage
 from db.supabase_client import supabase
 import logging
 from openai_api.content_generator import generate_content
@@ -28,7 +28,7 @@ def parse_price(price_str):
 # ---------------------------------------------------------------------
 # DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入
 # ---------------------------------------------------------------------
-def insert_dmm_item(item: dict, image_paths, site, service, floor):
+def insert_dmm_item(item: dict, tachiyomi_image_paths, site, service, floor):
     content_id = item.get("content_id")
     if not content_id:
         logging.warning("content_id が存在しないためスキップ")
@@ -40,19 +40,24 @@ def insert_dmm_item(item: dict, image_paths, site, service, floor):
         logging.info(f"[SKIP] 既に登録済: {item.get('title')} : {item.get('URL')}")
         return
 
-    uploaded_paths = [];
-    if not image_paths:
-        logging.warning(f"[WARN] 画像パスが空です: {item.get('title')} : {item.get('URL')}")
-        image_paths = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
-        if not image_paths:
-            logging.warning(f"[WARN] 画像パスも見つかりません: {item.get('title')} : {item.get('URL')}")
-            return
+    uploaded_paths = []
+    # 立ち読み画像を先にアップロード
+    if not tachiyomi_image_paths:
+        logging.warning(f"[WARN] 立ち読み画像パスが空です: {item.get('title')} : {item.get('URL')}")
 
-    for idx, img_url in enumerate(image_paths):
-        storage_path = upload_image_to_storage(img_url, content_id=content_id, index=idx + 1)
+    for idx, img_url in enumerate(tachiyomi_image_paths):
+        storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1)
         if storage_path:
             uploaded_paths.append(storage_path)
 
+    # サンプル画像をアップロード
+    sample_urls = item.get("sampleImageURL", {}).get("list", [])
+    for idx, img_url in enumerate(sample_urls):
+        storage_path = upload_image_to_storage(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
+        if storage_path:
+            uploaded_paths.append(storage_path)
+
+    # ジャンル情報を抽出
     iteminfo = item.get("iteminfo", {})
 
     genres_raw = iteminfo.get("genre", [])

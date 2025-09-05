@@ -79,9 +79,11 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     # Selenium初期化
     # ---------------------
     options = Options()
-    # options.add_argument("--headless")  # 必要に応じて
+    options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=440,932")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 

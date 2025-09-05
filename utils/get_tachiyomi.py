@@ -1,52 +1,73 @@
-import os
+import time
 import logging
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import time
 
-def fetch_sample_images_from_tachiyomi(tachiyomi_url: str):
-    """
-    Tachiyomiの試し読みページをSeleniumで開き、画面キャプチャを保存
-    """
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    TEMP_DIR = os.path.join(BASE_DIR, "temp")
-    os.makedirs(TEMP_DIR, exist_ok=True)
-    # os.makedirs(save_dir, exist_ok=True)
+# ---------------------
+# ログ設定
+# ---------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    # Chromeオプション
-    options = Options()
-    options.add_argument("--headless")  # ヘッドレスモード
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1200,2000")  # 画面サイズ調整
+tachiyomi_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxaAQZUVg4KQlcACFQIUE5EDl0VClQMBllNB1o*UFcKWhRHVwVfCBxZW1kEVQ__&lin=1&sd=0"
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+# ---------------------
+# Chrome起動
+# ---------------------
+options = Options()
+options.add_argument("--disable-blink-features=AutomationControlled")  # bot判定回避
+driver = webdriver.Chrome(options=options)
 
+try:
+    # 1. DMMトップを開く
+    logging.info("DMMトップページを開く")
+    driver.get("https://www.dmm.co.jp/top/")
+
+    # 2. 年齢認証（「はい、18歳以上です」ボタンを押す）
+    logging.info("年齢認証ボタンを探す")
     try:
-        logging.info(f"ページを開く: {tachiyomi_url}")
-        driver.get(tachiyomi_url)
-        driver.add_cookie({"name": "age_check_done", "value": "1"})
-        driver.add_cookie({"name": "over18", "value": "yes"})
-        driver.get(tachiyomi_url)  # 再度アクセスすれば直接読める
-        time.sleep(3)  # ページが完全に読み込まれるまで待機
+        button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
+        )
+        button.click()
+        logging.info("年齢認証に成功")
+    except Exception as e:
+        logging.warning("年齢認証ボタンが見つからなかった（すでに認証済みかも）")
 
-        # ページ内の画像要素を取得
-        pages = driver.find_elements(By.CSS_SELECTOR, "img")  # 必要に応じてセレクタを変更
-        image_paths = []
+    # 3. 試し読みページを開く
+    logging.info("試し読みページを開く")
+    driver.get(tachiyomi_url)
 
-        for idx, page in enumerate(pages, start=1):
-            screenshot_path = os.path.join(TEMP_DIR, f"page_{idx}.png")
-            # 画像要素だけをスクリーンショット
-            page.screenshot(screenshot_path)
-            image_paths.append(screenshot_path)
+    # 4. iframe / canvas 待機
+    iframe = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.TAG_NAME, "iframe"))
+    )
+    driver.switch_to.frame(iframe)
+    logging.info("iframe に切り替え完了")
 
-        logging.info(f"保存したページ数: {len(image_paths)}")
-        return image_paths
+    # 5. canvas を取得
+    canvas = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.TAG_NAME, "canvas"))
+    )
+    logging.info(f"canvas 見つかった: size={canvas.size}")
 
-    finally:
-        driver.quit()
+    # スクショ保存
+    driver.save_screenshot("tachiyomi_page.png")
+    logging.info("スクショ保存しました")
+
+    time.sleep(3)
+
+except Exception as e:
+    logging.error(f"処理中にエラー: {e}")
+
+finally:
+    driver.quit()
+
+
+
+
 
 
 # def download_tachiyomi_images(image_urls, save_dir=SAVE_DIR):

@@ -38,8 +38,12 @@ def get_page_counter(driver, timeout=5):
         logging.warning(f"ページカウンタ取得失敗: {e} → 仮の値を返す")
         return 1, 50
 
-
+# ---------------------
+# Tachiyomiページキャプチャ関数
+# ---------------------
 def capture_all_tachiyomi_pages(tachiyomi_url: str):
+    logging.info(f"立ち読み対象URL: {tachiyomi_url}")
+
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     TEMP_DIR = os.path.join(BASE_DIR, "temp")
     os.makedirs(TEMP_DIR, exist_ok=True)
@@ -50,9 +54,9 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     # Selenium初期化
     # ---------------------
     options = Options()
-    options.add_argument("--headless")  # 必要に応じて
+    # options.add_argument("--headless")  # 必要に応じて
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=600,2000")
+    options.add_argument("--window-size=530,1000")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
@@ -89,6 +93,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         # 総ページ数を取得
         _, total_page = get_page_counter(driver)
 
+        viewer.click()  # ページ番号が消えるのを待つ
+        time.sleep(3)  # ページ描画待ち
         while True:
             try:
                 # canvas取得

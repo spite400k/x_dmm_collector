@@ -56,7 +56,9 @@ def main():
             
             for item in top_items:
                 tachiyomi_url = item.get("tachiyomi").get("URL")
+                logging.info("立ち読みデータ取得1")
                 if tachiyomi_url:
+                    logging.info("立ち読みデータ取得完了2")
                     tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
                 logging.info("立ち読みデータ取得完了")
                 # image_paths = fetch_sample_images_from_tachiyomi(sample_urls)

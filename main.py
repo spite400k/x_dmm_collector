@@ -52,15 +52,19 @@ def main():
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=10, min_sample_count=10)
             top_items = items[:10]  # 上位10件のみ処理
-
+            logging.info("データ取得完了")
+            
             for item in top_items:
                 tachiyomi_url = item.get("tachiyomi").get("URL")
                 if tachiyomi_url:
                     tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
+                logging.info("立ち読みデータ取得完了")
                 # image_paths = fetch_sample_images_from_tachiyomi(sample_urls)
                 insert_dmm_item(item, tachiyomi_image_paths, site=site, service=service, floor=floor)
+                logging.info("データ登録完了")
                 for image_path in tachiyomi_image_paths:
                     cleanup_file(image_path)
+                logging.info("不要ファイル削除完了")
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

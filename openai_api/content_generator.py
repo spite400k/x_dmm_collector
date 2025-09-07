@@ -133,7 +133,7 @@ def generate_content(item: dict) -> dict:
     """
 
     logging.info("[OpenAI] Generating content for: %s", title)
-    logging.info("[OpenAI] Prompt:\n%s", prompt)
+    # logging.info("[OpenAI] Prompt:\n%s", prompt)
 
     try:
         response = client.chat.completions.create(

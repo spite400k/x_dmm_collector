@@ -16,7 +16,10 @@ from PIL import Image
 # ---------------------
 # ログ設定
 # ---------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d | %(message)s"
+)
 
 def save_page_source(driver, idx, log_dir="logs"):
     # ログディレクトリがなければ作成
@@ -35,12 +38,18 @@ def save_page_source(driver, idx, log_dir="logs"):
 # 表示中のcanvas取得関数
 # ---------------------
 def get_visible_canvas(driver):
-    # 両方探す
+    logging.debug("canvas探索開始")
     candidates = driver.find_elements(By.CSS_SELECTOR, "canvas")
+    logging.debug(f"候補canvas数: {len(candidates)}")
 
-    for c in candidates:
-        if c.is_displayed():  # 実際に表示されているcanvasだけ使う
-            return c
+    for i, c in enumerate(candidates):
+        try:
+            visible = c.is_displayed()
+            logging.debug(f"canvas[{i}] visible={visible}, size={c.size}, location={c.location}")
+            if visible:
+                return c
+        except Exception as e:
+            logging.warning(f"canvas[{i}] 可視チェック失敗: {e}")
     raise Exception("表示中のcanvasが見つかりません")
 
 # ---------------------
@@ -52,7 +61,9 @@ def get_page_counter(driver, timeout=5):
         counter_elem = WebDriverWait(driver, timeout).until(
             EC.visibility_of_element_located((By.ID, "pageSliderCounter"))
         )
-        counter_text = counter_elem.text.strip()  # 例: "3/32"
+        counter_text = counter_elem.text.strip()
+        logging.info(f"ページカウンタ取得: '{counter_text}'")
+
         if "/" in counter_text:
             current_page, total_page = map(int, counter_text.split("/"))
             return current_page, total_page
@@ -60,7 +71,7 @@ def get_page_counter(driver, timeout=5):
             logging.warning(f"ページカウンタの形式が不正: '{counter_text}'")
             return 1, 1
     except Exception as e:
-        logging.warning(f"ページカウンタ取得失敗: {e} → 仮の値を返す")
+        logging.error(f"ページカウンタ取得失敗: {e}")
         return 1, 50
 
 # ---------------------
@@ -75,11 +86,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
     output_pdf_path = os.path.join(BASE_DIR, "tachiyomi_pages.pdf")
 
-    # ---------------------
-    # Selenium初期化
-    # ---------------------
     options = Options()
-    options.add_argument("--headless")  # 必要に応じて
+    options.add_argument("--headless=new")  # 新しいヘッドレスモード
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=440,932")
     options.add_argument("--no-sandbox")
@@ -91,16 +99,15 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
 
-        # 年齢認証ボタン
+        # 年齢認証
         try:
             button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
             )
             button.click()
             logging.info("年齢認証成功")
-            time.sleep(2)
-        except:
-            logging.info("年齢認証不要 or 既認証済み")
+        except Exception as e:
+            logging.info(f"年齢認証不要 or 既認証済み ({e})")
 
         logging.info("試し読みページを開く")
         driver.get(tachiyomi_url)
@@ -120,18 +127,16 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         viewer.click()
         time.sleep(5)  # ページ描画待ち
-        # viewer.click()
-
 
         while True:
             try:
-                # save_page_source(driver, idx=page_idx)  # デバッグ用
-                # canvas取得
+                logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
+
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
                 screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
                 images.append(screenshot_path)
-                logging.info(f"保存: {screenshot_path}")
+                logging.info(f"保存成功: {screenshot_path}")
 
                 # ページ番号更新
                 if current_page == 0:
@@ -141,31 +146,38 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                     logging.info("最後のページに到達 → 終了")
                     break
 
-                # キーボードで次ページへ
+                logging.debug("次ページへ移動 (ARROW_LEFT)")
                 actions.send_keys(Keys.ARROW_LEFT).perform()
                 page_idx += 1
                 current_page += 1
-                time.sleep(1)  # ページ描画待ち
+                time.sleep(1)
 
-            except (TimeoutException, NoSuchElementException):
-                logging.warning("canvas取得失敗 → 終了")
+            except (TimeoutException, NoSuchElementException) as e:
+                logging.error(f"canvas取得失敗 idx={page_idx}: {e}")
+                save_page_source(driver, idx=page_idx)  # ページソース保存
+                break
+            except Exception as e:
+                logging.exception(f"予期せぬエラー idx={page_idx}: {e}")
+                save_page_source(driver, idx=page_idx)
                 break
 
-        # ---------------------
         # 画像をPDF化
-        # ---------------------
         if images:
-            pil_images = [Image.open(p).convert("RGB") for p in images]
-            pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
-            images.append(output_pdf_path)
-            logging.info(f"PDF保存完了: {output_pdf_path}")
+            try:
+                pil_images = [Image.open(p).convert("RGB") for p in images]
+                pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
+                images.append(output_pdf_path)
+                logging.info(f"PDF保存完了: {output_pdf_path}")
+            except Exception as e:
+                logging.exception(f"PDF保存失敗: {e}")
         else:
             logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
 
     finally:
         driver.quit()
 
-    return images  # ここで返す
+    return images
+
 
 if __name__ == "__main__":
     test_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxaBwFUVgMLU1gAClAPVU5EDl0VClQMBllNB1o*UFcKWhRHVwVfCBxZW1kEVQ__&lin=1&sd=0"

@@ -101,11 +101,19 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
 
+        with open("debug1.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+            logging.info("debug1.html 保存完了")
+
         # 年齢認証
         try:
             button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
             )
+            with open("debug2.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+                logging.info("debug2.html 保存完了")
+
             button.click()
             logging.info("年齢認証成功")
         except Exception as e:

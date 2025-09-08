@@ -92,6 +92,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     options.add_argument("--window-size=440,932")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) \
+                            AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
 
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
@@ -126,9 +128,11 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         logging.info("viewer要素を待機")
         # viewer要素にフォーカス
-        viewer = WebDriverWait(driver, 10).until(
+        viewer = WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "viewer"))
         )
+        with open("debug.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
         logging.info("viewer要素取得成功")
         viewer.click()
         logging.info("viewer要素にフォーカス完了")

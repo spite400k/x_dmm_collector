@@ -103,7 +103,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         with open("debug1.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
-            logging.info("debug1.html 保存完了")
+        logging.info("debug1.html 保存完了")
 
         # 年齢認証
         try:
@@ -112,7 +112,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             )
             with open("debug2.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
-                logging.info("debug2.html 保存完了")
+            logging.info("debug2.html 保存完了")
 
             button.click()
             logging.info("年齢認証成功")

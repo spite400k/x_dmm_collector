@@ -33,3 +33,23 @@ jobs:
       - name: Run DMM collector
         run: |
           python main.py
+        continue-on-error: true   # エラーでも次の step に進む
+
+      - name: Upload debug.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-page
+          path: debug.html
+      - name: Upload debug1.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug1-page 
+          path: debug1.html
+      - name: Upload debug2.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug2-page
+          path: debug2.html

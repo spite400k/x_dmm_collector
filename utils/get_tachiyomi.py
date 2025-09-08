@@ -145,10 +145,12 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         viewer = WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "viewer"))
         )
-        with open("debug.html", "w", encoding="utf-8") as f:
+        with open("debug3.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         logging.info("viewer要素取得成功")
         viewer.click()
+        with open("debug4.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
         logging.info("viewer要素にフォーカス完了")
         _, total_page = get_page_counter(driver)
         logging.info(f"総ページ数: {total_page}")

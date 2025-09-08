@@ -69,10 +69,12 @@ def get_page_counter(driver, timeout=5):
             return current_page, total_page
         else:
             logging.warning(f"ページカウンタの形式が不正: '{counter_text}'")
-            return 1, 1
+            return 0, 0
     except Exception as e:
         logging.error(f"ページカウンタ取得失敗: {e}")
-        return 1, 50
+        with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        return 0, 0
 
 # ---------------------
 # Tachiyomiページキャプチャ関数

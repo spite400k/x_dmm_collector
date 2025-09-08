@@ -65,3 +65,9 @@ jobs:
         with:
           name: debug4-page
           path: debug4.html
+      - name: Upload debug_get_page_counter.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug_get_page_counter
+          path: debug_get_page_counter.html

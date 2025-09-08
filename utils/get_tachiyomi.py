@@ -107,8 +107,12 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         # 年齢認証
         try:
+            # 日本語「はい」または英語「I Agree」を探す
             button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//button[text()='はい'] | //button[text()='I Agree']"
+                ))
             )
             with open("debug2.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)

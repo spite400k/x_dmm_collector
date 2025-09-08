@@ -109,9 +109,15 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         except Exception as e:
             logging.info(f"年齢認証不要 or 既認証済み ({e})")
 
-        logging.info("試し読みページを開く")
-        driver.get(tachiyomi_url)
-        logging.info("試し読みページを開く完了")
+        try:
+            logging.info("試し読みページを開く")
+            driver.get(tachiyomi_url)
+            logging.info("試し読みページを開く完了")
+        except Exception as e:
+            logging.error(f"driver.get 失敗: {e}")
+            driver.save_screenshot("error_page.png")
+            raise
+
         time.sleep(5)
 
         images = []

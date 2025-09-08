@@ -53,3 +53,15 @@ jobs:
         with:
           name: debug2-page
           path: debug2.html
+      - name: Upload debug3.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug3-page
+          path: debug3.html
+      - name: Upload debug4.html if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug4-page
+          path: debug4.html

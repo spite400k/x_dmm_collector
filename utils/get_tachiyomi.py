@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from PIL import Image
 
 # ---------------------
@@ -107,23 +107,18 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         # 年齢認証
         try:
-            # 日本語「はい」または英語「I Agree」を探す
             button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((
+                EC.presence_of_element_located((
                     By.XPATH,
-                    "//a[contains(text(), 'はい')] | //a[contains(text(), 'I Agree')]"
+                    "//a[text()='はい'] | //a[text()='I Agree']"
                 ))
             )
-            button.click()
-
-            with open("debug2.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-            logging.info("debug2.html 保存完了")
-
-            button.click()
+            driver.execute_script("arguments[0].click();", button)
             logging.info("年齢認証成功")
-        except Exception as e:
-            logging.info(f"年齢認証不要 or 既認証済み ({e})")
+            time.sleep(2)
+        except (TimeoutException, StaleElementReferenceException):
+            logging.info("年齢認証不要 or 既認証済み")
+
 
         try:
             logging.info("試し読みページを開く")

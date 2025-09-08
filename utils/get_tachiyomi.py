@@ -111,9 +111,11 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable((
                     By.XPATH,
-                    "//button[text()='はい'] | //button[text()='I Agree']"
+                    "//a[contains(text(), 'はい')] | //a[contains(text(), 'I Agree')]"
                 ))
             )
+            button.click()
+
             with open("debug2.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
             logging.info("debug2.html 保存完了")

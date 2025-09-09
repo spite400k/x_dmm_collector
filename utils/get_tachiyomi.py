@@ -119,10 +119,15 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             )
             driver.execute_script("arguments[0].click();", button)
             logging.info("年齢認証成功")
+            with open("debug2.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            driver.save_screenshot("debug2.png")
             time.sleep(2)
         except (TimeoutException, StaleElementReferenceException):
             logging.info("年齢認証不要 or 既認証済み")
-
+            with open("debug1_e.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            driver.save_screenshot("debug1_e.png")
 
         try:
             logging.info("試し読みページを開く")

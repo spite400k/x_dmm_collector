@@ -119,14 +119,14 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             )
             driver.execute_script("arguments[0].click();", button)
             logging.info("年齢認証成功")
-            with open("debug2.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
+            # with open("debug2.html", "w", encoding="utf-8") as f:
+            #     f.write(driver.page_source)
             driver.save_screenshot("debug2.png")
             time.sleep(2)
         except (TimeoutException, StaleElementReferenceException):
             logging.info("年齢認証不要 or 既認証済み")
-            with open("debug1_e.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
+            # with open("debug1_e.html", "w", encoding="utf-8") as f:
+            #     f.write(driver.page_source)
             driver.save_screenshot("debug1_e.png")
 
         try:
@@ -148,18 +148,23 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         viewer = WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "viewer"))
         )
+        driver.save_screenshot("debug3.png")  
+
         WebDriverWait(driver, 30).until_not(
             EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
         )
-        logging.info("viewer要素取得成功")
-        with open("debug3.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        driver.save_screenshot("debug3.png")  
+        driver.save_screenshot("debug4.png")  
 
-        viewer.click()
-        with open("debug4.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        driver.save_screenshot("debug4.png")
+        logging.info("viewer要素取得成功")
+        # with open("debug3.html", "w", encoding="utf-8") as f:
+        #     f.write(driver.page_source)
+        driver.save_screenshot("debug5.png")  
+
+        driver.execute_script("arguments[0].click();", viewer)
+        # viewer.click()
+        # with open("debug4.html", "w", encoding="utf-8") as f:
+        #     f.write(driver.page_source)
+        driver.save_screenshot("debug6.png")
         logging.info("viewer要素にフォーカス完了")
 
         _, total_page = get_page_counter(driver)
@@ -169,6 +174,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("viewer要素をクリックしてフォーカス")
 
         viewer.click()
+        driver.save_screenshot("debug7.png")  
         time.sleep(5)  # ページ描画待ち
         logging.info("初期ページ描画待ち完了")
 

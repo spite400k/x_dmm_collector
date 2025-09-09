@@ -142,6 +142,9 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         viewer = WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "viewer"))
         )
+        WebDriverWait(driver, 30).until_not(
+            EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
+        )
         with open("debug3.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         logging.info("viewer要素取得成功")

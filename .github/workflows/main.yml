@@ -71,3 +71,33 @@ jobs:
         with:
           name: debug_get_page_counter
           path: debug_get_page_counter.html
+      - name: Upload debug1.png if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug1-page
+          path: debug1.png
+      - name: Upload debug2.png if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug2-page
+          path: debug2.png
+      - name: Upload debug3.png if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug3-page
+          path: debug3.png
+      - name: Upload debug4.png if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug4-page
+          path: debug4.png
+      - name: Upload debug_get_page_counter.png if exists
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug_get_page_counter
+          path: debug_get_page_counter.png

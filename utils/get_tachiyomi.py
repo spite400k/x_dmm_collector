@@ -74,6 +74,7 @@ def get_page_counter(driver, timeout=5):
         logging.error(f"ページカウンタ取得失敗: {e}")
         with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
+        driver.save_screenshot("debug_get_page_counter.png")
         return 0, 0
 
 # ---------------------
@@ -105,6 +106,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         with open("debug1.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
+        driver.save_screenshot("debug1.png")   
         logging.info("debug1.html 保存完了")
 
         # 年齢認証
@@ -128,7 +130,6 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             logging.info("試し読みページを開く完了")
         except Exception as e:
             logging.error(f"driver.get 失敗: {e}")
-            driver.save_screenshot("error_page.png")
             raise
 
         time.sleep(5)
@@ -148,10 +149,12 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("viewer要素取得成功")
         with open("debug3.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
-            
+        driver.save_screenshot("debug3.png")  
+
         viewer.click()
         with open("debug4.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
+        driver.save_screenshot("debug4.png")
         logging.info("viewer要素にフォーカス完了")
 
         _, total_page = get_page_counter(driver)

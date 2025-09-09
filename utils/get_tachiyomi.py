@@ -155,12 +155,24 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         )
         driver.save_screenshot("debug4.png")  
 
-        logging.info("viewer要素取得成功")
-        # with open("debug3.html", "w", encoding="utf-8") as f:
-        #     f.write(driver.page_source)
+        # 要素の大きさを取得
+        size = viewer.size
+        width = size['width']
+        height = size['height']
+
+        # 中央座標を計算
+        center_x = width / 2
+        center_y = height / 2
+
+        logging.info(f"viewer中央をクリック: x={center_x}, y={center_y}")
+
+        # ActionChainsで中央クリック
+        actions = ActionChains(driver)
+        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
         driver.save_screenshot("debug5.png")  
 
-        driver.execute_script("arguments[0].click();", viewer)
+        # driver.execute_script("arguments[0].click();", viewer)
+        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
         # viewer.click()
         # with open("debug4.html", "w", encoding="utf-8") as f:
         #     f.write(driver.page_source)
@@ -173,7 +185,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         actions = ActionChains(driver)
         logging.info("viewer要素をクリックしてフォーカス")
 
-        viewer.click()
+        # viewer.click()
+        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
         driver.save_screenshot("debug7.png")  
         time.sleep(5)  # ページ描画待ち
         logging.info("初期ページ描画待ち完了")

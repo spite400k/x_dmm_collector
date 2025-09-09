@@ -145,20 +145,26 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         WebDriverWait(driver, 30).until_not(
             EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
         )
+        logging.info("viewer要素取得成功")
         with open("debug3.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
-        logging.info("viewer要素取得成功")
+            
         viewer.click()
         with open("debug4.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         logging.info("viewer要素にフォーカス完了")
+
         _, total_page = get_page_counter(driver)
         logging.info(f"総ページ数: {total_page}")
+
         actions = ActionChains(driver)
         logging.info("viewer要素をクリックしてフォーカス")
+
         viewer.click()
         time.sleep(5)  # ページ描画待ち
         logging.info("初期ページ描画待ち完了")
+
+
         while True:
             try:
                 logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")

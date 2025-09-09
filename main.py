@@ -49,8 +49,8 @@ def main():
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
         try:
-            items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=10, min_sample_count=10)
-            top_items = items[:10]  # 上位10件のみ処理
+            items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=1, min_sample_count=10)
+            top_items = items[:1]  # 上位10件のみ処理
             logging.info("データ取得完了")
 
             for item in top_items:

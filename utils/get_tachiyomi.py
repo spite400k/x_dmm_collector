@@ -55,18 +55,22 @@ def get_visible_canvas(driver):
 # ---------------------
 # ページカウンタ取得関数
 # ---------------------
-def get_page_counter(driver, timeout=5):
+def get_page_counter(driver, timeout=30):
     """pageSliderCounter から現在/総ページ数を取得する（非表示でもOK）"""
     try:
-        counter_elem = WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.ID, "pageSliderCounter"))
-        )
-        logging.info(f"取得した counter_elem: '{counter_elem.get_attribute('outerHTML')}'")
-        
-        counter_text = WebDriverWait(driver, timeout).until(
-            lambda d: counter_elem.text.strip() if counter_elem.text.strip() else None
-        ) # e.g., "1/27"
-        logging.info(f"取得した pageSliderCounter: '{counter_text}'")
+        def get_text(d):
+            try:
+                elem = d.find_element(By.ID, "pageSliderCounter")
+                txt = elem.text.strip()
+                if txt:
+                    return txt
+            except StaleElementReferenceException:
+                return None  # 要素が再生成されるまで待つ
+            return None
+
+        counter_text = WebDriverWait(driver, timeout).until(get_text)
+
+        logging.info(f"counter_elem.text = '{counter_text}'")
 
         if "/" in counter_text:
             current_page, total_page = map(int, counter_text.split("/"))

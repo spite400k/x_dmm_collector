@@ -56,26 +56,27 @@ def get_visible_canvas(driver):
 # ページカウンタ取得関数
 # ---------------------
 def get_page_counter(driver, timeout=5):
-    """pageSliderCounter から現在/総ページ数を取得する"""
+    """pageSliderCounter から現在/総ページ数を取得する（非表示でもOK）"""
     try:
         counter_elem = WebDriverWait(driver, timeout).until(
-            EC.visibility_of_element_located((By.ID, "pageSliderCounter"))
+            EC.presence_of_element_located((By.ID, "pageSliderCounter"))
         )
-        counter_text = counter_elem.text.strip()
-        logging.info(f"ページカウンタ取得: '{counter_text}'")
+        counter_text = counter_elem.text.strip()  # e.g., "1/27"
+        logging.info(f"取得した pageSliderCounter: '{counter_text}'")
 
         if "/" in counter_text:
             current_page, total_page = map(int, counter_text.split("/"))
             return current_page, total_page
         else:
             logging.warning(f"ページカウンタの形式が不正: '{counter_text}'")
-            return 0, 0
+            return 0, 0  # 仮値
     except Exception as e:
         logging.error(f"ページカウンタ取得失敗: {e}")
         with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         driver.save_screenshot("debug_get_page_counter.png")
         return 0, 0
+
 
 # ---------------------
 # Tachiyomiページキャプチャ関数
@@ -155,30 +156,6 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         )
         driver.save_screenshot("debug4.png")  
 
-        # 要素の大きさを取得
-        size = viewer.size
-        width = size['width']
-        height = size['height']
-
-        # 中央座標を計算
-        center_x = width / 2
-        center_y = height / 2
-
-        logging.info(f"viewer中央をクリック: x={center_x}, y={center_y}")
-
-        # ActionChainsで中央クリック
-        actions = ActionChains(driver)
-        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
-        driver.save_screenshot("debug5.png")  
-
-        # driver.execute_script("arguments[0].click();", viewer)
-        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
-        # viewer.click()
-        # with open("debug4.html", "w", encoding="utf-8") as f:
-        #     f.write(driver.page_source)
-        driver.save_screenshot("debug6.png")
-        logging.info("viewer要素にフォーカス完了")
-
         _, total_page = get_page_counter(driver)
         logging.info(f"総ページ数: {total_page}")
 
@@ -186,7 +163,6 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("viewer要素をクリックしてフォーカス")
 
         # viewer.click()
-        actions.move_to_element_with_offset(viewer, center_x, center_y).click().perform()
         driver.save_screenshot("debug7.png")  
         time.sleep(5)  # ページ描画待ち
         logging.info("初期ページ描画待ち完了")

@@ -61,6 +61,7 @@ def get_page_counter(driver, timeout=5):
         counter_elem = WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located((By.ID, "pageSliderCounter"))
         )
+        logging.info(f"取得した counter_elem: '{counter_elem.get_attribute('outerHTML')}'")
         counter_text = counter_elem.text.strip()  # e.g., "1/27"
         logging.info(f"取得した pageSliderCounter: '{counter_text}'")
 

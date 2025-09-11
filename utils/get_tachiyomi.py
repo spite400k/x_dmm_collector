@@ -74,13 +74,13 @@ def get_page_counter(driver, timeout=30):
             with open("debug_get_page_counter1.html", "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
             driver.save_screenshot("debug_get_page_counter1.png")
-            return 0, 0  # 仮値
+            return 1, 50  # 仮値
     except Exception as e:
         logging.error(f"ページカウンタ取得失敗: {e}")
         with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         driver.save_screenshot("debug_get_page_counter.png")
-        return 0, 0
+        return 1, 50
 
 
 # ---------------------
@@ -176,6 +176,15 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         while True:
             try:
                 logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
+                # ページ処理の最後にチェックを追加
+                try:
+                    purchase_button = driver.find_element(By.XPATH, "//span[text()='購入する']")
+                    if purchase_button.is_displayed():
+                        logging.info("購入ボタンを検出 → スクリーンショット終了")
+                        break
+                except:
+                    # 要素がない場合はエラーになるので無視して続行
+                    pass
 
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
                 screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")

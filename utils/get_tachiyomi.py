@@ -178,7 +178,9 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
                 # ページ処理の最後にチェックを追加
                 try:
-                    purchase_button = driver.find_element(By.XPATH, "//span[text()='購入する']")
+                    purchase_button = WebDriverWait(driver, 30).until(
+                        EC.presence_of_element_located(By.XPATH, "//span[text()='購入する']")
+                    )
                     if purchase_button.is_displayed():
                         logging.info("購入ボタンを検出 → スクリーンショット終了")
                         break

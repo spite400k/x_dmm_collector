@@ -186,6 +186,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                         break
                 except:
                     # 要素がない場合はエラーになるので無視して続行
+                    logging.info("最終ページではないようです → 続行")
+                    driver.save_screenshot(f"debug_{page_idx:03}.png")  
                     pass
 
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))

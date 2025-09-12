@@ -179,7 +179,8 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 # ページ処理の最後にチェックを追加
                 try:
                     purchase_button = WebDriverWait(driver, 30).until(
-                        EC.presence_of_element_located(By.XPATH, "//span[text()='購入する']")
+                        # EC.presence_of_element_located(By.XPATH, "//span[text()='購入する']")
+                        EC.presence_of_element_located((By.ID, "endOfBook"))
                     )
                     logging.info("購入ボタンを検出")
                     if purchase_button.is_displayed():

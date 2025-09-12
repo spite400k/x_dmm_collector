@@ -35,8 +35,8 @@ def cleanup_file(filepath: str):
 def main():
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        # {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
-        # {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
+        {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
         {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         # {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
@@ -50,17 +50,17 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=10, min_sample_count=10)
-            top_items = items[:1]  # 上位10件のみ処理
+            top_items = items[:10]  # 上位10件のみ処理
             logging.info("データ取得完了")
 
             for item in top_items:
                 tachiyomi_url = item.get("tachiyomi", {}).get("URL")  # ← .get を安全化
-                logging.info("立ち読みデータ取得開始")
+                # logging.info("立ち読みデータ取得開始")
                 tachiyomi_image_paths = []
                 if tachiyomi_url:
                     logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
                     tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
-                logging.info("立ち読みデータ取得完了")
+                # logging.info("立ち読みデータ取得完了")
 
                 insert_dmm_item(item, tachiyomi_image_paths, site=site, service=service, floor=floor)
                 logging.info("データ登録完了")

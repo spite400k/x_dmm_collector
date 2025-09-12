@@ -55,7 +55,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, site, service, floor):
         for idx, img_url in enumerate(tachiyomi_image_paths):
             storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1)
             if storage_path:
-                logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+                # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
                 uploaded_paths.append(storage_path)
             else:
                 logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")

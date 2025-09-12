@@ -110,10 +110,10 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
 
-        with open("debug1.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        driver.save_screenshot("debug1.png")   
-        logging.info("debug1.html 保存完了")
+        # with open("debug1.html", "w", encoding="utf-8") as f:
+        #     f.write(driver.page_source)
+        # driver.save_screenshot("debug1.png")   
+        # logging.info("debug1.html 保存完了")
 
         # 年齢認証
         try:
@@ -127,18 +127,18 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             logging.info("年齢認証成功")
             # with open("debug2.html", "w", encoding="utf-8") as f:
             #     f.write(driver.page_source)
-            driver.save_screenshot("debug2.png")
+            # driver.save_screenshot("debug2.png")
             time.sleep(2)
         except (TimeoutException, StaleElementReferenceException):
             logging.info("年齢認証不要 or 既認証済み")
             # with open("debug1_e.html", "w", encoding="utf-8") as f:
             #     f.write(driver.page_source)
-            driver.save_screenshot("debug1_e.png")
+            # driver.save_screenshot("debug1_e.png")
 
         try:
-            logging.info("試し読みページを開く")
+            # logging.info("試し読みページを開く")
             driver.get(tachiyomi_url)
-            logging.info("試し読みページを開く完了")
+            # logging.info("試し読みページを開く完了")
         except Exception as e:
             logging.error(f"driver.get 失敗: {e}")
             raise
@@ -149,28 +149,28 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         page_idx = 1
         current_page = 0
 
-        logging.info("viewer要素を待機")
+        # logging.info("viewer要素を待機")
         # viewer要素にフォーカス
         viewer = WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.ID, "viewer"))
         )
-        driver.save_screenshot("debug3.png")  
+        # driver.save_screenshot("debug3.png")  
 
         WebDriverWait(driver, 30).until_not(
             EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
         )
-        driver.save_screenshot("debug4.png")  
+        # driver.save_screenshot("debug4.png")  
 
         _, total_page = get_page_counter(driver)
         logging.info(f"総ページ数: {total_page}")
 
         actions = ActionChains(driver)
-        logging.info("viewer要素をクリックしてフォーカス")
+        # logging.info("viewer要素をクリックしてフォーカス")
 
         # viewer.click()
-        driver.save_screenshot("debug7.png")  
+        # driver.save_screenshot("debug7.png")  
         time.sleep(5)  # ページ描画待ち
-        logging.info("初期ページ描画待ち完了")
+        # logging.info("初期ページ描画待ち完了")
 
 
         while True:
@@ -182,19 +182,13 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                         # EC.presence_of_element_located(By.XPATH, "//span[text()='購入する']")
                         EC.presence_of_element_located((By.ID, "endOfBook"))
                     )
-                    logging.info("購入ボタンを検出")
+
                     if purchase_button.is_displayed():
-                        logging.info("購入ボタンを検出 → スクリーンショット終了")
+                        logging.info("最終ページを検出 → スクリーンショット終了")
                         break
-                    else:
-                        logging.info("購入ボタンは非表示 → 続行")
                 except:
                     # 要素がない場合はエラーになるので無視して続行
-                    logging.info("最終ページではないようです → 続行")
-                    if page_idx > 30:
-                        driver.save_screenshot(f"debug_{page_idx:03}.png")  
-                        with open(f"debug_get_page_{page_idx:03}.html", "w", encoding="utf-8") as f:
-                            f.write(driver.page_source)
+                    # logging.info("最終ページではないようです → 続行")
                     pass
 
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))

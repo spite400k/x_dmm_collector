@@ -18,21 +18,21 @@ logging.basicConfig(
 # ---------------------------------------------------------------------
 # ローカル画像ファイルをSupabase Storageにアップロード
 # ---------------------------------------------------------------------
-def upload_local_image_to_storage(filepath: str, content_id: str, index: int, bucket: str = "dmm-images2") -> str:
+def upload_local_image_to_storage(filepath: str, content_id: str, index: int, floor:str, bucket: str = "dmm-images2") -> str:
     """
     ローカルの画像ファイルを Supabase Storage にアップロードする
     """
     try:
         if not os.path.exists(filepath):
-            logging.warning("[ERROR] ファイルが存在しません: %s", filepath)
+            logging.warning("ファイルが存在しません: %s", filepath)
             return ""
 
         filename = f"{content_id}_{index:02d}{os.path.splitext(filepath)[1]}"
-        storage_path = f"{content_id}/{filename}"  # フォルダごと格納
+        storage_path = f"{floor}/{content_id}/{filename}"  # フォルダごと格納
         logging.info("[UPLOAD] %s", storage_path)
 
         # すでに存在する場合はスキップ
-        files = supabase.storage.from_(bucket).list(f"{content_id}/")
+        files = supabase.storage.from_(bucket).list(f"{floor}/{content_id}/")
         if any(file["name"] == filename for file in files):
             logging.info("[SKIP] 既に存在: %s", filename)
             return storage_path
@@ -48,7 +48,7 @@ def upload_local_image_to_storage(filepath: str, content_id: str, index: int, bu
         return storage_path
 
     except Exception as e:
-        logging.warning("[ERROR] ローカル画像アップロード失敗: %s (%s)", filepath, e)
+        logging.error("ローカル画像アップロード失敗: %s (%s)", filepath, e)
         return ""
     
 # ---------------------------------------------------------------------
@@ -78,7 +78,7 @@ def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str =
         return storage_path
 
     except Exception as e:
-        logging.warning("[ERROR] 画像アップロード失敗: %s (%s)", url, e)
+        logging.error("画像アップロード失敗: %s (%s)", url, e)
         return ""
 
 

@@ -29,7 +29,7 @@ def parse_price(price_str):
 # ---------------------------------------------------------------------
 # DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入
 # ---------------------------------------------------------------------
-def insert_dmm_item(item: dict, tachiyomi_image_paths, site, service, floor):
+def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor):
     try:
         content_id = item.get("content_id")
         title = item.get("title")
@@ -50,15 +50,28 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, site, service, floor):
         uploaded_paths = []
         # 立ち読み画像を先にアップロード
         if not tachiyomi_image_paths:
-            logging.info(f"[INFO] 立ち読み画像パスが空: {title} : {url}")
+            logging.info(f" 立ち読み画像パスが空: {title} : {url}")
 
         for idx, img_url in enumerate(tachiyomi_image_paths):
-            storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1)
+            storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1, floor=floor)
             if storage_path:
                 # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
                 uploaded_paths.append(storage_path)
             else:
                 logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")
+
+        # サンプル動画をアップロード
+        if not sample_movie_path:
+            logging.info(f"サンプル動画パスが空: {title} : {url}")
+
+        
+        storage_path = upload_local_image_to_storage(sample_movie_path, content_id=content_id, index=1, floor=floor)
+        if storage_path:
+            # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+            uploaded_paths.append(storage_path)
+        else:
+            logging.error(f"  [IMG-FAIL] サンプル動画 : {sample_movie_path}")
+
 
         # サンプル画像をアップロード
         sample_urls = item.get("sampleImageURL", {}).get("list", [])
@@ -121,5 +134,5 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, site, service, floor):
         logging.info(f"[INSERT] 成功: {title} ({content_id}) : {url}")
 
     except Exception as e:
-        logging.error(f"[ERROR] insert_dmm_item 失敗: {e}")
+        logging.error(f" insert_dmm_item 失敗: {e}")
         logging.error(traceback.format_exc())

@@ -98,6 +98,10 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         list_price = parse_price(item.get("prices", {}).get("list_price"))
         # logging.info(f"  [PRICE] price={price}, list_price={list_price}")
 
+        # メーカー名
+        maker_list = iteminfo.get("maker") or iteminfo.get("manufacture") or [{}]
+        maker = maker_list[0].get("name")
+
         data = {
             "content_id": content_id,
             "product_id": item.get("product_id"),
@@ -120,7 +124,8 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "genres": genre_names,
             "genre_ids": genre_ids,
             "series": iteminfo.get("series", [{}])[0].get("name"),
-            "maker": iteminfo.get("maker", [{}])[0].get("name"),
+            "maker": maker,
+            "category_name": item.get("category_name"),
             "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),
             "tachiyomi_affiliate_url": item.get("tachiyomi", {}).get("affiliateURL"),
             "auto_comment": ai_content.get("auto_comment", ""),

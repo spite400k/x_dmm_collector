@@ -96,24 +96,28 @@ def generate_content(item: dict) -> dict:
     genres = [g["name"] for g in genres_raw]
     review_score = item.get("review", {}).get("average", "不明")
     review_count = item.get("review", {}).get("count", 0)
-    maker = item.get("iteminfo", {}).get("maker", [{}])[0].get("name", "")
+    # メーカー名
+    maker_list = item.get("maker") or item.get("manufacture") or [{}]
+    maker = maker_list[0].get("name")
     series = item.get("iteminfo", {}).get("series", [{}])[0].get("name", "")
     release_date = item.get("date", "")
+    category_name = item.get("category_name"),
 
     # HTMLからあらすじを取得
     url = item.get("URL", "")
     html_summary = scrape_product_details(url)
 
     prompt = f"""
-    以下の情報をもとに、同人作品の紹介文を生成してください。
+    以下の情報をもとに、作品の紹介文を生成してください。
     出力はJSON形式で、3つの項目（感想・概要・買いたくなるポイント）を含めてください。
     値はテンプレではなく、実際に生成された日本語文で埋めてください。
 
     ### 入力情報:
+    - カテゴリ: {category_name}
     - タイトル: {title}
     - ジャンル: {genres}
     - レビュー: {review_score}点（{review_count}件）
-    - サークル: {maker}
+    - メーカー: {maker}
     - 発売日: {release_date}
     - シリーズ: {series or '該当なし'}
 
@@ -124,12 +128,11 @@ def generate_content(item: dict) -> dict:
     ```json
     {{
         "auto_comment": "10～20文字の一言感想",
-        "auto_summary": "50〜80文字の概要",
-        "auto_point": "30〜50文字の買いたくなるポイント"
+        "auto_summary": "1000文字の概要",
+        "auto_point": "500文字の買いたくなるポイント"
     }}
     テンプレのままではなく、内容を埋めて出力してください。
     次の文言は使用禁止「一冊」「作品」「一作」「話」「！」
-    「の末路…」で終えるようにしてください。
     """
 
     logging.info("[OpenAI] Generating content for: %s", title)

@@ -1,4 +1,4 @@
-from db.storage import upload_image_to_storage, upload_local_image_to_storage
+from db.storageMega import upload_image_to_mega, upload_local_image_to_mega
 from db.supabase_client import supabase
 import logging
 from openai_api.content_generator import generate_content
@@ -52,31 +52,33 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         if not tachiyomi_image_paths:
             logging.info(f" 立ち読み画像パスが空: {title} : {url}")
 
-        for idx, img_url in enumerate(tachiyomi_image_paths):
-            storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1, floor=floor)
-            if storage_path:
-                # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
-                uploaded_paths.append(storage_path)
-            else:
-                logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")
+        else:
+            for idx, img_url in enumerate(tachiyomi_image_paths):
+                storage_path = upload_local_image_to_mega(img_url, content_id=content_id, index=idx + 1, floor=floor)
+                if storage_path:
+                    # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+                    uploaded_paths.append(storage_path)
+                else:
+                    logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")
 
+        uploaded_video_paths="";
         # サンプル動画をアップロード
         if not sample_movie_path:
             logging.info(f"サンプル動画パスが空: {title} : {url}")
-
-        
-        storage_path = upload_local_image_to_storage(sample_movie_path, content_id=content_id, index=1, floor=floor)
-        if storage_path:
-            # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
-            uploaded_paths.append(storage_path)
         else:
-            logging.error(f"  [IMG-FAIL] サンプル動画 : {sample_movie_path}")
+        
+            storage_path = upload_local_image_to_mega(sample_movie_path, content_id=content_id, index=1, floor=floor)
+            if storage_path:
+                logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+                # uploaded_video_paths.append(storage_path)
+            else:
+                logging.error(f"  [IMG-FAIL] サンプル動画 : {sample_movie_path}")
 
 
         # サンプル画像をアップロード
         sample_urls = item.get("sampleImageURL", {}).get("list", [])
         for idx, img_url in enumerate(sample_urls):
-            storage_path = upload_image_to_storage(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
+            storage_path = upload_image_to_mega(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
             if storage_path:
                 logging.info(f"  [IMG-UPLOAD] Sample {idx+1}: {storage_path}")
                 uploaded_paths.append(storage_path)
@@ -114,7 +116,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "review_average": item.get("review", {}).get("average"),
             "item_url": url,
             "affiliate_url": item.get("affiliateURL"),
-            "image_list_url": item.get("imageURL", {}).get("list"),
+            # "image_list_url": item.get("imageURL", {}).get("list"),
             "image_large_url": item.get("imageURL", {}).get("large"),
             "sample_images": uploaded_paths,
             "sample_movie_url": item.get("sampleMovieURL_highest"),
@@ -125,6 +127,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "genre_ids": genre_ids,
             "series": iteminfo.get("series", [{}])[0].get("name"),
             "maker": maker,
+            "author": item.get("author"),
             "category_name": item.get("category_name"),
             "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),
             "tachiyomi_affiliate_url": item.get("tachiyomi", {}).get("affiliateURL"),

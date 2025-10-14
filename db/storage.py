@@ -56,6 +56,7 @@ def upload_local_image_to_storage(filepath: str, content_id: str, index: int, fl
 # ---------------------------------------------------------------------
 def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str = "dmm-images2") -> str:
     try:
+        # 画像を取得
         response = requests.get(url)
         response.raise_for_status()
 
@@ -63,22 +64,24 @@ def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str =
         storage_path = f"{content_id}/{filename}"  # フォルダごと格納
         logging.info("[UPLOAD] %s", storage_path)
 
-        # すでに存在する場合は上書きせずスキップ（必要に応じて変更）
+        # 既存チェック
         files = supabase.storage.from_(bucket).list(f"{content_id}/")
         if any(file["name"] == filename for file in files):
             logging.info("[SKIP] 既に存在: %s", filename)
-            return storage_path
+        else:
+            # アップロード
+            supabase.storage.from_(bucket).upload(
+                path=storage_path,
+                file=response.content,
+                file_options={"content-type": "image/jpeg"}
+            )
 
-        supabase.storage.from_(bucket).upload(
-            path=storage_path,
-            file=response.content,
-            file_options={"content-type": "image/jpeg"}
-        )
-
-        return storage_path
+        # 公開URLを取得
+        public_url = supabase.storage.from_(bucket).get_public_url(storage_path).get("publicUrl")
+        return public_url
 
     except Exception as e:
-        logging.error("画像アップロード失敗: %s (%s)", url, e)
+        logging.error("画像アップロード失敗: %s", e)
         return ""
 
 

@@ -2,6 +2,7 @@ import os
 import subprocess
 import logging
 import platform
+from dotenv import load_dotenv
 import requests
 import traceback
 
@@ -23,11 +24,13 @@ logging.basicConfig(
 def get_mega_cmd_path(command: str) -> str:
     system = platform.system()
     if system == "Windows":
-        base = r"C:\Users\kazuk\AppData\Local\MEGAcmd"
-        path = os.path.join(base, f"{command}.exe")
+        # Windows は .bat ファイルをフルパス指定
+        base = r"C:\Users\kazuk\AppData\Local\MEGAcmd"  # ← 実際のパスに置き換え
+        path = os.path.join(base, f"{command}.bat")
         logging.debug("Using Windows MEGA command path: %s", path)
         return path
     else:
+        # Linux / macOS
         logging.debug("Using Linux/macOS MEGA command path: %s", command)
         return command
 
@@ -41,7 +44,8 @@ def run_subprocess(cmd_list, check=True):
             cmd_list,
             capture_output=True,
             text=True,
-            check=check
+            check=check,
+            shell=False  # .bat でもフルパス指定なら False でOK
         )
         logging.debug("stdout: %s", result.stdout.strip())
         if result.stderr.strip():
@@ -62,6 +66,8 @@ def run_subprocess(cmd_list, check=True):
 # MEGAログイン
 # ---------------------------------------------------------------------
 def mega_login():
+
+    load_dotenv()
     email = os.getenv("MEGA_EMAIL")
     password = os.getenv("MEGA_PASSWORD")
     if not email or not password:
@@ -79,7 +85,7 @@ def mega_logout():
     logging.info("MEGAログアウト完了 ✅")
 
 # ---------------------------------------------------------------------
-# ローカル画像アップロード
+# アップロードラッパー（ログイン・アップロード・ログアウト）
 # ---------------------------------------------------------------------
 def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor: str) -> str:
     try:
@@ -87,6 +93,7 @@ def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor
             logging.warning("ファイルが存在しません: %s", filepath)
             return ""
 
+        mega_login()
         remote_dir = f"/Root/{floor}/{content_id}"
         filename = f"{content_id}_{index:02d}{os.path.splitext(filepath)[1]}"
 
@@ -104,12 +111,19 @@ def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor
         logging.error("MEGAアップロード失敗: %s", e)
         logging.debug(traceback.format_exc())
         return ""
+    finally:
+        try:
+            mega_logout()
+        except Exception as e:
+            logging.warning("ログアウト時にエラー: %s", e)
+            logging.debug(traceback.format_exc())
 
 # ---------------------------------------------------------------------
-# URL画像アップロード
+# URLアップロードラッパー（ログイン・アップロード・ログアウト）
 # ---------------------------------------------------------------------
 def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> str:
     try:
+        mega_login()
         logging.info("[DOWNLOAD] URL: %s", url)
         response = requests.get(url)
         response.raise_for_status()
@@ -129,3 +143,9 @@ def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> s
         logging.error("URL画像アップロード失敗: %s", e)
         logging.debug(traceback.format_exc())
         return ""
+    finally:
+        try:
+            mega_logout()
+        except Exception as e:
+            logging.warning("ログアウト時にエラー: %s", e)
+            logging.debug(traceback.format_exc())

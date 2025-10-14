@@ -45,7 +45,7 @@ def run_subprocess(cmd_list, check=True):
             capture_output=True,
             text=True,
             check=check,
-            shell=False  # .bat でもフルパス指定なら False でOK
+            shell=False
         )
         logging.debug("stdout: %s", result.stdout.strip())
         if result.stderr.strip():
@@ -66,7 +66,6 @@ def run_subprocess(cmd_list, check=True):
 # MEGAログイン
 # ---------------------------------------------------------------------
 def mega_login():
-
     load_dotenv()
     email = os.getenv("MEGA_EMAIL")
     password = os.getenv("MEGA_PASSWORD")
@@ -85,7 +84,7 @@ def mega_logout():
     logging.info("MEGAログアウト完了 ✅")
 
 # ---------------------------------------------------------------------
-# アップロードラッパー（ログイン・アップロード・ログアウト）
+# ローカル画像アップロード（-c で階層自動作成）
 # ---------------------------------------------------------------------
 def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor: str) -> str:
     try:
@@ -93,17 +92,17 @@ def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor
             logging.warning("ファイルが存在しません: %s", filepath)
             return ""
 
-        mega_login()
-        remote_dir = f"/Root/{floor}/{content_id}"
+        remote_dir = f"/{floor}/{content_id}"
         filename = f"{content_id}_{index:02d}{os.path.splitext(filepath)[1]}"
 
-        # フォルダ作成
-        logging.info("[MKDIR] %s", remote_dir)
-        run_subprocess([get_mega_cmd_path("mega-mkdir"), remote_dir], check=False)
-
-        # アップロード
+        # アップロード（-c で階層自動作成）
         logging.info("[UPLOAD] %s -> %s", filepath, f"{remote_dir}/{filename}")
-        run_subprocess([get_mega_cmd_path("mega-put"), filepath, f"{remote_dir}/{filename}"])
+        run_subprocess([
+            get_mega_cmd_path("mega-put"),
+            "-c",  # <- 親フォルダ自動作成
+            filepath,
+            f"{remote_dir}/{filename}"
+        ])
         logging.info("[UPLOAD OK] %s", f"{remote_dir}/{filename}")
         return f"{remote_dir}/{filename}"
 
@@ -111,32 +110,48 @@ def upload_local_image_to_mega(filepath: str, content_id: str, index: int, floor
         logging.error("MEGAアップロード失敗: %s", e)
         logging.debug(traceback.format_exc())
         return ""
-    finally:
-        try:
-            mega_logout()
-        except Exception as e:
-            logging.warning("ログアウト時にエラー: %s", e)
-            logging.debug(traceback.format_exc())
+
 
 # ---------------------------------------------------------------------
-# URLアップロードラッパー（ログイン・アップロード・ログアウト）
+# 複数ファイルアップロードサンプル
+# ---------------------------------------------------------------------
+def upload_files_local_image(file_list, content_id, floor):
+
+    uploaded_paths = []
+    try:
+        mega_login()  # 先にログイン
+
+        if isinstance(file_list, list):
+            for i, file in enumerate(file_list, start=1):
+                storage_path = upload_local_image_to_mega(file, content_id, i, floor)
+                uploaded_paths.append(storage_path)
+        elif isinstance(file_list, str):
+            # 単一ファイルの場合
+            storage_path = upload_local_image_to_mega(file_list, content_id, 1, floor)
+            uploaded_paths.append(storage_path)
+        else:
+            logging.warning("file_list が list または str ではありません: %s", type(file_list))
+            
+        return uploaded_paths
+    finally:
+        mega_logout()  # 最後にログアウト
+        
+# ---------------------------------------------------------------------
+# URL画像アップロード（-c で階層自動作成）
 # ---------------------------------------------------------------------
 def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> str:
+    temp_file = f"temp_{content_id}_{index:02d}.jpg"
     try:
         mega_login()
         logging.info("[DOWNLOAD] URL: %s", url)
         response = requests.get(url)
         response.raise_for_status()
 
-        temp_file = f"temp_{content_id}_{index:02d}.jpg"
         with open(temp_file, "wb") as f:
             f.write(response.content)
         logging.info("[DOWNLOAD OK] %s", temp_file)
 
         result = upload_local_image_to_mega(temp_file, content_id, index, floor)
-
-        os.remove(temp_file)
-        logging.debug("[TEMP FILE REMOVED] %s", temp_file)
         return result
 
     except Exception as e:
@@ -144,8 +159,27 @@ def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> s
         logging.debug(traceback.format_exc())
         return ""
     finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+            logging.debug("[TEMP FILE REMOVED] %s", temp_file)
         try:
             mega_logout()
         except Exception as e:
             logging.warning("ログアウト時にエラー: %s", e)
             logging.debug(traceback.format_exc())
+
+# ---------------------------------------------------------------------
+# 複数ファイルアップロードサンプル
+# ---------------------------------------------------------------------
+def upload_files_buffer(file_list, content_id, floor):
+    try:
+        mega_login()  # 先にログイン
+
+        uploaded_paths = []
+        for i, file in enumerate(file_list, start=1):
+            storage_path = upload_image_to_mega(file, content_id, i, floor)
+            uploaded_paths.append(storage_path)
+
+        return uploaded_paths
+    finally:
+        mega_logout()  # 最後にログアウト

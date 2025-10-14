@@ -1,4 +1,4 @@
-from db.storageMega import upload_image_to_mega, upload_local_image_to_mega
+from db.storageMega import upload_files_buffer, upload_files_local_image, upload_image_to_mega, upload_local_image_to_mega
 from db.supabase_client import supabase
 import logging
 from openai_api.content_generator import generate_content
@@ -49,41 +49,26 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
 
         uploaded_paths = []
         # 立ち読み画像を先にアップロード
-        if not tachiyomi_image_paths:
-            logging.info(f" 立ち読み画像パスが空: {title} : {url}")
+        if tachiyomi_image_paths:
+            logging.info(f" 立ち読み画像を取得: {title} : {url}")
+            storage_path = upload_files_local_image(tachiyomi_image_paths, content_id, floor)
+            # for idx, img_url in enumerate(tachiyomi_image_paths):
+            #     storage_path = upload_local_image_to_mega(img_url, content_id=content_id, index=idx + 1, floor=floor)
 
-        else:
-            for idx, img_url in enumerate(tachiyomi_image_paths):
-                storage_path = upload_local_image_to_mega(img_url, content_id=content_id, index=idx + 1, floor=floor)
-                if storage_path:
-                    # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
-                    uploaded_paths.append(storage_path)
-                else:
-                    logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")
 
-        uploaded_video_paths="";
         # サンプル動画をアップロード
-        if not sample_movie_path:
-            logging.info(f"サンプル動画パスが空: {title} : {url}")
-        else:
-        
-            storage_path = upload_local_image_to_mega(sample_movie_path, content_id=content_id, index=1, floor=floor)
-            if storage_path:
-                logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
-                # uploaded_video_paths.append(storage_path)
-            else:
-                logging.error(f"  [IMG-FAIL] サンプル動画 : {sample_movie_path}")
+        if sample_movie_path:
+            logging.info(f"サンプル動画パスを取得: {title} : {url}")
+
+            storage_path =upload_files_local_image(sample_movie_path, content_id=content_id, floor=floor)
+            # storage_path = upload_local_image_to_mega(sample_movie_path, content_id=content_id, index=1, floor=floor)
 
 
         # サンプル画像をアップロード
         sample_urls = item.get("sampleImageURL", {}).get("list", [])
-        for idx, img_url in enumerate(sample_urls):
-            storage_path = upload_image_to_mega(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
-            if storage_path:
-                logging.info(f"  [IMG-UPLOAD] Sample {idx+1}: {storage_path}")
-                uploaded_paths.append(storage_path)
-            else:
-                logging.error(f"  [IMG-FAIL] Sample {idx+1}: {img_url}")
+        storage_path = upload_files_buffer(sample_urls, content_id, floor)
+        # for idx, img_url in enumerate(sample_urls):
+        #     storage_path = upload_image_to_mega(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
 
         # ジャンル情報を抽出
         iteminfo = item.get("iteminfo", {})

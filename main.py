@@ -36,9 +36,9 @@ def cleanup_file(filepath: str):
 def main():
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        # {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
         {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
-        # {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
+        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         # {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
     ]
@@ -52,8 +52,8 @@ def main():
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
         try:
-            items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=30, min_sample_count=10)
-            top_items = items[:10]  # 上位10件のみ処理
+            items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=40, min_sample_count=10)
+            top_items = items[:30]  # 上位10件のみ処理
             logging.info("データ取得完了")
 
             for item in top_items:

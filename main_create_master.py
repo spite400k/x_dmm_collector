@@ -173,16 +173,16 @@ def main():
     )
 
     try:
-        # sync_site_and_service_master()
-        # sync_floor_master()
+        sync_site_and_service_master()
+        sync_floor_master()
 
-        floors = supabase.table("mst_floor").select("floor_id").execute().data
-        for floor in floors:
-            floor_id = floor["floor_id"]
-            try:
-                sync_genre_master(floor_id)
-            except Exception as e:
-                logging.warning("[GENRE] floor_id=%s のジャンル取得失敗: %s", floor_id, str(e))
+        # floors = supabase.table("mst_floor").select("floor_id").execute().data
+        # for floor in floors:
+        #     floor_id = floor["floor_id"]
+        #     try:
+        #         sync_genre_master(floor_id)
+        #     except Exception as e:
+        #         logging.warning("[GENRE] floor_id=%s のジャンル取得失敗: %s", floor_id, str(e))
 
     except Exception as e:
         logging.critical("[FATAL] 処理中に例外発生: %s", str(e))

@@ -1,4 +1,5 @@
 import sys
+from db.storageMega import mega_login, mega_logout
 from dmm.dmm_api import fetch_items
 from db.trn_dmm_items_repository import insert_dmm_item
 import os
@@ -45,6 +46,8 @@ def main():
 
     has_error = False
 
+    mega_login()  # 先にログイン
+
     for target in targets:
         site = target["site"]
         service = target["service"]
@@ -56,6 +59,8 @@ def main():
             top_items = items[:30]  # 上位10件のみ処理
             logging.info("データ取得完了")
 
+            
+            
             for item in top_items:
                 # 立ち読みデータの取得
                 # 立ち読みURLが存在する場合のみ処理
@@ -86,12 +91,16 @@ def main():
             # logging.error(" Failed to fetch or insert items for floor=%s: %s", floor, str(e))
             logging.error("登録処理に失敗: %s", str(e))
             has_error = True
+        # finally :
+            
 
     if has_error:
         logging.error("処理中にエラーが発生しました")
+        mega_logout()  # 最後にログアウト
         sys.exit(1)  # 非ゼロで終了（CIで失敗扱い）
     else:
         logging.info("全ての処理が正常に完了しました")
+        mega_logout()  # 最後にログアウト
         sys.exit(0)
 
 

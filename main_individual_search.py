@@ -21,10 +21,10 @@ def main():
 
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        {"service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        # {"service": "doujin", "floor": "digital_doujin"}, # 同人誌
         # {"service": "digital", "floor": "videoc"}, # 動画 素人
         # {"service": "digital", "floor": "nikkatsu"}, # 写真
-        # {"service": "digital", "floor": "videoa"}, # ビデオ
+        {"service": "digital", "floor": "videoa"}, # ビデオ
         # {"service": "digital", "floor": "anime"}, # アニメ
     ]
 
@@ -32,10 +32,17 @@ def main():
         service = target["service"]
         floor = target["floor"]
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
-        keyword = "セキレイちゃん"  # 必要に応じてキーワードを設定
+        # keyword = "セキレイちゃん"  # 必要に応じてキーワードを設定
+        keyword=""
 
         try:
-            items = fetch_items_search_keyword(site=site, service=service, floor=floor, keyword=keyword, offset=1, hits=10)
+            items = fetch_items_search_keyword(
+                site=site, 
+                service=service, 
+                floor=floor, 
+                keyword=keyword, 
+                offset=1, 
+                hits=10)
             for item in items:
                 insert_dmm_item(item)
         except Exception as e:

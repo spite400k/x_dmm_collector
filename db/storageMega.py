@@ -6,11 +6,14 @@ from dotenv import load_dotenv
 import requests
 import traceback
 
+
+
+
 # ---------------------------------------------------------------------
 # ログ設定（ファイル + コンソール、DEBUGレベルまで出力）
 # ---------------------------------------------------------------------
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler("logs/mega_storage.log", encoding="utf-8"),
@@ -119,7 +122,7 @@ def upload_files_local_image(file_list, content_id, floor):
 
     uploaded_paths = []
     try:
-        mega_login()  # 先にログイン
+        # mega_login()  # 先にログイン
 
         if isinstance(file_list, list):
             for i, file in enumerate(file_list, start=1):
@@ -134,7 +137,8 @@ def upload_files_local_image(file_list, content_id, floor):
             
         return uploaded_paths
     finally:
-        mega_logout()  # 最後にログアウト
+        logging.info("複数ファイルアップロードサンプル終了")
+    #     mega_logout()  # 最後にログアウト
         
 # ---------------------------------------------------------------------
 # URL画像アップロード（-c で階層自動作成）
@@ -142,7 +146,7 @@ def upload_files_local_image(file_list, content_id, floor):
 def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> str:
     temp_file = f"temp_{content_id}_{index:02d}.jpg"
     try:
-        mega_login()
+        # mega_login()
         logging.info("[DOWNLOAD] URL: %s", url)
         response = requests.get(url)
         response.raise_for_status()
@@ -162,18 +166,18 @@ def upload_image_to_mega(url: str, content_id: str, index: int, floor: str) -> s
         if os.path.exists(temp_file):
             os.remove(temp_file)
             logging.debug("[TEMP FILE REMOVED] %s", temp_file)
-        try:
-            mega_logout()
-        except Exception as e:
-            logging.warning("ログアウト時にエラー: %s", e)
-            logging.debug(traceback.format_exc())
+        # try:
+        #     mega_logout()
+        # except Exception as e:
+        #     logging.warning("ログアウト時にエラー: %s", e)
+        #     logging.debug(traceback.format_exc())
 
 # ---------------------------------------------------------------------
 # 複数ファイルアップロードサンプル
 # ---------------------------------------------------------------------
 def upload_files_buffer(file_list, content_id, floor):
     try:
-        mega_login()  # 先にログイン
+        # mega_login()  # 先にログイン
 
         uploaded_paths = []
         for i, file in enumerate(file_list, start=1):
@@ -182,4 +186,5 @@ def upload_files_buffer(file_list, content_id, floor):
 
         return uploaded_paths
     finally:
-        mega_logout()  # 最後にログアウト
+    #     mega_logout()  # 最後にログアウト
+        logging.info("複数ファイルアップロードサンプル終了")

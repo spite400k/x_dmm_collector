@@ -65,8 +65,18 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
 
 
         # サンプル画像をアップロード
-        sample_urls = item.get("sampleImageURL", {}).get("list", [])
-        storage_path = upload_files_buffer(sample_urls, content_id, floor)
+        # サンプル画像をアップロード用に取得
+        sample_image_urls = []
+
+        sample_l = item.get("sampleImageURL", {}).get("sample_l")
+        if isinstance(sample_l, list):
+            # 配列の場合
+            sample_image_urls = [img.get("image") for img in sample_l if "image" in img]
+        elif isinstance(sample_l, dict):
+            # 辞書の場合
+            if "image" in sample_l:
+                sample_image_urls.append(sample_l["image"])
+        # storage_path = upload_files_buffer(sample_urls, content_id, floor)
         # for idx, img_url in enumerate(sample_urls):
         #     storage_path = upload_image_to_mega(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
 
@@ -103,7 +113,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "affiliate_url": item.get("affiliateURL"),
             # "image_list_url": item.get("imageURL", {}).get("list"),
             "image_large_url": item.get("imageURL", {}).get("large"),
-            "sample_images": uploaded_paths,
+            "sample_images": sample_image_urls,
             "sample_movie_url": item.get("sampleMovieURL_highest"),
             "price": price,
             "list_price": list_price,

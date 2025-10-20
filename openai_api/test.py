@@ -1,94 +1,16 @@
 import os
-import logging
 import json
+import logging
 from openai import OpenAI
 from dotenv import load_dotenv
-from bs4 import BeautifulSoup
-import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 
 # ログ設定
 os.makedirs("logs", exist_ok=True)
-logging.basicConfig(filename="logs/scraper.log", level=logging.INFO)
+logging.basicConfig(filename="logs/test_generate.log", level=logging.INFO)
 
 # 環境変数読み込み
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
-def get_page_source_with_age_verification(url: str) -> str:
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
-    try:
-        driver.get(url)
-        driver.implicitly_wait(5)
-
-        # 年齢確認「はい」ボタンが存在する場合はクリック
-        try:
-            yes_button = driver.find_element(By.LINK_TEXT, "はい")
-            yes_button.click()
-            driver.implicitly_wait(5)
-        except Exception:
-            pass
-
-        return driver.page_source
-    finally:
-        driver.quit()
-
-def get_dmm_comment_text(url: str) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-    }
-    res = requests.get(url, headers=headers, timeout=10)
-    res.raise_for_status()
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    comment_div = soup.select_one("div.mg-b20.lh4")
-
-    if comment_div:
-        text = comment_div.get_text(separator="\n").strip()
-        return text
-    else:
-        return ""
-
-def scrape_product_details(url: str) -> dict:
-    try:
-        html = get_page_source_with_age_verification(url)
-        soup = BeautifulSoup(html, "html.parser")
-
-        summary_el = soup.select_one(".summary__txt")
-        comment_el = soup.select_one(".trailer__txt")
-        fallback_el = soup.select_one("div.mg-b20.lh4")
-
-        summary = summary_el.get_text(strip=True) if summary_el else ""
-        comment = comment_el.get_text(strip=True) if comment_el else ""
-
-        if not summary and fallback_el:
-            summary = fallback_el.get_text(separator="\n").strip()
-            
-            if not summary:
-                # コメントがない場合は、別の場所から取得する
-                # ▼ 商品情報エリアからあらすじを抽出（DMM動画用）
-                # 特定のdiv構造： <div class="mg-b20 lh4"><p>作品説明</p></div>
-                comment_div = get_dmm_comment_text(url)
-                if comment_div:
-                    summary = comment_div
-
-
-        return summary
-
-    except Exception as e:
-        logging.warning(f"[Scrape Error] URL: {url} → {e}")
-        return ""
-
 
 # --- generate_content関数 ---
 def generate_content(item: dict) -> dict:
@@ -104,10 +26,8 @@ def generate_content(item: dict) -> dict:
     directors = item.get("iteminfo", {}).get("director", [])
     release_date = item.get("date", "")
     category_name = item.get("category_name", "")
-    # HTMLからあらすじを取得
-    url = item.get("URL", "")
-    html_summary = scrape_product_details(url)
-    
+    html_summary = item.get("html_summary", "(テスト用のあらすじ)")
+
     actress_names = [a.get("name") for a in actresses if a.get("name")]
     director_names = [d.get("name") for d in directors if d.get("name")]
 
@@ -201,3 +121,51 @@ def generate_content(item: dict) -> dict:
     except Exception as e:
         logging.error("[OpenAI ERROR] %s", str(e))
         return {"auto_comment": "", "auto_summary": "", "auto_point": ""}
+
+# --- Markdown整形関数 ---
+def format_markdown(item: dict, content: dict) -> str:
+    return f"""
+# 🎬 {item['title']}
+
+**カテゴリ:** {item.get('category_name', '')}  
+**ジャンル:** {', '.join([g['name'] for g in item.get('iteminfo', {}).get('genre', [])])}  
+**レビュー:** {item.get('review', {}).get('average', '不明')}点（{item.get('review', {}).get('count', 0)}件）  
+**メーカー:** {item.get('maker', [{}])[0].get('name', '')}  
+**発売日:** {item.get('date', '')}  
+**出演:** {', '.join([a['name'] for a in item.get('iteminfo', {}).get('actress', [])]) if item.get('iteminfo', {}).get('actress') else '該当なし'}  
+**監督:** {', '.join([d['name'] for d in item.get('iteminfo', {}).get('director', [])]) if item.get('iteminfo', {}).get('director') else '該当なし'}
+
+---
+
+## 💬 一言感想
+{content.get('auto_comment', '')}
+
+## 📝 概要
+{content.get('auto_summary', '')}
+
+## ⭐ 買いたくなるポイント
+{content.get('auto_point', '')}
+"""
+
+#--- テスト用データ ---
+test_item = {
+    "title": "ももか先生の誘惑レッスン",
+    "iteminfo": {
+        "genre": [{"name": "教師"}, {"name": "コスプレ"}],
+        "actress": [{"name": "相川ももか"}],
+        "director": [{"name": "山田太郎"}]
+    },
+    "review": {"average": 4.5, "count": 28},
+    "maker": [{"name": "FANZAオリジナル"}],
+    "date": "2024-11-01",
+    "category_name": "AV",
+    "html_summary": "真面目な教師・ももか先生が、生徒との距離を縮めるために大胆な一歩を踏み出す――そんなドキドキの展開が待つ物語。"
+}
+
+#--- 実行 ---
+if __name__ == "__main__":
+    print("🔍 OpenAI接続テスト開始...")
+    result = generate_content(test_item)
+    print(result)
+    markdown = format_markdown(test_item, result)
+    print(markdown)

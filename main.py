@@ -56,7 +56,7 @@ def main():
 
         try:
             items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=40, min_sample_count=10)
-            top_items = items[:10]  # 上位10件のみ処理
+            top_items = items[:30]  # 上位10件のみ処理
             logging.info("データ取得完了")
 
             

@@ -1,5 +1,5 @@
 import sys
-from db.storageMega import mega_login, mega_logout
+# from db.storageMega import mega_login, mega_logout
 from dmm.dmm_api import fetch_items
 from db.trn_dmm_items_repository import insert_dmm_item
 import os
@@ -46,7 +46,7 @@ def main():
 
     has_error = False
 
-    mega_login()  # 先にログイン
+    # mega_login()  # 先にログイン
 
     for target in targets:
         site = target["site"]
@@ -96,11 +96,11 @@ def main():
 
     if has_error:
         logging.error("処理中にエラーが発生しました")
-        mega_logout()  # 最後にログアウト
+        # mega_logout()  # 最後にログアウト
         sys.exit(1)  # 非ゼロで終了（CIで失敗扱い）
     else:
         logging.info("全ての処理が正常に完了しました")
-        mega_logout()  # 最後にログアウト
+        # mega_logout()  # 最後にログアウト
         sys.exit(0)
 
 

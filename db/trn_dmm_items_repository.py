@@ -1,4 +1,4 @@
-from db.storageMega import upload_files_buffer, upload_files_local_image, upload_image_to_mega, upload_local_image_to_mega
+from db.storage import upload_image_to_storage, upload_local_image_to_storage
 from db.supabase_client import supabase
 import logging
 from openai_api.content_generator import generate_content
@@ -51,31 +51,39 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         # 立ち読み画像を先にアップロード
         if tachiyomi_image_paths:
             logging.info(f" 立ち読み画像を取得: {title} : {url}")
-            storage_path = upload_files_local_image(tachiyomi_image_paths, content_id, floor)
-            # for idx, img_url in enumerate(tachiyomi_image_paths):
-            #     storage_path = upload_local_image_to_mega(img_url, content_id=content_id, index=idx + 1, floor=floor)
+            for idx, img_url in enumerate(tachiyomi_image_paths):
+                storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1, floor=floor)
+                if storage_path:
+                    # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+                    uploaded_paths.append(storage_path)
+                else:
+                    logging.error(f"  [IMG-FAIL] Tachiyomi {idx+1}: {img_url}")
 
 
         # サンプル動画をアップロード
-        if sample_movie_path:
-            logging.info(f"サンプル動画パスを取得: {title} : {url}")
-
-            storage_path =upload_files_local_image(sample_movie_path, content_id=content_id, floor=floor)
-            # storage_path = upload_local_image_to_mega(sample_movie_path, content_id=content_id, index=1, floor=floor)
+        # if sample_movie_path:
+        #     logging.info(f"サンプル動画パスを取得: {title} : {url}")
+        #     storage_path = upload_local_image_to_storage(sample_movie_path, content_id=content_id, index=1, floor=floor)
+        #     if storage_path:
+        #         # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
+        #         uploaded_paths.append(storage_path)
+        #     else:
+        #         logging.error(f"  [IMG-FAIL] サンプル動画 : {sample_movie_path}")
 
 
         # サンプル画像をアップロード
-        # サンプル画像をアップロード用に取得
         sample_image_urls = []
 
-        sample_l = item.get("sampleImageURL", {}).get("sample_l")
-        if isinstance(sample_l, list):
-            # 配列の場合
-            sample_image_urls = [img.get("image") for img in sample_l if "image" in img]
-        elif isinstance(sample_l, dict):
-            # 辞書の場合
-            if "image" in sample_l:
-                sample_image_urls.append(sample_l["image"])
+        sample_images = (
+            item.get("sampleImageURL", {})
+            .get("sample_l", {})
+            .get("image", [])
+        )
+        sample_images_s = (
+            item.get("sampleImageURL", {})
+            .get("sample_s", {})
+            .get("image", [])
+        )
         # storage_path = upload_files_buffer(sample_urls, content_id, floor)
         # for idx, img_url in enumerate(sample_urls):
         #     storage_path = upload_image_to_mega(img_url, content_id=content_id, index=idx + 1 + len(tachiyomi_image_paths))
@@ -113,7 +121,9 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "affiliate_url": item.get("affiliateURL"),
             # "image_list_url": item.get("imageURL", {}).get("list"),
             "image_large_url": item.get("imageURL", {}).get("large"),
-            "sample_images": sample_image_urls,
+            "image_small_url": item.get("imageURL", {}).get("small",[]),
+            "sample_images": sample_images,
+            "sample_images_s": sample_images_s,
             "sample_movie_url": item.get("sampleMovieURL_highest"),
             "price": price,
             "list_price": list_price,
@@ -122,6 +132,9 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "genre_ids": genre_ids,
             "series": iteminfo.get("series", [{}])[0].get("name"),
             "maker": maker,
+            "campaign": item.get("campaign_data"),
+            "actress" : iteminfo.get("actress", []),
+            "director" : iteminfo.get("director", []),
             "author": item.get("author"),
             "category_name": item.get("category_name"),
             "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),
@@ -130,7 +143,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "auto_summary": ai_content.get("auto_summary", ""),
             "auto_point": ai_content.get("auto_point", ""),
             "raw_json": item,
-            "campaign": item.get("campaign_data"),
+
         }
 
         supabase.table("trn_dmm_items").insert(data).execute()

@@ -93,7 +93,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     TEMP_DIR = os.path.join(BASE_DIR, "temp")
     os.makedirs(TEMP_DIR, exist_ok=True)
 
-    output_pdf_path = os.path.join(BASE_DIR, "tachiyomi_pages.pdf")
+    # output_pdf_path = os.path.join(BASE_DIR, "tachiyomi_pages.pdf")
 
     options = Options()
     options.add_argument("--headless=new")  # 新しいヘッドレスモード
@@ -221,16 +221,16 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 break
 
         # 画像をPDF化
-        if images:
-            try:
-                pil_images = [Image.open(p).convert("RGB") for p in images]
-                pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
-                images.append(output_pdf_path)
-                logging.info(f"PDF保存完了: {output_pdf_path}")
-            except Exception as e:
-                logging.exception(f"PDF保存失敗: {e}")
-        else:
-            logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
+        # if images:
+        #     try:
+        #         pil_images = [Image.open(p).convert("RGB") for p in images]
+        #         pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
+        #         images.append(output_pdf_path)
+        #         logging.info(f"PDF保存完了: {output_pdf_path}")
+        #     except Exception as e:
+        #         logging.exception(f"PDF保存失敗: {e}")
+        # else:
+        #     logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
 
     finally:
         driver.quit()

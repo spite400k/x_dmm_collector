@@ -37,9 +37,9 @@ def cleanup_file(filepath: str):
 def main():
     # 対象の service/floor の組み合わせ一覧
     targets = [
+        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
         {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
-        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
         {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
     ]
@@ -73,18 +73,18 @@ def main():
                 # logging.info("立ち読みデータ取得完了")
 
                 sample_movie_url = item.get("sampleMovieURL_highest")
-                sample_movie_path = ""
-                if sample_movie_url:
-                    logging.info("サンプル動画URL: %s", sample_movie_url)
-                    sample_movie_path = get_sample_movie(sample_movie_url)
+                # sample_movie_path = ""
+                # if sample_movie_url:
+                #     logging.info("サンプル動画URL: %s", sample_movie_url)
+                #     sample_movie_path = get_sample_movie(sample_movie_url)
 
-                insert_dmm_item(item, tachiyomi_image_paths, sample_movie_path,site=site, service=service, floor=floor)
+                insert_dmm_item(item, tachiyomi_image_paths, sample_movie_url,site=site, service=service, floor=floor)
                 logging.info("データ登録完了")
 
                 for image_path in tachiyomi_image_paths:
                     cleanup_file(image_path)
 
-                cleanup_file(sample_movie_path)
+                # cleanup_file(sample_movie_path)
                 logging.info("不要ファイル削除完了")
 
         except Exception as e:

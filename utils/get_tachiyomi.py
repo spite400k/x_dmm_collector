@@ -194,8 +194,17 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
                 screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
-                images.append(screenshot_path)
-                logging.info(f"保存成功: {screenshot_path}")
+                
+                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
+                # ✅ PNG → WebP に変換して削除
+                webp_path = screenshot_path.replace(".png", ".webp")
+                with Image.open(screenshot_path) as im:
+                    im.save(webp_path, "webp", quality=90)  # quality=90は好みで調整可能
+                os.remove(screenshot_path)  # PNG削除して整理
+
+                images.append(webp_path)
+                logging.info(f"保存成功 (WebP): {webp_path}")
+
 
                 # ページ番号更新
                 if current_page == 0:

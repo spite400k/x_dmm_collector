@@ -28,7 +28,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
 # --- デバッグ（ヘッダ確認用） ---
-ENABLE_BOTO_DEBUG = True
+ENABLE_BOTO_DEBUG = False
 if ENABLE_BOTO_DEBUG:
     # botocore の HTTP レベルのやり取りを出す（ヘッダ確認に便利）
     logging.basicConfig(level=logging.DEBUG)

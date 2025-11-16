@@ -1,4 +1,4 @@
-from db.storage import upload_image_to_storage, upload_local_image_to_storage
+from db.storageS3 import upload_local_image_to_s3
 from db.supabase_client import supabase
 import logging
 from openai_api.content_generator import generate_content
@@ -52,7 +52,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         if tachiyomi_image_paths:
             logging.info(f" 立ち読み画像を取得: {title} : {url}")
             for idx, img_url in enumerate(tachiyomi_image_paths):
-                storage_path = upload_local_image_to_storage(img_url, content_id=content_id, index=idx + 1, floor=floor)
+                storage_path = upload_local_image_to_s3(img_url, content_id=content_id, index=idx + 1, floor=floor)
                 if storage_path:
                     # logging.info(f"  [IMG-UPLOAD] Tachiyomi {idx+1}: {storage_path}")
                     uploaded_paths.append(storage_path)

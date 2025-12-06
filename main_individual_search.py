@@ -29,8 +29,8 @@ def main():
         # {"service": "unlimited_book", "floor": "unlimited_comic"}, # FANZAブックス読み放題
         # {"service": "monthly", "floor": "premium"}, # 見放題ch デラックス
         # {"service": "monthly", "floor": "vr"}, # VR
-        # {"site": "FANZA","service": "mono", "floor": "goods"}, # 大人のおもちゃ
-        {"site": "FANZA","service": "ebook", "floor": "bl"}, # BL
+        {"site": "FANZA","service": "mono", "floor": "goods"}, # 大人のおもちゃ
+        # {"site": "FANZA","service": "ebook", "floor": "bl"}, # BL
 
     ]
 

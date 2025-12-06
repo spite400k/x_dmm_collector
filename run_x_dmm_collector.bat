@@ -12,7 +12,7 @@ REM 作業ディレクトリ
 SET WORK_DIR=C:\Users\kazuk\python\x_dmm_collector
 
 REM ログ出力用ファイル
-SET LOG_FILE=%WORK_DIR%\task_run.log
+SET LOG_FILE=%WORK_DIR%\\logs\task_run.log
 
 REM ================================================
 echo ================================================ >> %LOG_FILE%

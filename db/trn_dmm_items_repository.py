@@ -26,6 +26,12 @@ def parse_price(price_str):
         return int(match.group())
     return None
 
+# ----------------------------------------------------
+# []→null
+# ----------------------------------------------------
+def normalize_field(v):
+    return None if v in (None, [], "") else v
+
 # ---------------------------------------------------------------------
 # DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入
 # ---------------------------------------------------------------------
@@ -128,13 +134,13 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "price": price,
             "list_price": list_price,
             "release_date": item.get("date"),
-            "genres": genre_names,
-            "genre_ids": genre_ids,
+            "genres": normalize_field(genre_names),
+            "genre_ids": normalize_field(genre_ids),
             "series": iteminfo.get("series", [{}])[0].get("name"),
             "maker": maker,
             "campaign": item.get("campaign_data"),
-            "actress" : iteminfo.get("actress", []),
-            "director" : iteminfo.get("director", []),
+            "actress" : normalize_field(iteminfo.get("actress")),
+            "director" : normalize_field(iteminfo.get("director")),
             "author": item.get("author"),
             "category_name": item.get("category_name"),
             "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),

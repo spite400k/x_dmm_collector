@@ -19,6 +19,10 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+#---------------------
+#定数・設定
+#---------------------
+hits_per_request = 30
 
 # ---------------------
 # ファイル削除
@@ -41,7 +45,7 @@ def main():
         {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
         {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
         {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
-        # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
+        {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
     ]
 
     has_error = False
@@ -55,8 +59,7 @@ def main():
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
         try:
-            items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=40, min_sample_count=10)
-            top_items = items[:30]  # 上位10件のみ処理
+            top_items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=hits_per_request, min_sample_count=10)
             logging.info("データ取得完了")
 
             

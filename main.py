@@ -6,18 +6,15 @@ import os
 import logging
 from utils.get_sample_movie import get_sample_movie
 from utils.get_tachiyomi import capture_all_tachiyomi_pages
+from utils.zip_logger import ZipRotatingLogger
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
 
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/fetch_items.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+# ZIP ローテート付きログ設定
+ZipRotatingLogger.setup(
+    log_path="logs/fetch_items.log",
+    backupCount=7,   # 必要に応じて変更
 )
 #---------------------
 #定数・設定
@@ -46,6 +43,9 @@ def main():
         {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
         {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
         {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
+        {"site": "FANZA", "service": "ebook", "floor": "novel"}, # 美少女ノベル・官能小説
+        {"site": "FANZA", "service": "ebook", "floor": "photo"}, # アダルト写真集・雑誌
+        {"site": "FANZA", "service": "pcgame", "floor": "digital_pcgame"}, # アダルトPCゲーム
     ]
 
     has_error = False
@@ -72,7 +72,7 @@ def main():
                 tachiyomi_image_paths = []
                 if tachiyomi_url:
                     logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
-                    tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url)
+                    tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url=tachiyomi_url)
                 # logging.info("立ち読みデータ取得完了")
 
                 sample_movie_url = item.get("sampleMovieURL_highest")

@@ -83,12 +83,12 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         sample_images = (
             item.get("sampleImageURL", {})
             .get("sample_l", {})
-            .get("image", [])
+            .get("image")
         )
         sample_images_s = (
             item.get("sampleImageURL", {})
             .get("sample_s", {})
-            .get("image", [])
+            .get("image")
         )
         # storage_path = upload_files_buffer(sample_urls, content_id, floor)
         # for idx, img_url in enumerate(sample_urls):
@@ -127,7 +127,7 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
             "affiliate_url": item.get("affiliateURL"),
             # "image_list_url": item.get("imageURL", {}).get("list"),
             "image_large_url": item.get("imageURL", {}).get("large"),
-            "image_small_url": item.get("imageURL", {}).get("small",[]),
+            "image_small_url": item.get("imageURL", {}).get("small"),
             "sample_images": sample_images,
             "sample_images_s": sample_images_s,
             "sample_movie_url": item.get("sampleMovieURL_highest"),

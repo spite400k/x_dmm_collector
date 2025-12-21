@@ -60,7 +60,7 @@ def sync_site_and_service_master():
                     "service_name": service.get("name"),
                     "service_code": service.get("code"),
                     "site_code": site_code,
-                }, on_conflict=["service_code"]).execute()
+                }, on_conflict="service_code,site_code").execute()
             except Exception as e:
                 logging.warning("[SERVICE] mst_service upsert失敗: %s", str(e))
 

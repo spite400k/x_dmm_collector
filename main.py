@@ -1,4 +1,6 @@
 import sys
+
+import supabase
 # from db.storageMega import mega_login, mega_logout
 from dmm.dmm_api import fetch_items
 from db.trn_dmm_items_repository import insert_dmm_item
@@ -62,9 +64,24 @@ def main():
             top_items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=hits_per_request, min_sample_count=10)
             logging.info("データ取得完了")
 
-            
-            
+            items = []
             for item in top_items:
+                content_id = item.get("content_id")
+                title = item.get("title")
+                url = item.get("URL")
+
+                if not content_id:
+                    logging.warning(f"[SKIP] content_id が存在しない: {title} : {url}")
+                    return
+                exists = supabase.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
+                if exists.data:
+                    logging.info(f"[SKIP] 既に登録済: {title} ({content_id}) : {url}")
+                    return
+                else:
+                    items.append(item)
+
+            
+            for item in items[:1]:
                 # 立ち読みデータの取得
                 # 立ち読みURLが存在する場合のみ処理
                 tachiyomi_url = item.get("tachiyomi", {}).get("URL")  # ← .get を安全化

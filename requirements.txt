@@ -6,4 +6,4 @@ selenium
 webdriver-manager
 beautifulsoup4
 PILLOW
-mega.py
+boto3

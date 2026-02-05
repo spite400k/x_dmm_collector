@@ -11,7 +11,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("logs/fetch_items.log", encoding="utf-8"),
+        logging.FileHandler("logs/fetch_items_indi.log", encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
@@ -21,15 +21,16 @@ def main():
 
     # 対象の service/floor の組み合わせ一覧
     targets = [
-        # {"service": "doujin", "floor": "digital_doujin"}, # 同人誌
-        # {"service": "digital", "floor": "videoc"}, # 動画 素人
-        # {"service": "digital", "floor": "nikkatsu"}, # 写真
-        # {"service": "digital", "floor": "videoa"}, # ビデオ
-        # {"service": "digital", "floor": "anime"}, # アニメ
-        # {"service": "unlimited_book", "floor": "unlimited_comic"}, # FANZAブックス読み放題
-        # {"service": "monthly", "floor": "premium"}, # 見放題ch デラックス
-        # {"service": "monthly", "floor": "vr"}, # VR
-        {"site": "FANZA","service": "mono", "floor": "goods"}, # 大人のおもちゃ
+        # {"site": "FANZA","service": "doujin", "floor": "digital_doujin"}, # 同人誌
+        {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # 同人誌
+        # {"site": "FANZA","service": "digital", "floor": "videoc"}, # 動画 素人
+        # {"site": "FANZA","service": "digital", "floor": "nikkatsu"}, # 写真
+        # {"site": "FANZA","service": "digital", "floor": "videoa"}, # ビデオ
+        # {"site": "FANZA","service": "digital", "floor": "anime"}, # アニメ
+        # {"site": "FANZA","service": "unlimited_book", "floor": "unlimited_comic"}, # FANZAブックス読み放題
+        # {"site": "FANZA","service": "monthly", "floor": "premium"}, # 見放題ch デラックス
+        # {"site": "FANZA","service": "monthly", "floor": "vr"}, # VR
+        # {"site": "FANZA","service": "mono", "floor": "goods"}, # 大人のおもちゃ
         # {"site": "FANZA","service": "ebook", "floor": "bl"}, # BL
 
     ]
@@ -39,8 +40,8 @@ def main():
         service = target["service"]
         floor = target["floor"]
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
-        # keyword = "女性向け"  # 必要に応じてキーワードを設定
-        keyword=""
+        keyword = "メスガキ"  # 必要に応じてキーワードを設定
+        #keyword=""
 
         try:
             items = fetch_items_search_keyword(
@@ -49,9 +50,11 @@ def main():
                 floor=floor, 
                 keyword=keyword, 
                 offset=1, 
-                hits=10)
-            # for item in items:
+                hits=10,
+                sort="match")
+            for item in items:
             #     insert_dmm_item(item)
+                logging.info("[INSERTED] item_id=%s title=%s", item['id'], item['title'],item)
         except Exception as e:
             logging.error("[ERROR] Failed to fetch or insert items for floor=%s: %s", floor, str(e))
 

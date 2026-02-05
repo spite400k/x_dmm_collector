@@ -1,8 +1,6 @@
 name: Run DMM Collector
 
 on:
-  schedule:
-    - cron: '0 14 * 1 *'  # 毎日14:00（JSTで23:00）に実行
   workflow_dispatch:      # 手動実行も可能
 
 jobs:

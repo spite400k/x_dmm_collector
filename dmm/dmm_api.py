@@ -15,16 +15,11 @@ API_URL = "https://api.dmm.com/affiliate/v3/ItemList"
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)  
+from utils.logger import setup_logger
 
-# ログ設定（ファイル + コンソール出力）
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/dmm_itemlist.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
+# ZIP ローテート付きログ設定
+setup_logger("dmm_api.log")
+
 
 # ---------------------------------------------------------------------
 # sampleMovieURL から最大解像度のURLを取得する関数
@@ -122,6 +117,47 @@ def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_
 
     return filtered_items
 
+
+# ---------------------------------------------------------------------
+# 複数 sort を順に叩いて結果を統合（同一 content_id は先勝ち）
+# ---------------------------------------------------------------------
+def fetch_items_merged_sorts(
+    site,
+    service,
+    floor,
+    hits=1,
+    offset=1,
+    sorts=("rank", "date", "review"),
+    min_sample_count=10,
+):
+    """
+    sorts の順で ItemList を取得し、content_id で重複を除いた 1 本のリストにまとめる。
+    並びは rank 結果が先頭、その後に date のみに現れたもの、最後に review のみに現れたもの。
+    """
+    merged = []
+    seen = set()
+    for sort_key in sorts:
+        batch = fetch_items(
+            site=site,
+            service=service,
+            floor=floor,
+            hits=hits,
+            offset=offset,
+            sort=sort_key,
+            min_sample_count=min_sample_count,
+        )
+        for item in batch:
+            cid = item.get("content_id")
+            if not cid or cid in seen:
+                continue
+            seen.add(cid)
+            merged.append(item)
+    logging.info(
+        "統合取得完了 sorts=%s → %d 件（重複除去後）",
+        sorts,
+        len(merged),
+    )
+    return merged
 
 
 # ---------------------------------------------------------------------

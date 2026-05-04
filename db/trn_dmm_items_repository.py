@@ -4,16 +4,9 @@ import logging
 from openai_api.content_generator import generate_content
 import re
 import traceback
-
-# ログ設定（ファイル + コンソール出力）
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/dmm_itemlist.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
+from utils.logger import setup_logger
+# ZIP ローテート付きログ設定
+setup_logger("trn_dmm_items_repository.log")
 
 # ---------------------------------------------------------------------
 # 価格を整数に変換する関数

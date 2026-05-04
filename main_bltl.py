@@ -1,23 +1,20 @@
 import sys
 
-import supabase
+from db.supabase_client import supabase2
 # from db.storageMega import mega_login, mega_logout
-from dmm.dmm_api2 import fetch_items
+from dmm.dmm_api import fetch_items
 from db.trn_dmm_items_repository2 import insert_dmm_item
 import os
 import logging
 from utils.get_sample_movie import get_sample_movie
 from utils.get_tachiyomi import capture_all_tachiyomi_pages
-from utils.zip_logger import ZipRotatingLogger
+from utils.logger import setup_logger
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
 
 # ZIP ローテート付きログ設定
-ZipRotatingLogger.setup(
-    log_path="logs/fetch_items.log",
-    backupCount=7,   # 必要に応じて変更
-)
+setup_logger("main_bltl.log")
 #---------------------
 #定数・設定
 #---------------------
@@ -57,7 +54,15 @@ def main():
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
         try:
-            top_items = fetch_items(site=site, service=service, floor=floor, offset=1, hits=hits_per_request, min_sample_count=10)
+            top_items = fetch_items(
+                site=site,
+                service=service,
+                floor=floor,
+                offset=1,
+                hits=hits_per_request,
+                min_sample_count=10,
+                supabase_client=supabase2,
+            )
             logging.info("データ取得完了")
 
             items = []
@@ -69,7 +74,7 @@ def main():
                 if not content_id:
                     logging.warning(f"[SKIP] content_id が存在しない: {title} : {url}")
                     return
-                exists = supabase.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
+                exists = supabase2.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
                 if exists.data:
                     logging.info(f"[SKIP] 既に登録済: {title} ({content_id}) : {url}")
                     return

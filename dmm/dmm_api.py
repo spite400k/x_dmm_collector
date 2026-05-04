@@ -3,7 +3,7 @@ import requests
 import logging
 import json
 from dotenv import load_dotenv
-from db.supabase_client import supabase
+from db.supabase_client import supabase as default_supabase_client
 
 # .envファイル読み込み
 load_dotenv()
@@ -52,7 +52,23 @@ def get_highest_resolution_movie(movie_info: dict):
 # ---------------------------------------------------------------------
 # アイテム取得（サンプル画像枚数でフィルタリング）
 # ---------------------------------------------------------------------
-def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_count=10):
+def fetch_items(
+    site,
+    service,
+    floor,
+    hits=1,
+    offset=1,
+    sort="rank",
+    min_sample_count=10,
+    supabase_client=None,
+    keyword=None,
+):
+    """
+    supabase_client: None のとき db.supabase_client の既定クライアント。
+    keyword: 指定時は ItemList に keyword パラメータを付与（メスガキ用検索など）。
+    """
+    client = default_supabase_client if supabase_client is None else supabase_client
+
     params = {
         "api_id": DMM_API_ID,
         "affiliate_id": DMM_AFFILIATE_ID,
@@ -61,11 +77,13 @@ def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_
         "hits": hits,
         "offset": offset,
         "sort": sort,
-        "output": "json"
+        "output": "json",
     }
     # floor が None でなければ追加
     if floor is not None:
         params["floor"] = floor
+    if keyword is not None:
+        params["keyword"] = keyword
     logging.info("DMM APIへリクエスト送信: %s", API_URL)
     logging.info("送信パラメータ: %s", params)
 
@@ -97,7 +115,7 @@ def fetch_items(site, service, floor, hits=1, offset=1, sort="rank", min_sample_
         # Supabase で存在確認
         # ---------------------------
         try:
-            existing = supabase.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
+            existing = client.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
             if existing.data and len(existing.data) > 0:
                 logging.info("[SKIP] 既に登録済み: %s", content_id)
                 continue  # 既に登録済みなのでスキップ
@@ -129,6 +147,8 @@ def fetch_items_merged_sorts(
     offset=1,
     sorts=("rank", "date", "review"),
     min_sample_count=10,
+    supabase_client=None,
+    keyword=None,
 ):
     """
     sorts の順で ItemList を取得し、content_id で重複を除いた 1 本のリストにまとめる。
@@ -145,6 +165,8 @@ def fetch_items_merged_sorts(
             offset=offset,
             sort=sort_key,
             min_sample_count=min_sample_count,
+            supabase_client=supabase_client,
+            keyword=keyword,
         )
         for item in batch:
             cid = item.get("content_id")

@@ -3,7 +3,7 @@ import sys
 from db.supabase_client import supabase2
 # from db.storageMega import mega_login, mega_logout
 from dmm.dmm_api import fetch_items
-from db.trn_dmm_items_repository2 import insert_dmm_item
+from db.trn_dmm_items_repository import insert_dmm_item_supabase2 as insert_dmm_item
 import os
 import logging
 from utils.get_sample_movie import get_sample_movie

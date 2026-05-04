@@ -1,8 +1,8 @@
 import sys
 
 from db.supabase_client import supabase3
-from dmm.dmm_api import fetch_items
-from db.trn_dmm_items_repository3 import insert_dmm_item
+from dmm.dmm_api import fetch_items_merged_sorts
+from db.trn_dmm_items_repository import insert_dmm_item_supabase3 as insert_dmm_item
 import os
 import logging
 from utils.get_sample_movie import get_sample_movie
@@ -57,12 +57,13 @@ def main():
         logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
         try:
-            top_items = fetch_items(
+            top_items = fetch_items_merged_sorts(
                 site=site,
                 service=service,
                 floor=floor,
                 offset=1,
                 hits=hits_per_request,
+                sorts=("rank", "date", "review"),
                 min_sample_count=10,
                 supabase_client=supabase3,
                 keyword="メスガキ",

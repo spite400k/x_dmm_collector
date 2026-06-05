@@ -4,7 +4,7 @@
     {
       "label": "run-python-script",
       "type": "shell",
-      "command": "python ${workspaceFolder}/main.py",
+      "command": "python ${workspaceFolder}/run.py --phase collect",
       "problemMatcher": []
     }
   ]

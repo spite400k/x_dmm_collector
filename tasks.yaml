@@ -1,0 +1,67 @@
+# スクリプト実行定義（run.py / bat / CI が参照）
+phases:
+  collect:
+    schedule: daily
+    description: DMM API からデータを取得して DB に登録
+    scripts:
+      - path: scripts/collect/default.py
+        name: 通常収集
+        log: logs/task_run.log
+      - path: scripts/collect/mesugaki.py
+        name: メスガキ収集
+        log: logs/task_run_mesugaki.log
+      - path: scripts/collect/bltl.py
+        name: BL/TL収集
+        log: logs/task_run_bltl.log
+      - path: scripts/collect/campaign.py
+        name: キャンペーン収集
+        log: logs/task_run_campaign.log
+
+  process:
+    schedule: daily
+    description: 取得済みデータの AI 加工・ランキング生成
+    scripts:
+      - path: scripts/process/update_items.py
+        name: AIテキスト更新
+        log: logs/task_run_update_items.log
+      - path: scripts/process/create_ai_review.py
+        name: AIレビュー生成
+        log: logs/task_run_create_ai_review.log
+      - path: scripts/process/create_weekly_rankings.py
+        name: 週次ランキング
+        log: logs/task_run_create_weekly_rankings.log
+      - path: scripts/process/create_weekly_rankings_mesugaki.py
+        name: メスガキ週次ランキング
+        log: logs/task_run_create_weekly_rankings_mesugaki.log
+
+  manual:
+    schedule: manual
+    description: 必要時のみ手動実行
+    scripts:
+      - path: scripts/process/update_mesugaki.py
+        name: メスガキ AI 更新
+        log: logs/task_run_update_mesugaki.log
+      - path: scripts/process/update_actress.py
+        name: 女優プロフィール更新
+        log: logs/task_run_update_actress.log
+      - path: scripts/process/enrich_actress.py
+        name: 女優情報 enrich（DMM API）
+        log: logs/task_run_enrich_actress.log
+      - path: scripts/process/create_actress_review.py
+        name: 女優 AI レビュー生成
+        log: logs/task_run_create_actress_review.log
+      - path: scripts/process/create_ai_review_mesugaki.py
+        name: メスガキ AI レビュー生成
+        log: logs/task_run_create_ai_review_mesugaki.log
+      - path: scripts/manual/check_campaign.py
+        name: キャンペーンチェック
+        log: logs/task_run_check_campaign.log
+      - path: scripts/manual/create_master.py
+        name: マスタ作成
+        log: logs/task_run_create_master.log
+      - path: scripts/manual/individual_search.py
+        name: 個別検索
+        log: logs/task_run_individual_search.log
+      - path: scripts/manual/supabase2storj.py
+        name: Supabase → Storj 移行
+        log: logs/task_run_supabase2storj.log

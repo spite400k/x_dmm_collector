@@ -59,31 +59,87 @@ def get_dmm_comment_text(url: str) -> str:
     else:
         return ""
 
-def scrape_product_details(url: str) -> dict:
+
+def _parse_json_ld_description(soup: BeautifulSoup) -> str:
+    best = ""
+    for script in soup.find_all("script", type="application/ld+json"):
+        if not script.string:
+            continue
+        try:
+            data = json.loads(script.string)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            desc = (item.get("description") or "").strip()
+            if len(desc) > len(best):
+                best = desc
+            graph = item.get("@graph")
+            if isinstance(graph, list):
+                for node in graph:
+                    if isinstance(node, dict):
+                        desc = (node.get("description") or "").strip()
+                        if len(desc) > len(best):
+                            best = desc
+    return best if len(best) >= 40 else ""
+
+
+def _extract_book_dmm_synopsis(soup: BeautifulSoup) -> str:
+    """book.dmm.co.jp: 折りたたみUIでも DOM / JSON-LD に全文が入る。"""
+    toggle = soup.select_one('[data-testid="detail-toggle-button"]')
+    if toggle and toggle.parent:
+        paragraph = toggle.parent.find("p")
+        if paragraph:
+            text = paragraph.get_text(separator="\n").strip()
+            if len(text) >= 40:
+                return text
+
+    return _parse_json_ld_description(soup)
+
+
+def extract_synopsis_from_soup(soup: BeautifulSoup, url: str = "") -> str:
+    if "book.dmm.co.jp" in url:
+        book_synopsis = _extract_book_dmm_synopsis(soup)
+        if book_synopsis:
+            return book_synopsis
+
+    summary_el = soup.select_one(".summary__txt")
+    if summary_el:
+        summary = summary_el.get_text(separator="\n").strip()
+        if summary:
+            return summary
+
+    for selector in ("div.mg-b20.lh4", ".trailer__txt"):
+        el = soup.select_one(selector)
+        if el:
+            text = el.get_text(separator="\n").strip()
+            if text:
+                return text
+
+    json_desc = _parse_json_ld_description(soup)
+    if json_desc:
+        return json_desc
+
+    return ""
+
+
+def scrape_product_details(url: str) -> str:
     try:
         html = get_page_source_with_age_verification(url)
         soup = BeautifulSoup(html, "html.parser")
 
-        summary_el = soup.select_one(".summary__txt")
-        comment_el = soup.select_one(".trailer__txt")
-        fallback_el = soup.select_one("div.mg-b20.lh4")
+        summary = extract_synopsis_from_soup(soup, url)
+        if summary:
+            return summary
 
-        summary = summary_el.get_text(strip=True) if summary_el else ""
-        comment = comment_el.get_text(strip=True) if comment_el else ""
+        if "book.dmm.co.jp" not in url:
+            comment_div = get_dmm_comment_text(url)
+            if comment_div:
+                return comment_div
 
-        if not summary and fallback_el:
-            summary = fallback_el.get_text(separator="\n").strip()
-            
-            if not summary:
-                # コメントがない場合は、別の場所から取得する
-                # ▼ 商品情報エリアからあらすじを抽出（DMM動画用）
-                # 特定のdiv構造： <div class="mg-b20 lh4"><p>作品説明</p></div>
-                comment_div = get_dmm_comment_text(url)
-                if comment_div:
-                    summary = comment_div
-
-
-        return summary
+        return ""
 
     except Exception as e:
         logging.warning(f"[Scrape Error] URL: {url} → {e}")

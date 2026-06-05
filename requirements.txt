@@ -7,3 +7,6 @@ webdriver-manager
 beautifulsoup4
 PILLOW
 boto3
+pykakasi
+psycopg2-binary
+pyyaml>=6.0

@@ -1,4 +1,5 @@
 logs/
+*.log
 *.pyc
 .env
 *.png
@@ -7,4 +8,13 @@ __pycache__/
 *.mp4
 *.html
 venv/
-*.webp
+.venv/
+myenv/
+work/
+.DS_Store
+debug/
+screenshots/
+dmm_samples/
+dmm_tachiyomi/
+temp/
+data/temp/

@@ -3,6 +3,9 @@ import logging
 import requests
 import boto3
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ログ設定
 logging.basicConfig(
@@ -143,6 +146,84 @@ def upload_image_to_s3(url: str, content_id: str, index: int, floor: str) -> str
 # ---------------------------------------------------------------------
 def upload_image_to_s3_bucket3(url: str, content_id: str, index: int, floor: str) -> str:
     return _upload_image_to_s3(url, content_id, index, floor, S3_BUCKET_3)
+
+
+# ---------------------------------------------------------------------
+# 女優プロフィール画像を S3 にアップロード（公開URLを返す）
+# ---------------------------------------------------------------------
+S3_ACTRESS_PREFIX = os.environ.get("S3_ACTRESS_PREFIX", "actress")
+S3_PUBLIC_BASE_URL = os.environ.get("S3_PUBLIC_BASE_URL", "")
+
+
+def build_s3_public_url(key: str, bucket: str) -> str:
+    base = S3_PUBLIC_BASE_URL.rstrip("/")
+    if base:
+        return f"{base}/{key}"
+    return f"https://{bucket}.s3.{S3_REGION}.amazonaws.com/{key}"
+
+
+def upload_actress_image_to_s3(
+    actress_id: int | str,
+    source_url: str,
+    *,
+    bucket: str | None = None,
+) -> str:
+    target_bucket = bucket or S3_BUCKET
+    if not target_bucket:
+        logging.error("S3 バケット名が未設定です")
+        return ""
+    if not source_url:
+        return ""
+
+    key = f"{S3_ACTRESS_PREFIX}/{actress_id}.jpg"
+    logging.info("[UPLOAD] actress image %s", key)
+
+    try:
+        s3_client.head_object(Bucket=target_bucket, Key=key)
+        logging.info("[SKIP] 既に存在: %s", key)
+        return build_s3_public_url(key, target_bucket)
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "404":
+            logging.error("S3 head_object エラー: %s", e)
+            return ""
+
+    try:
+        response = requests.get(
+            source_url,
+            timeout=30,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        response.raise_for_status()
+        if len(response.content) < 1024:
+            logging.warning(
+                "[SKIP] 画像サイズが小さすぎます actress_id=%s size=%d",
+                actress_id,
+                len(response.content),
+            )
+            return ""
+    except Exception as e:
+        logging.error("女優画像取得失敗 actress_id=%s: %s", actress_id, e)
+        return ""
+
+    try:
+        s3_client.put_object(
+            Bucket=target_bucket,
+            Key=key,
+            Body=response.content,
+            ContentType="image/jpeg",
+            CacheControl="public, max-age=31536000, immutable",
+        )
+        logging.info("[UPLOADED] %s (%d bytes)", key, len(response.content))
+    except ClientError as e:
+        logging.error("女優画像アップロード失敗 actress_id=%s: %s", actress_id, e)
+        return ""
+
+    return build_s3_public_url(key, target_bucket)
 
 
 # ---------------------------------------------------------------------

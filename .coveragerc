@@ -1,0 +1,11 @@
+[run]
+source =
+    db/mst_actress_repository.py
+    dmm/dmm_actress_api.py
+    scripts/process/enrich_actress.py
+    scripts/process/create_actress_review.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:

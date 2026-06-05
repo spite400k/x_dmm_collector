@@ -18,7 +18,7 @@ from utils.logger import setup_logger
 os.makedirs("logs", exist_ok=True)
 setup_logger("main_actress.log")
 
-DEFAULT_BATCH_SIZE = 20
+DEFAULT_BATCH_SIZE = 1000
 
 
 def main():

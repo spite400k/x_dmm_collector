@@ -4,6 +4,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # main_create_actress_ai.py
 
+import argparse
 import json
 import os
 import time
@@ -48,34 +49,39 @@ def generate_actress_ai_profile(actress):
     fanza_activity = actress.get("fanza_activity")
 
     prompt = f"""
-あなたはAV作品を探しているユーザー向けの
-レビューサイトのライターです。
+あなたはAV作品を長年見てきた熱心なファン兼レビュアーです。
+「この女優、どんな人で、なぜ好かれるのか」を、読者の心が動く語り口で書いてください。
 
-訪問者が
-「この女優はどんな魅力があるのか」
-を理解できる解説を書いてください。
+【事実の扱い】
+・提供された情報だけを根拠に書く（推測・創作・架空の経歴は禁止）
+・情報が少ない場合は、わかる範囲を温かく紹介する
+・「情報が限定的」「照合すると」「二次情報」など、データ分析の前置きは書かない
 
-【重要ルール】
-
-・事実が不明な内容は推測しない
-・架空の経歴を作らない
-・公開情報が少ない場合は
-  「公開情報は多くありませんが〜」
-  のように説明する
-
-【文章ルール】
-
-・自然な日本語
-・レビュー記事本文
+【文章スタイル】
+・一人称・二人称を交えた、レビュアーが語りかける口調
+・読者の感情が動く、読み応えのある文章
+・体言止め・評論調・論文調・マーケティング調は禁止
+・「あなた」で語りかけてよい（「読者」という語は使わない）
 ・誹謗中傷禁止
-・800〜1000文字
 
-【解説観点】
+【絶対に書かないこと】
+・SEO、検索、キーワード、コンテンツ整備、購入行動、プロモーション戦略
+・記事作成・サイト運営・データ分析の話
+・AI生成の説明、開発者向けの解説
+・「〜が重要な参照ポイント」「客観的に把握」「分析の鍵」などの調査レポート表現
 
-・外見の特徴
-・出演作品の傾向
-・ジャンル傾向
-・ファンから支持される理由
+【各フィールドの書き方】（各200〜350文字、3項目合計で800〜1000文字）
+
+ai_summary:
+  第一印象・外見の特徴・雰囲気・プロフィールから伝わる人柄を、ファン目線で紹介する。
+
+ai_career:
+  デビューからの歩み・作品数・活動期間・ジャンルの広がりを、キャリアの物語として語る。
+  調査手順や分析方法ではなく、「どんな作品を重ねてきた女優か」を伝える。
+
+ai_appeal:
+  ファンが惹かれる理由を、演技・表情・役柄との相性・作品での見せ方など具体的な魅力で語る。
+  人気の根拠を感情豊かに伝え、最後までレビュー本文のトーンを保つ。
 
 【女優情報】
 
@@ -109,9 +115,9 @@ FANZA活動: {fanza_activity}
 【出力(JSON)】
 
 {{
-"ai_summary": "女優の特徴",
-"ai_career": "出演作品の傾向",
-"ai_appeal": "人気の理由"
+"ai_summary": "女優の特徴・第一印象",
+"ai_career": "キャリアの歩みと出演傾向",
+"ai_appeal": "ファンが惹かれる理由"
 }}
 """
 
@@ -123,21 +129,13 @@ FANZA活動: {fanza_activity}
                 {
                     "role": "system",
                     "content": """
-あなたはAV作品レビューサイトの編集ライターです。
+あなたはAV作品レビューサイトで活動する、経験豊富なレビュアーです。
+作品を愛するファンの気持ちを代弁し、情感のあるレビュー本文だけを書きます。
 
-禁止事項
-・SEOの話
-・記事作成の説明
-・AI生成の説明
-・開発者向け解説
-
-文章ルール
-・自然な日本語
-・解説記事本文
-・誹謗中傷禁止
-・800〜1000文字
-
-JSONのみ出力
+禁止: SEO・検索・キーワード・マーケティング・記事運営・データ分析・AI言及・調査レポート調
+文体: 自然な日本語、語りかける口調、体言止め・評論調・論文調は禁止
+分量: 3フィールド合計800〜1000文字
+出力: JSONのみ
 """
                 },
                 {"role": "user", "content": prompt}
@@ -179,7 +177,7 @@ def save_actress_ai(actress_id, ai):
 # 女優取得
 # =================================
 
-def get_target_actresses():
+def get_actresses_without_ai():
 
     response = supabase.table("mst_actress") \
         .select("*") \
@@ -190,15 +188,43 @@ def get_target_actresses():
     return response.data or []
 
 
+def get_actresses_by_ids(actress_ids):
+
+    response = supabase.table("mst_actress") \
+        .select("*") \
+        .in_("actress_id", actress_ids) \
+        .execute()
+
+    return response.data or []
+
+
+def get_actress_by_name(name):
+
+    response = supabase.table("mst_actress") \
+        .select("*") \
+        .eq("name", name) \
+        .limit(1) \
+        .execute()
+
+    rows = response.data or []
+    return rows[0] if rows else None
+
+
+def get_target_actresses(*, actress_ids=None, name=None):
+
+    if actress_ids:
+        return get_actresses_by_ids(actress_ids)
+    if name:
+        actress = get_actress_by_name(name)
+        return [actress] if actress else []
+    return get_actresses_without_ai()
+
+
 # =================================
 # メイン処理
 # =================================
 
-def main():
-
-    logging.info("=== 女優AI解説生成開始 ===")
-
-    actresses = get_target_actresses()
+def process_actresses(actresses, *, regenerate=False):
 
     if not actresses:
         logging.info("対象女優なし")
@@ -210,18 +236,71 @@ def main():
 
         actress_id = actress["actress_id"]
         name = actress["name"]
+        mode = "再生成" if regenerate else "新規生成"
 
-        logging.info(f"[{i}/{total}] AI生成: {name}")
+        logging.info(f"[{i}/{total}] AI{mode}: {name} (actress_id={actress_id})")
 
         ai = generate_actress_ai_profile(actress)
 
         if not ai:
-            logging.warning("AI生成失敗")
+            logging.warning("AI生成失敗: actress_id=%s", actress_id)
             continue
 
         save_actress_ai(actress_id, ai)
 
         time.sleep(SLEEP_TIME)
+
+
+def parse_args(argv=None):
+
+    parser = argparse.ArgumentParser(
+        description="女優 AI レビュー生成バッチ",
+    )
+    parser.add_argument(
+        "--actress-id",
+        type=int,
+        action="append",
+        dest="actress_ids",
+        metavar="ID",
+        help="指定した actress_id を再生成（既存レビューを上書き。複数指定可）",
+    )
+    parser.add_argument(
+        "--name",
+        type=str,
+        help="指定した名前の女優を再生成（既存レビューを上書き）",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+
+    args = parse_args(argv)
+    regenerate = bool(args.actress_ids or args.name)
+
+    if regenerate:
+        logging.info("=== 女優AI解説 再生成開始 ===")
+    else:
+        logging.info("=== 女優AI解説生成開始 ===")
+
+    if args.actress_ids and args.name:
+        logging.error("--actress-id と --name は同時に指定できません")
+        sys.exit(1)
+
+    actresses = get_target_actresses(
+        actress_ids=args.actress_ids,
+        name=args.name,
+    )
+
+    if regenerate and args.actress_ids:
+        found_ids = {a["actress_id"] for a in actresses}
+        missing_ids = [aid for aid in args.actress_ids if aid not in found_ids]
+        if missing_ids:
+            logging.warning("見つからない actress_id: %s", ", ".join(map(str, missing_ids)))
+
+    if regenerate and args.name and not actresses:
+        logging.warning("名前に一致する女優が見つかりません: %s", args.name)
+
+    process_actresses(actresses, regenerate=regenerate)
 
     logging.info("🎉 女優AI解説生成完了")
 

@@ -342,7 +342,7 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
 
         title = item.get("title", "")
         # 🧠 Safe化AI生成
-        # auto_summary, auto_point = generate_safe_summary_point(title, auto_summary, auto_point )
+        auto_summary, auto_point = generate_safe_summary_point(title, auto_summary, auto_point )
 
         raw_json = item
         actress_ids = [a.get("id") for a in actresses] if actresses else None
@@ -359,15 +359,15 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
             "review_average": review_average,
             "price": price,
             "list_price": list_price,
-            # "auto_summary": auto_summary,
-            # "auto_point": auto_point,
+            "auto_summary": auto_summary,
+            "auto_point": auto_point,
             "campaign": campaign,
             "actress_ids": actress_ids,
             "actress": actresses,
             "director_ids": director_ids,
             "director": directors,
-            # "genre_ids": genre_ids,
-            # "genre": genre_names,
+            "genre_ids": genre_ids,
+            "genre": genre_names,
             "delivery": delivery,
             "sample_images": sample_images,  # ← 追加（配列カラム）
             "raw_json": raw_json,

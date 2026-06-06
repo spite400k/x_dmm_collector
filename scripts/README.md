@@ -1,120 +1,99 @@
-# scripts 配下スクリプト
+# scripts スクリプト一覧
 
-DMM データの収集・加工・手動メンテ用バッチ群です。
+`scripts/` 配下のバッチスクリプト一覧です。  
+**テーブルの読み書き・更新カラムなどの詳細仕様**は [`SPEC.md`](SPEC.md) を参照してください。
 
-- **実行定義の正本**: ルートの [`tasks.yaml`](../tasks.yaml)（`run.py` / bat / CI が参照）
-- **一覧・run.py / bat の詳細**: ルートの [`SCRIPTS.md`](../SCRIPTS.md)
+- **実行定義の正本**: [`tasks.yaml`](../tasks.yaml)
+- **run.py / bat の使い方**: [`SCRIPTS.md`](../SCRIPTS.md)
 
 ## ディレクトリ構成
 
-```
-scripts/
-  collect/    … DMM API から取得して DB 登録（定期）
-  process/    … 取得済みデータの AI 加工・ランキング生成（定期 / 手動）
-  manual/     … 手動実行・メンテ用
-  _bootstrap.py … プロジェクトルートを sys.path に追加（各スクリプトは同等処理を内蔵）
-```
+| ディレクトリ | 役割 |
+|-------------|------|
+| [`collect/`](collect/) | DMM から取得して DB 登録（定期） |
+| [`process/`](process/) | 取得済みデータの加工・AI 生成（定期 / 手動） |
+| [`manual/`](manual/) | 手動実行・メンテ |
 
 ## 共通事項
 
-- **実行場所**: プロジェクトルート（`x_dmm_collector/`）から実行する
-- **直接実行**: 各 `.py` は起動時にルートを `sys.path` に追加するため、`python scripts/...` で動く
-- **一括実行**: `python run.py --list` / `python run.py --phase collect` など（詳細は `SCRIPTS.md`）
-- **ログ**: タスク実行時は `logs/task_run_*.log`、スクリプト単体実行時は各ファイル内 `setup_logger` のファイル名
-
-### 主な環境変数
-
-| 変数 | 用途 |
-|------|------|
-| `DMM_API_ID`, `DMM_AFFILIATE_ID` | DMM Affiliate API |
-| `SUPABASE_URL`, `SUPABASE_KEY` | 通常 DB |
-| `OPENAI_API_KEY` | AI レビュー・テキスト生成 |
-| `MESUGAKI_DB_PASSWORD` 等 | メスガキ用 DB（`supabase_client_mesugaki.py`） |
-| `ACTRESS_ENRICH_BATCH_SIZE` | 女優 enrich の1回あたり件数（省略時 1000） |
+- **実行場所**: プロジェクトルートから `python scripts/...`
+- **一括実行**: `python run.py --list` / `python run.py --phase collect|process|manual`
+- **ログ**: タスク実行時は `logs/task_run_*.log`（`tasks.yaml` 参照）
 
 ---
 
-## collect/ — 収集フェーズ（定期）
+## collect/（定期）
 
-| スクリプト | 説明 | 実行例 |
-|-----------|------|--------|
-| [`collect/default.py`](collect/default.py) | 通常サイト向け作品収集 | `python scripts/collect/default.py` |
-| [`collect/mesugaki.py`](collect/mesugaki.py) | メスガキサイト向け作品収集 | `python scripts/collect/mesugaki.py` |
-| [`collect/bltl.py`](collect/bltl.py) | BL/TL 向け収集 | `python scripts/collect/bltl.py` |
-| [`collect/campaign.py`](collect/campaign.py) | キャンペーン対象の収集 | `python scripts/collect/campaign.py` |
-
-いずれも DMM API で作品を取得し、Supabase に登録する。CLI オプションなし。
+| スクリプト | 説明 | DB 接続 | 実行 |
+|-----------|------|---------|------|
+| [`default.py`](collect/default.py) | 通常サイト向け作品収集 | 通常 (`supabase`) | `python scripts/collect/default.py` |
+| [`mesugaki.py`](collect/mesugaki.py) | メスガキ向け作品収集 | メスガキ収集用 (`supabase3`) | `python scripts/collect/mesugaki.py` |
+| [`bltl.py`](collect/bltl.py) | BL/TL 向け作品収集 | BL/TL 用 (`supabase2`) | `python scripts/collect/bltl.py` |
+| [`campaign.py`](collect/campaign.py) | キャンペーン情報収集 | 通常 (`supabase`) | `python scripts/collect/campaign.py` |
 
 ---
 
-## process/ — 加工フェーズ
+## process/
 
-### 定期（`tasks.yaml` の process フェーズ）
+### 定期（`tasks.yaml` → process）
 
-| スクリプト | 説明 | 実行例 |
-|-----------|------|--------|
-| [`process/update_items.py`](process/update_items.py) | 作品の AI テキスト更新 | `python scripts/process/update_items.py` |
-| [`process/create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成 | `python scripts/process/create_ai_review.py` |
-| [`process/create_weekly_rankings.py`](process/create_weekly_rankings.py) | 週次ランキング生成 | `python scripts/process/create_weekly_rankings.py` |
-| [`process/create_weekly_rankings_mesugaki.py`](process/create_weekly_rankings_mesugaki.py) | メスガキ週次ランキング | `python scripts/process/create_weekly_rankings_mesugaki.py` |
+| スクリプト | 説明 | DB 接続 | 実行 |
+|-----------|------|---------|------|
+| [`update_items.py`](process/update_items.py) | 作品情報・AI テキスト更新 | 通常 | `python scripts/process/update_items.py` |
+| [`create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成 | 通常 | `python scripts/process/create_ai_review.py` |
+| [`create_weekly_rankings.py`](process/create_weekly_rankings.py) | 週次ランキング生成 | 通常（Postgres 直結） | `python scripts/process/create_weekly_rankings.py` |
+| [`create_weekly_rankings_mesugaki.py`](process/create_weekly_rankings_mesugaki.py) | メスガキ週次ランキング | メスガキ（Postgres 直結） | `python scripts/process/create_weekly_rankings_mesugaki.py` |
 
-### 手動（`tasks.yaml` の manual フェーズに分類）
+### 手動（`tasks.yaml` → manual）
 
-| スクリプト | 説明 | 実行例 |
-|-----------|------|--------|
-| [`process/update_mesugaki.py`](process/update_mesugaki.py) | メスガキ DB の AI 更新 | `python scripts/process/update_mesugaki.py` |
-| [`process/update_actress.py`](process/update_actress.py) | 女優プロフィールをスクレイピングで更新 | `python scripts/process/update_actress.py` |
-| [`process/enrich_actress.py`](process/enrich_actress.py) | DMM API / osusume から女優情報を enrich | `python scripts/process/enrich_actress.py` |
-| [`process/create_actress_review.py`](process/create_actress_review.py) | 女優 AI レビュー（summary / career / appeal）生成 | 下記参照 |
-| [`process/create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ向け AI レビュー | 下記参照 |
+| スクリプト | 説明 | DB 接続 | 実行 |
+|-----------|------|---------|------|
+| [`update_mesugaki.py`](process/update_mesugaki.py) | メスガキ DB の作品情報更新 | メスガキ | `python scripts/process/update_mesugaki.py` |
+| [`update_actress.py`](process/update_actress.py) | 女優プロフィール（osusume スクレイピング）更新 | 通常 | `python scripts/process/update_actress.py` |
+| [`enrich_actress.py`](process/enrich_actress.py) | 女優情報 enrich（DMM API 等） | 通常 | `python scripts/process/enrich_actress.py` |
+| [`create_actress_review.py`](process/create_actress_review.py) | 女優 AI レビュー生成 | 通常 | 下記 |
+| [`create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ AI レビュー | メスガキ | 下記 |
 
 #### create_actress_review.py
 
-`mst_actress` の `ai_summary` / `ai_career` / `ai_appeal` を OpenAI で生成する。
-
 ```bash
-# 未生成の女優のみ（ai_summary IS NULL）
-python scripts/process/create_actress_review.py
-
-# 名前で再生成（既存を上書き）
-python scripts/process/create_actress_review.py --name "つばさ舞"
-
-# actress_id で再生成（複数可）
-python scripts/process/create_actress_review.py --actress-id 12345
-python scripts/process/create_actress_review.py --actress-id 123 --actress-id 456
+python scripts/process/create_actress_review.py                          # 未生成のみ
+python scripts/process/create_actress_review.py --name "つばさ舞"          # 名前で再生成
+python scripts/process/create_actress_review.py --actress-id 12345         # ID で再生成
 ```
-
-`--actress-id` と `--name` は同時指定不可。要 `OPENAI_API_KEY`。
 
 #### create_ai_review_mesugaki.py
 
-メスガキ用 Supabase に対して AI レビューを生成する。
-
 ```bash
-# 通常（AI レビュー + あらすじ等）
 python scripts/process/create_ai_review_mesugaki.py
-
-# 生レビュー（dmm_raw_reviews）の保存のみ
-python scripts/process/create_ai_review_mesugaki.py --raw-only
+python scripts/process/create_ai_review_mesugaki.py --raw-only   # 生レビュー保存のみ
 ```
-
-要 `MESUGAKI_DB_PASSWORD`。AI 生成時は `OPENAI_API_KEY` も必要。
 
 ---
 
-## manual/ — 手動メンテ
+## manual/（手動）
 
-| スクリプト | 説明 | 実行例 |
-|-----------|------|--------|
-| [`manual/check_campaign.py`](manual/check_campaign.py) | キャンペーン対象の確認・更新 | `python scripts/manual/check_campaign.py` |
-| [`manual/create_master.py`](manual/create_master.py) | DMM floorList 等からマスタ同期 | `python scripts/manual/create_master.py` |
-| [`manual/individual_search.py`](manual/individual_search.py) | キーワード指定の個別作品取得 | `python scripts/manual/individual_search.py` |
-| [`manual/supabase2storj.py`](manual/supabase2storj.py) | Supabase Storage → Storj へ画像移行 | `python scripts/manual/supabase2storj.py` |
+| スクリプト | 説明 | DB 接続 | 実行 |
+|-----------|------|---------|------|
+| [`check_campaign.py`](manual/check_campaign.py) | キャンペーン有無の確認（検証用） | 通常 | `python scripts/manual/check_campaign.py` |
+| [`create_master.py`](manual/create_master.py) | DMM マスタ同期 | 通常 | `python scripts/manual/create_master.py` |
+| [`individual_search.py`](manual/individual_search.py) | キーワード検索の試験実行 | なし | `python scripts/manual/individual_search.py` |
+| [`supabase2storj.py`](manual/supabase2storj.py) | Storage → Storj 画像移行 | Storage のみ | `python scripts/manual/supabase2storj.py` |
 
-`individual_search.py` はスクリプ内の `targets` / キーワードを編集してから実行する想定。
+---
+
+## DB 接続の対応
+
+| 接続名 | 設定 | 主な利用スクリプト |
+|--------|------|-------------------|
+| 通常 | `SUPABASE_URL`, `SUPABASE_KEY` | `default.py`, `update_items.py`, `create_ai_review.py` 等 |
+| BL/TL | `SUPABASE_URL2`, `SUPABASE_KEY2` | `bltl.py` |
+| メスガキ収集 | `SUPABASE_URL3`, `SUPABASE_KEY3` | `mesugaki.py` |
+| メスガキ加工 | `MESUGAKI_SUPABASE_*` | `update_mesugaki.py`, `create_ai_review_mesugaki.py` 等 |
+| Postgres 直結 | `DB_*` / `MESUGAKI_DB_*` | `create_weekly_rankings*.py` |
 
 ---
 
 ## 旧 main_*.py との対応
 
-リポジトリ整理前のエントリポイント名との対応は [`SCRIPTS.md` の「旧 main_*.py との対応」](../SCRIPTS.md#旧-main_py-との対応) を参照。
+[`SCRIPTS.md` の「旧 main_*.py との対応」](../SCRIPTS.md#旧-main_py-との対応) を参照。

@@ -26,9 +26,9 @@ from utils.screenshot import save_debug_files
 
 # 対象の service/floor の組み合わせ一覧
 targets = [
-    # {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
-    # {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
-    # {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
+    {"site": "DMM.R18", "service": "ebook", "floor": "comic"}, # コミック
+    {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"}, # 同人誌
+    {"site": "FANZA", "service": "digital", "floor": "videoc"}, # 動画 素人
     {"site": "DMM.R18", "service": "digital", "floor": "videoa"}, # ビデオ
     # {"site": "DMM.R18", "service": "digital", "floor": "anime"}, # アニメ
     # {"site": "FANZA", "service": "ebook", "floor": "novel"}, # 美少女ノベル・官能小説

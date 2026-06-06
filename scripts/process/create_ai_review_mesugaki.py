@@ -290,7 +290,7 @@ def process_content(
             "avg_rating": avg_rating,
             "summary_text": html_summary,
             "ai_model": "gpt-5.4-nano",
-            "prompt_version": "v2_5axis",
+            "prompt_version": "v3_structured",
             "updated_at": datetime.utcnow().isoformat(),
         }
         save_ai_summary(summary)

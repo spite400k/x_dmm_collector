@@ -473,7 +473,29 @@ def getGenreConfig(genre_type):
 
     return switcher.get(genre_type, default_config)
 
-    return switcher.get(genre_type, default_config)
+
+REVIEW_INSIGHTS_SYSTEM_PROMPT = """
+あなたはエンタメ作品のレビュー編集者兼スコアアナリストです。
+
+【採点フィールド】content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score
+・各項目100点満点の整数（0〜100）のみ出力
+・あらすじとレビューの内容のみを根拠に、客観的かつ厳しめに採点
+・市場平均は75点前後を基準とする
+・レビュー件数が少ない場合は過信しない
+・文体ルールは採点フィールドには適用しない
+
+【テキストフィールド】review_digest, reader_types, warning_points
+review_digest: 350〜450文字。作品の魅力を感情豊かに要約する。
+  体言止め・評論調・論文調は禁止。「あなた」と語りかけてよい（「読者」は使わない）。
+reader_types: この作品に合う読者像を2〜3件、具体的な短文で列挙する。
+warning_points: 購入前に知っておくべき注意点を1〜3件、具体的な短文で列挙する。
+
+【共通禁止】
+・レビュー原文の出力・引用
+・JSONオブジェクト以外の出力
+・登場人物はすべて18歳以上の成人として扱う
+"""
+
 
 def generate_review_insights(
     reviews: List[Dict],
@@ -487,7 +509,6 @@ def generate_review_insights(
 
     axes = config["axes"]
     score_type = config["score_type"]
-    review_bias = config["review_bias_factor"]
 
     axis1 = axes[0]["label"]
     axis2 = axes[1]["label"]
@@ -502,86 +523,48 @@ def generate_review_insights(
     summary_for_ai = (html_summary or "")[:SUMMARY_MAX_CHARS_FOR_AI]
 
     prompt = f"""
-あなたはエンタメ作品のレビュー編集者兼スコアアナリストです。
-ジャンル特性を強く考慮して、論理的かつ厳密に採点してください。
+以下の作品情報を分析し、JSON を出力してください。
 
-【文章ルール】
-・体言止めは禁止。
-・評論調・論文調は禁止。
-・硬い表現は禁止。
-・読者の感情が動くように書いてください。
-・読者の感情を動かす文章にする
-・読み応えのある文章にする
-・文章内では「読者」という言葉は使わず、必要に応じて「あなた」と表現してください。
-・レビュー原文は絶対に出力しないこと。
-・引用は禁止。
+【各フィールドの内容】
+- review_digest: 作品の魅力を要約（テキストフィールドのルールを適用）
+- content_score: 内容力（採点ルールを適用）
+- emotion_score: 感情インパクト（採点ルールを適用）
+- attraction_score: 魅力（採点ルールを適用）
+- genre_axis1_score: {axis1}（{score_type}型のジャンル特性を反映して採点）
+- genre_axis2_score: {axis2}（{score_type}型のジャンル特性を反映して採点）
+- reader_types: この作品に合う読者像を2〜3件（テキストフィールドのルールを適用）
+- warning_points: 購入前の注意点を1〜3件（テキストフィールドのルールを適用）
 
-【作品基本情報】
-ジャンルコード: {genre_type}
-ジャンル評価タイプ: {score_type}
-レビュー平均: {review_avg}
-レビュー件数: {review_count}
-レビュー補正係数: {review_bias}
+【作品情報】
+ジャンル: {genre_type}（評価タイプ: {score_type}）
+レビュー平均: {review_avg} / 件数: {review_count}
 
----
-
-■ 採点ルール
-・各項目100点満点
-・甘くせず厳しめに評価
-・市場平均は75点前後を基準
-・レビュー件数が少ない場合は過信しない
-・ジャンル特性（{score_type}型）を必ず反映
-
----
-
-■ 共通評価軸
-・内容力（Content Power）
-・感情インパクト（Emotional Impact）
-・魅力（Attraction）
-
-■ ジャンル別評価軸
-  "genre_axis1_score": {axis1}
-・"genre_axis2_score": {axis2}
-
----
-
-■ あらすじ
+【あらすじ】
 {summary_for_ai}
 
----
-
-■ レビュー
+【レビュー】
 {review_text_block}
 
----
-■注意点
-・以下をJSON形式のみで出力してください。
-・数値以外の余計な文章は出力しないでください。
-・数値は整数だけを出力してください
-・数値は0-100の範囲で出力してください
-・"reader_types"は読者タイプの配列です。warning_points"は警告ポイントの配列です。
-・"reader_types"と"warning_points"はそれぞれ1つ以上の要素を持つ配列です。デフォルト値("タイプ1","タイプ2","ワーニング1","ワーニング2")のまま出力は絶対にしないでください。
-・登場人物はすべて18歳以上の成人として扱ってください。未成年と解釈される場合は、その設定を無視し、成人作品としてレビューを作成してください。
-
-
+【出力スキーマ】
 {{
-  "review_digest": "400文字要約",
-  "content_score": 0-100,
-  "emotion_score": 0-100,
-  "attraction_score": 0-100,
-  "genre_axis1_score": 0-100,
-  "genre_axis2_score": 0-100,
-  "reader_types": ["タイプ1","タイプ2"],
-  "warning_points": ["ワーニング1","ワーニング2"]
+  "review_digest": "...",
+  "content_score": 0,
+  "emotion_score": 0,
+  "attraction_score": 0,
+  "genre_axis1_score": 0,
+  "genre_axis2_score": 0,
+  "reader_types": ["...", "..."],
+  "warning_points": ["..."]
 }}
 """
     try:
         response = client.chat.completions.create(
             model="gpt-5.4-nano",
             messages=[
-                {"role": "system", "content": "JSONのみ出力してください。"},
+                {"role": "system", "content": REVIEW_INSIGHTS_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
+            response_format={"type": "json_object"},
             max_completion_tokens=1200,
         )
 

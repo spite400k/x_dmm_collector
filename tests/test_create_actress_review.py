@@ -33,6 +33,22 @@ def _mock_supabase(review_module):
     return mock_supabase
 
 
+def test_format_actress_info_skips_empty_fields(review_module):
+    actress = {
+        "name": "テスト",
+        "height": None,
+        "bust": "",
+        "profile": "プロフィール本文",
+        "career_text": "",
+    }
+    info = review_module._format_actress_info(actress)
+    assert "名前: テスト" in info
+    assert "身長" not in info
+    assert "バスト" not in info
+    assert "プロフィール:\nプロフィール本文" in info
+    assert "経歴" not in info
+
+
 def test_generate_actress_ai_profile_success(review_module):
     actress = {"name": "テスト", "height": 160}
     ai_payload = {"ai_summary": "s", "ai_career": "c", "ai_appeal": "a"}
@@ -43,9 +59,16 @@ def test_generate_actress_ai_profile_success(review_module):
     response = MagicMock()
     response.choices = [choice]
 
-    with patch.object(review_module.client.chat.completions, "create", return_value=response):
+    with patch.object(review_module.client.chat.completions, "create", return_value=response) as create_mock:
         result = review_module.generate_actress_ai_profile(actress)
         assert result == ai_payload
+        call_kwargs = create_mock.call_args.kwargs
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+        messages = call_kwargs["messages"]
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == review_module.ACTRESS_SYSTEM_PROMPT
+        assert "名前: テスト" in messages[1]["content"]
+        assert "SEO" not in messages[1]["content"]
 
 
 def test_generate_actress_ai_profile_failure(review_module):

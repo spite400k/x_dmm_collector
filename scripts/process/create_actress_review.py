@@ -23,34 +23,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 BATCH_SIZE = 1000
 SLEEP_TIME = 1
 
-
-# =================================
-# AI解説生成
-# =================================
-
-def generate_actress_ai_profile(actress):
-
-    name = actress.get("name")
-    height = actress.get("height")
-    bust = actress.get("bust")
-    cup = actress.get("cup")
-    waist = actress.get("waist")
-    hip = actress.get("hip")
-    prefectures = actress.get("prefectures")
-    hobby = actress.get("hobby")
-
-    profile = actress.get("profile")
-    career_text = actress.get("career_text")
-    awards = actress.get("awards")
-
-    favorite_count = actress.get("favorite_count")
-    works_count = actress.get("works_count")
-    debut_date = actress.get("debut_date")
-    fanza_activity = actress.get("fanza_activity")
-
-    prompt = f"""
-あなたはAV作品を長年見てきた熱心なファン兼レビュアーです。
-「この女優、どんな人で、なぜ好かれるのか」を、読者の心が動く語り口で書いてください。
+ACTRESS_SYSTEM_PROMPT = """
+あなたはAV作品レビューサイトで活動する、経験豊富なレビュアーです。
+作品を愛するファンの気持ちを代弁し、情感のあるレビュー本文を書きます。
 
 【事実の扱い】
 ・提供された情報だけを根拠に書く（推測・創作・架空の経歴は禁止）
@@ -64,60 +39,76 @@ def generate_actress_ai_profile(actress):
 ・「あなた」で語りかけてよい（「読者」という語は使わない）
 ・誹謗中傷禁止
 
-【絶対に書かないこと】
+【禁止事項】
 ・SEO、検索、キーワード、コンテンツ整備、購入行動、プロモーション戦略
 ・記事作成・サイト運営・データ分析の話
 ・AI生成の説明、開発者向けの解説
 ・「〜が重要な参照ポイント」「客観的に把握」「分析の鍵」などの調査レポート表現
 
-【各フィールドの書き方】（各200〜350文字、3項目合計で800〜1000文字）
+【出力】
+・JSONオブジェクトのみ出力
+・ai_summary / ai_career / ai_appeal は各200〜350文字、3項目合計800〜1000文字
+"""
 
-ai_summary:
-  第一印象・外見の特徴・雰囲気・プロフィールから伝わる人柄を、ファン目線で紹介する。
 
-ai_career:
-  デビューからの歩み・作品数・活動期間・ジャンルの広がりを、キャリアの物語として語る。
-  調査手順や分析方法ではなく、「どんな作品を重ねてきた女優か」を伝える。
+def _format_actress_info(actress: dict) -> str:
+    """空・null のフィールドを除いて女優情報ブロックを組み立てる。"""
+    lines = []
 
-ai_appeal:
-  ファンが惹かれる理由を、演技・表情・役柄との相性・作品での見せ方など具体的な魅力で語る。
-  人気の根拠を感情豊かに伝え、最後までレビュー本文のトーンを保つ。
+    scalar_fields = [
+        ("名前", actress.get("name")),
+        ("身長", actress.get("height")),
+        ("バスト", actress.get("bust")),
+        ("カップ", actress.get("cup")),
+        ("ウエスト", actress.get("waist")),
+        ("ヒップ", actress.get("hip")),
+        ("出身", actress.get("prefectures")),
+        ("趣味", actress.get("hobby")),
+        ("デビュー日", actress.get("debut_date")),
+        ("FANZA活動", actress.get("fanza_activity")),
+        ("作品数", actress.get("works_count")),
+        ("お気に入り数", actress.get("favorite_count")),
+    ]
+    for label, value in scalar_fields:
+        if value is not None and value != "":
+            lines.append(f"{label}: {value}")
+
+    for label, key in (
+        ("プロフィール", "profile"),
+        ("経歴", "career_text"),
+        ("受賞", "awards"),
+    ):
+        value = actress.get(key)
+        if value:
+            lines.append(f"\n{label}:\n{value}")
+
+    return "\n".join(lines) if lines else "（情報なし）"
+
+
+# =================================
+# AI解説生成
+# =================================
+
+def generate_actress_ai_profile(actress):
+
+    actress_info = _format_actress_info(actress)
+
+    prompt = f"""
+以下の女優情報をもとに JSON を出力してください。
+
+【各フィールドの内容】
+- ai_summary: 第一印象・外見の特徴・雰囲気・プロフィールから伝わる人柄を、ファン目線で紹介
+- ai_career: デビューからの歩み・作品数・活動期間・ジャンルの広がりを、キャリアの物語として語る
+- ai_appeal: ファンが惹かれる理由を、演技・表情・役柄との相性・作品での見せ方など具体的な魅力で語る
 
 【女優情報】
+{actress_info}
 
-名前: {name}
-
-スタイル
-身長: {height}
-バスト: {bust}
-カップ: {cup}
-ウエスト: {waist}
-ヒップ: {hip}
-
-出身: {prefectures}
-趣味: {hobby}
-
-デビュー日: {debut_date}
-FANZA活動: {fanza_activity}
-
-作品数: {works_count}
-お気に入り数: {favorite_count}
-
-プロフィール:
-{profile}
-
-経歴:
-{career_text}
-
-受賞:
-{awards}
-
-【出力(JSON)】
-
+【出力スキーマ】
 {{
-"ai_summary": "女優の特徴・第一印象",
-"ai_career": "キャリアの歩みと出演傾向",
-"ai_appeal": "ファンが惹かれる理由"
+  "ai_summary": "...",
+  "ai_career": "...",
+  "ai_appeal": "..."
 }}
 """
 
@@ -126,18 +117,7 @@ FANZA活動: {fanza_activity}
         response = client.chat.completions.create(
             model="gpt-5.4-nano",
             messages=[
-                {
-                    "role": "system",
-                    "content": """
-あなたはAV作品レビューサイトで活動する、経験豊富なレビュアーです。
-作品を愛するファンの気持ちを代弁し、情感のあるレビュー本文だけを書きます。
-
-禁止: SEO・検索・キーワード・マーケティング・記事運営・データ分析・AI言及・調査レポート調
-文体: 自然な日本語、語りかける口調、体言止め・評論調・論文調は禁止
-分量: 3フィールド合計800〜1000文字
-出力: JSONのみ
-"""
-                },
+                {"role": "system", "content": ACTRESS_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"}

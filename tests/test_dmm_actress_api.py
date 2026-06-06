@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -6,6 +7,26 @@ import requests
 from bs4 import BeautifulSoup
 
 from dmm import dmm_actress_api as api
+
+
+@contextmanager
+def patch_external_enrich():
+    with patch.object(
+        api,
+        "enrich_with_wikidata",
+        side_effect=lambda record, *_args, **_kwargs: (record, None),
+    ):
+        with patch.object(
+            api,
+            "enrich_with_wikipedia",
+            side_effect=lambda record, **_kwargs: record,
+        ):
+            with patch.object(
+                api,
+                "enrich_with_minnano",
+                side_effect=lambda record, **_kwargs: record,
+            ):
+                yield
 
 
 class FakeResponse:
@@ -314,10 +335,11 @@ def test_enrich_actress_via_api():
     with patch.object(api, "fetch_actress_by_id", return_value=api_actress):
         with patch.object(api, "_merge_scrape_and_works", return_value=merged):
             with patch.object(api, "_upload_actress_image", side_effect=lambda r: r):
-                with patch("dmm.dmm_actress_api.time.sleep") as sleep_mock:
-                    result = api.enrich_actress(5, request_interval=1.0)
-                    assert result["profile"] == "p"
-                    sleep_mock.assert_called_once_with(1.0)
+                with patch_external_enrich():
+                    with patch("dmm.dmm_actress_api.time.sleep") as sleep_mock:
+                        result = api.enrich_actress(5, request_interval=1.0)
+                        assert result["profile"] == "p"
+                        sleep_mock.assert_called_once_with(1.0)
 
 
 def test_enrich_actress_keyword_fallback():
@@ -328,8 +350,9 @@ def test_enrich_actress_keyword_fallback():
         with patch.object(api, "fetch_actress_by_keyword", return_value=api_actress):
             with patch.object(api, "_merge_scrape_and_works", return_value=merged):
                 with patch.object(api, "_upload_actress_image", side_effect=lambda r: r):
-                    result = api.enrich_actress(6, name="Fallback", request_interval=0)
-                    assert result["works_count"] == 1
+                    with patch_external_enrich():
+                        result = api.enrich_actress(6, name="Fallback", request_interval=0)
+                        assert result["works_count"] == 1
 
 
 def test_enrich_actress_scrape_only():
@@ -339,8 +362,9 @@ def test_enrich_actress_scrape_only():
         with patch.object(api, "fetch_actress_by_keyword", return_value=None):
             with patch.object(api, "_merge_scrape_and_works", return_value=merged):
                 with patch.object(api, "_upload_actress_image", side_effect=lambda r: r):
-                    result = api.enrich_actress(7, request_interval=0)
-                    assert result["profile"] == "only scrape"
+                    with patch_external_enrich():
+                        result = api.enrich_actress(7, request_interval=0)
+                        assert result["profile"] == "only scrape"
 
 
 def test_enrich_actress_no_data():

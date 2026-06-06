@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.storageS3 import S3_PUBLIC_BASE_URL, upload_actress_image_to_s3
+from dmm.minnano_actress_api import enrich_with_minnano
+from dmm.wikipedia_actress_api import enrich_with_wikipedia
+from dmm.wikidata_actress_api import enrich_with_wikidata
 from utils.logger import setup_logger
 
 os.makedirs("logs", exist_ok=True)
@@ -418,6 +421,19 @@ def enrich_actress(
             return None
 
     record = _upload_actress_image(record)
+    record, wiki_title = enrich_with_wikidata(record, actress_id, request_interval=0)
+    record = enrich_with_wikipedia(
+        record,
+        name=name or record.get("name"),
+        wiki_title=wiki_title,
+        request_interval=0,
+    )
+    record = enrich_with_minnano(
+        record,
+        name=name or record.get("name"),
+        session=session,
+        request_interval=0,
+    )
 
     if request_interval > 0:
         time.sleep(request_interval)

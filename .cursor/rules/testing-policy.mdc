@@ -1,0 +1,62 @@
+---
+description: 自動テスト作成方針（C0・ホワイトボックス・境界値）
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# テスト方針
+
+## 目標
+
+- **C0（文カバレッジ）を 100% に近づける** — `pytest.ini` の `--cov-fail-under=100` を満たす
+- **ホワイトボックステスト** — ソースの分岐・早期 return・例外を意図的に通す
+- **境界値・限界値テスト** — 空・None・0・1件・最大・不正値を加える
+
+## ワークフロー
+
+1. `python -m pytest tests/ -q --cov=. --cov-report=term-missing` で Missing 行を確認
+2. 対象関数の分岐（if/else, try/except, ループ）を表にし、未実行パスごとにケースを追加
+3. テスト実行後、Missing が消えたことを確認
+
+## ファイル配置
+
+| ソース | テスト先 |
+|--------|----------|
+| `db/`, `dmm/`, `utils/` | `tests/test_<領域>.py` の `TestXxx` クラス |
+| `main_*.py` | `tests/test_main_scripts.py` |
+| 複数モジュールの未カバー行 | `tests/test_coverage_gaps.py` |
+
+## モック方針
+
+- 外部依存（Supabase, S3, API, DB）は実接続しない
+- `conftest.py` の `supabase_mock`, `s3_mock`, `sample_dmm_item` を再利用
+- 関数単位は `unittest.mock.patch` で差し替え
+
+## 1関数あたりのチェックリスト
+
+- [ ] 正常系（代表入力）
+- [ ] 分岐の true / false 両側（または早期 return）
+- [ ] 境界値: `None`, `""`, `[]`, 0件, 1件, 最大値
+- [ ] 例外系: `side_effect` で except ブロックを通す
+- [ ] 副作用: モックの `assert_called_once` 等で検証
+
+## 境界値の例
+
+```python
+# 純粋関数は1テストにまとめてよい
+assert parse_price(None) is None
+assert parse_price("") is None
+assert parse_price("abc") is None
+assert parse_price("1,980円") == 1980
+```
+
+## 除外の扱い
+
+- `if __name__ == "__main__"`: 必要なら `runpy.run_module()` で1本
+- 到達困難な防御コードのみ `# pragma: no cover`（理由コメント必須）
+
+## 禁止・注意
+
+- 意味のないアサーションのみのテストを増やさない
+- 自明なモック返却の重複テストを避け、分岐・境界に集中する
+- 新規ケースは既存の命名・クラス構成・import スタイルに合わせる

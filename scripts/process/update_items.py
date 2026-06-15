@@ -367,7 +367,7 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
             "director_ids": director_ids,
             "director": directors,
             "genre_ids": genre_ids,
-            "genre": genre_names,
+            "genres": genre_names,
             "delivery": delivery,
             "sample_images": sample_images,  # ← 追加（配列カラム）
             "raw_json": raw_json,

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from utils.logger import RotatingLogFile
+
 ROOT = Path(__file__).resolve().parent
 TASKS_FILE = ROOT / "tasks.yaml"
 
@@ -50,13 +52,12 @@ def resolve_scripts(tasks: dict, phase: str | None, script_path: str | None) -> 
 def run_script(entry: dict, python_exe: str, continue_on_error: bool) -> int:
     script = ROOT / entry["path"]
     log_path = ROOT / entry.get("log", f"logs/{script.stem}.log")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = f"{'=' * 48}\n{timestamp} - タスク開始 ({entry['path']})\n"
 
     print(f"[RUN] {entry['path']}")
-    with log_path.open("a", encoding="utf-8") as log_file:
+    with RotatingLogFile(log_path) as log_file:
         log_file.write(header)
 
         result = subprocess.run(

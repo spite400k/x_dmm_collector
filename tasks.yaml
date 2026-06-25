@@ -41,6 +41,10 @@ phases:
         name: 女優のAIレビュー(summary, career, appeal)生成
         log: logs/task_run_create_actress_review.log
       
+      - path: scripts/process/create_weekly_rankings_actress.py
+        name: 女優週次ランキング
+        log: logs/task_run_create_weekly_rankings_actress.log
+      
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキのAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review_mesugaki.log

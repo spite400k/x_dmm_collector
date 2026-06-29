@@ -30,11 +30,14 @@ from openai import OpenAI
 from db.supabase_client_mesugaki import supabase
 from utils.content_generator_review import (
     create_driver,
+    ensure_driver_alive,
+    quit_driver_safe,
     scrape_doujin_synopsis,
     scrape_product_summary,
     scrape_review_comments,
     generate_review_insights,
 )
+from selenium.common.exceptions import InvalidSessionIdException
 from utils.logger import setup_logger
 
 # 対象の service/floor の組み合わせ一覧
@@ -300,6 +303,8 @@ def process_content(
 
         logging.info("🎉 完了: %s", content_id)
 
+    except InvalidSessionIdException:
+        raise
     except Exception as e:
         logging.info("❌ エラー: %s", e)
 
@@ -329,8 +334,44 @@ def process_content_raw_only(
         save_raw_reviews(content_id, reviews)
         logging.info("🎉 raw保存完了: %s (%s件)", content_id, len(reviews))
 
+    except InvalidSessionIdException:
+        raise
     except Exception as e:
         logging.info("❌ エラー: %s", e)
+
+
+def _process_item_with_retry(
+    driver,
+    raw_only: bool,
+    content_id: str,
+    product_url: str,
+    service_code: str,
+    floor_code: str,
+):
+    """セッション切れ時は driver を再作成して1回リトライする。"""
+    for attempt in range(2):
+        driver = ensure_driver_alive(driver)
+        try:
+            if raw_only:
+                process_content_raw_only(
+                    content_id, product_url, service_code, floor_code, driver
+                )
+            else:
+                process_content(
+                    content_id, product_url, service_code, floor_code, driver
+                )
+            return driver
+        except InvalidSessionIdException:
+            if attempt == 0:
+                logging.warning(
+                    "セッション切れ (%s) → driver 再作成してリトライ",
+                    content_id,
+                )
+                quit_driver_safe(driver)
+                driver = create_driver()
+                continue
+            raise
+    return driver
 
 
 def process_batch(batch_items, batch_index, total, raw_only: bool = False):
@@ -354,14 +395,14 @@ def process_batch(batch_items, batch_index, total, raw_only: bool = False):
                 content_id,
             )
             t0 = time.perf_counter()
-            if raw_only:
-                process_content_raw_only(
-                    content_id, product_url, service_code, floor_code, driver
-                )
-            else:
-                process_content(
-                    content_id, product_url, service_code, floor_code, driver
-                )
+            driver = _process_item_with_retry(
+                driver,
+                raw_only,
+                content_id,
+                product_url,
+                service_code,
+                floor_code,
+            )
             logging.info(
                 "⏱ %s 処理時間: %.1f秒",
                 content_id,
@@ -369,7 +410,7 @@ def process_batch(batch_items, batch_index, total, raw_only: bool = False):
             )
             time.sleep(0.3)
     finally:
-        driver.quit()
+        quit_driver_safe(driver)
     logging.info("=== ✅ バッチ %s 完了 ===", batch_index)
 
 

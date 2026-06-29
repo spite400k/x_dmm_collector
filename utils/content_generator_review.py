@@ -13,6 +13,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 from openai import OpenAI
 
 from bs4 import BeautifulSoup
@@ -53,9 +54,31 @@ def create_driver() -> webdriver.Chrome:
 
     return driver
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+
+def is_driver_alive(driver) -> bool:
+    try:
+        _ = driver.current_url
+        return True
+    except (InvalidSessionIdException, WebDriverException):
+        return False
+
+
+def quit_driver_safe(driver) -> None:
+    if driver is None:
+        return
+    try:
+        driver.quit()
+    except (InvalidSessionIdException, WebDriverException, OSError):
+        pass
+
+
+def ensure_driver_alive(driver):
+    """セッション切れ時は driver を再作成して返す。"""
+    if driver is not None and is_driver_alive(driver):
+        return driver
+    logging.warning("Chrome セッション切れ → driver を再作成します")
+    quit_driver_safe(driver)
+    return create_driver()
 
 def handle_safe_mode(driver):
     print("現在URL:", driver.current_url)
@@ -146,6 +169,8 @@ def scrape_review_comments(product_url: str, driver, service: str, floor: str, m
         except Exception:
             driver.execute_script("window.scrollTo(0, 2000);")
 
+    except InvalidSessionIdException:
+        raise
     except Exception as e:
         logging.warning(f"[Review Page Error] {product_url} → {e}")
         return []

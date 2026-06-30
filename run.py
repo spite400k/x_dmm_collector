@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -12,10 +13,13 @@ from pathlib import Path
 
 import yaml
 
-from utils.logger import RotatingLogFile
+from utils.logger import RotatingLogFile, setup_logger
 
 ROOT = Path(__file__).resolve().parent
 TASKS_FILE = ROOT / "tasks.yaml"
+RUN_LOG = "run.log"
+
+logger = logging.getLogger(__name__)
 
 
 def load_tasks() -> dict:
@@ -49,14 +53,28 @@ def resolve_scripts(tasks: dict, phase: str | None, script_path: str | None) -> 
     return [{**entry, "phase": phase} for entry in phase_def.get("scripts", [])]
 
 
-def run_script(entry: dict, python_exe: str, continue_on_error: bool) -> int:
+def run_script(
+    entry: dict,
+    python_exe: str,
+    continue_on_error: bool,
+    index: int,
+    total: int,
+) -> int:
     script = ROOT / entry["path"]
     log_path = ROOT / entry.get("log", f"logs/{script.stem}.log")
+    label = entry.get("name") or entry["path"]
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = f"{'=' * 48}\n{timestamp} - タスク開始 ({entry['path']})\n"
 
-    print(f"[RUN] {entry['path']}")
+    logger.info(
+        "[%d/%d] スクリプト実行開始: %s (%s) → %s",
+        index,
+        total,
+        label,
+        entry["path"],
+        log_path,
+    )
     with RotatingLogFile(log_path) as log_file:
         log_file.write(header)
 
@@ -72,11 +90,17 @@ def run_script(entry: dict, python_exe: str, continue_on_error: bool) -> int:
         log_file.write(footer)
 
     if result.returncode != 0:
-        print(f"[FAIL] {entry['path']} (exit {result.returncode})", file=sys.stderr)
+        logger.error(
+            "[%d/%d] スクリプト失敗: %s (exit %d)",
+            index,
+            total,
+            entry["path"],
+            result.returncode,
+        )
         if not continue_on_error:
             return result.returncode
     else:
-        print(f"[OK]   {entry['path']}")
+        logger.info("[%d/%d] スクリプト完了: %s", index, total, entry["path"])
     return result.returncode
 
 
@@ -120,14 +144,40 @@ def main() -> None:
         print("実行対象がありません")
         return
 
+    setup_logger(RUN_LOG)
+
+    mode = f"phase={args.phase}" if args.phase else f"script={args.script}"
+    logger.info(
+        "実行開始 (%s, python=%s, continue_on_error=%s)",
+        mode,
+        args.python,
+        args.continue_on_error,
+    )
+    logger.info("実行対象: %d 件", len(entries))
+    for i, entry in enumerate(entries, 1):
+        label = entry.get("name") or entry["path"]
+        logger.info("  予定 [%d] [%s] %s - %s", i, entry["phase"], entry["path"], label)
+
+    total = len(entries)
     exit_code = 0
-    for entry in entries:
-        code = run_script(entry, args.python, args.continue_on_error)
+    prev_phase: str | None = None
+    for i, entry in enumerate(entries, 1):
+        phase = entry["phase"]
+        if phase != prev_phase:
+            logger.info("--- フェーズ開始: %s ---", phase)
+            prev_phase = phase
+
+        code = run_script(entry, args.python, args.continue_on_error, i, total)
         if code != 0 and not args.continue_on_error:
+            logger.error("エラーにより実行を中断 (exit %d)", code)
             sys.exit(code)
         if code != 0:
             exit_code = code
 
+    if exit_code == 0:
+        logger.info("全 %d 件のスクリプトが正常終了しました", total)
+    else:
+        logger.warning("実行完了（失敗あり）: exit %d", exit_code)
     sys.exit(exit_code)
 
 

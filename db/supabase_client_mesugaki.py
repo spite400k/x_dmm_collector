@@ -1,8 +1,11 @@
 """メスガキサイト用 Supabase クライアント（プロジェクト URL がデフォルトと異なる）"""
 
 from supabase import create_client, Client
+from supabase.lib.client_options import SyncClientOptions as ClientOptions
 import os
 from dotenv import load_dotenv
+
+from db.supabase_http import create_supabase_httpx_client
 
 load_dotenv()
 
@@ -21,4 +24,5 @@ if not MESUGAKI_SUPABASE_KEY:
         "バッチ（AIレビュー・週次ランキング等）では service_role キーを .env に設定してください。"
     )
 
-supabase: Client = create_client(MESUGAKI_SUPABASE_URL, MESUGAKI_SUPABASE_KEY)
+_options = ClientOptions(httpx_client=create_supabase_httpx_client())
+supabase: Client = create_client(MESUGAKI_SUPABASE_URL, MESUGAKI_SUPABASE_KEY, options=_options)

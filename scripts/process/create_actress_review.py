@@ -11,9 +11,11 @@ import time
 import logging
 from datetime import datetime
 
+import httpx
 from openai import OpenAI
 from db.supabase_client import supabase
 from utils.logger import setup_logger
+from utils.supabase_retry import execute_with_retry
 
 setup_logger("create_actress_ai.log")
 
@@ -145,10 +147,11 @@ def save_actress_ai(actress_id, ai):
         "ai_generated_at": datetime.utcnow().isoformat()
     }
 
-    supabase.table("mst_actress") \
-        .update(data) \
-        .eq("actress_id", actress_id) \
-        .execute()
+    execute_with_retry(
+        lambda: supabase.table("mst_actress")
+        .update(data)
+        .eq("actress_id", actress_id)
+    )
 
     logging.info(f"AI解説保存: {actress_id}")
 
@@ -159,32 +162,35 @@ def save_actress_ai(actress_id, ai):
 
 def get_actresses_without_ai():
 
-    response = supabase.table("mst_actress") \
-        .select("*") \
-        .is_("ai_summary", "null") \
-        .limit(BATCH_SIZE) \
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("mst_actress")
+        .select("*")
+        .is_("ai_summary", "null")
+        .limit(BATCH_SIZE)
+    )
 
     return response.data or []
 
 
 def get_actresses_by_ids(actress_ids):
 
-    response = supabase.table("mst_actress") \
-        .select("*") \
-        .in_("actress_id", actress_ids) \
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("mst_actress")
+        .select("*")
+        .in_("actress_id", actress_ids)
+    )
 
     return response.data or []
 
 
 def get_actress_by_name(name):
 
-    response = supabase.table("mst_actress") \
-        .select("*") \
-        .eq("name", name) \
-        .limit(1) \
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("mst_actress")
+        .select("*")
+        .eq("name", name)
+        .limit(1)
+    )
 
     rows = response.data or []
     return rows[0] if rows else None
@@ -266,10 +272,17 @@ def main(argv=None):
         logging.error("--actress-id と --name は同時に指定できません")
         sys.exit(1)
 
-    actresses = get_target_actresses(
-        actress_ids=args.actress_ids,
-        name=args.name,
-    )
+    try:
+        actresses = get_target_actresses(
+            actress_ids=args.actress_ids,
+            name=args.name,
+        )
+    except httpx.ConnectError as exc:
+        logging.error(
+            "Supabase への接続に失敗しました。ネットワーク/DNS を確認してください: %s",
+            exc,
+        )
+        sys.exit(1)
 
     if regenerate and args.actress_ids:
         found_ids = {a["actress_id"] for a in actresses}

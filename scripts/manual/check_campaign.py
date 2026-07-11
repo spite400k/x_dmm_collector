@@ -72,14 +72,17 @@ SAFE_WORD_MAPPING = {
 }
 
 
-def safe_text_by_word_mapping(auto_summary: str, auto_point: str) -> str:
+def safe_text_by_word_mapping(auto_summary: str, auto_point: str) -> tuple[str, str]:
     """ワード置換でR18表現をSoft化"""
-    if not auto_summary.strip() and not auto_point.strip():
-        return ""
+    s = (auto_summary or "").strip()
+    p = (auto_point or "").strip()
+    if not s and not p:
+        return "", ""
+    safe_auto_summary = auto_summary or ""
+    safe_auto_point = auto_point or ""
     for r18_word, safe_word in SAFE_WORD_MAPPING.items():
-        safe_auto_summary = auto_summary.replace(r18_word, safe_word)
-        safe_auto_point = auto_point.replace(r18_word, safe_word)
-        
+        safe_auto_summary = safe_auto_summary.replace(r18_word, safe_word)
+        safe_auto_point = safe_auto_point.replace(r18_word, safe_word)
     return safe_auto_summary, safe_auto_point
 
 def generate_safe_summary_point(title: str, auto_summary: str, auto_point ) -> tuple[str, str]:

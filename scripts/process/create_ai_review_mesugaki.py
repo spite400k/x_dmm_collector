@@ -27,6 +27,7 @@ from datetime import date, datetime, timedelta
 
 from openai import OpenAI
 
+import httpx
 from db.supabase_client_mesugaki import supabase
 from utils.content_generator_review import (
     create_driver,
@@ -39,6 +40,7 @@ from utils.content_generator_review import (
 )
 from selenium.common.exceptions import InvalidSessionIdException
 from utils.logger import setup_logger
+from utils.supabase_retry import execute_with_retry
 
 # 対象の service/floor の組み合わせ一覧
 targets = [
@@ -66,12 +68,11 @@ SLEEP_BETWEEN_BATCH = 5
 
 
 def get_saved_summary(content_id):
-    result = (
-        supabase.table("dmm_ai_review_summaries")
+    result = execute_with_retry(
+        lambda: supabase.table("dmm_ai_review_summaries")
         .select("summary_text")
         .eq("content_id", content_id)
         .limit(1)
-        .execute()
     )
 
     if result.data:
@@ -81,11 +82,10 @@ def get_saved_summary(content_id):
 
 
 def has_no_review_changed(content_id: str, new_reviews: list):
-    response = (
-        supabase.table("dmm_raw_reviews")
+    response = execute_with_retry(
+        lambda: supabase.table("dmm_raw_reviews")
         .select("review_id")
         .eq("content_id", content_id)
-        .execute()
     )
 
     existing_ids = {r["review_id"] for r in response.data}
@@ -138,17 +138,21 @@ def save_raw_reviews(content_id: str, reviews):
         return
 
     logging.info("保存するレビュー件数: %s 件", len(clean_reviews))
-    supabase.table("dmm_raw_reviews").upsert(
-        clean_reviews, on_conflict="content_id,review_id"
-    ).execute()
+    execute_with_retry(
+        lambda: supabase.table("dmm_raw_reviews").upsert(
+            clean_reviews, on_conflict="content_id,review_id"
+        )
+    )
 
     logging.info("✅ raw_reviews保存完了")
 
 
 def save_ai_summary(summary: dict):
-    response = supabase.table("dmm_ai_review_summaries").upsert(
-        summary, on_conflict="content_id"
-    ).execute()
+    response = execute_with_retry(
+        lambda: supabase.table("dmm_ai_review_summaries").upsert(
+            summary, on_conflict="content_id"
+        )
+    )
 
     if response.data is None:
         raise Exception(response.error)
@@ -201,9 +205,11 @@ def save_weekly_score(summary: dict):
         "snapshot_date": snapshot_date,
     }
 
-    supabase.table("trn_dmm_score_history").upsert(
-        row, on_conflict="content_id,snapshot_date"
-    ).execute()
+    execute_with_retry(
+        lambda: supabase.table("trn_dmm_score_history").upsert(
+            row, on_conflict="content_id,snapshot_date"
+        )
+    )
 
     logging.info(
         "📊 週次スコア保存完了: %s → %s",
@@ -421,15 +427,13 @@ def fetch_all_items():
     for target in targets:
         start = 0
         while True:
-            response = (
-                supabase.table("trn_dmm_items")
+            response = execute_with_retry(
+                lambda target=target, start=start: supabase.table("trn_dmm_items")
                 .select("content_id, item_url,service,floor")
                 .eq("service", target["service"])
                 .eq("floor", target["floor"])
-                # .gte("release_date", release_date)
                 .order("created_at")
                 .range(start, start + limit - 1)
-                .execute()
             )
 
             data = response.data or []
@@ -477,7 +481,14 @@ def main():
             logging.error("必須環境変数が未設定です: %s", ", ".join(missing_env))
             sys.exit(1)
 
-    all_items = fetch_all_items()
+    try:
+        all_items = fetch_all_items()
+    except httpx.ConnectError as exc:
+        logging.error(
+            "Supabase への接続に失敗しました。ネットワーク/DNS を確認してください: %s",
+            exc,
+        )
+        sys.exit(1)
 
     if not all_items:
         logging.info("対象データが存在しません。処理を終了します。")

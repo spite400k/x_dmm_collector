@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 
 # ログ設定
 os.makedirs("logs", exist_ok=True)
-logging.basicConfig(filename="logs/test_generate.log", level=logging.INFO)
+logging.basicConfig(
+    filename="logs/test_generate.log",
+    level=logging.INFO,
+    encoding="utf-8",
+)
 
 # 環境変数読み込み
 load_dotenv()

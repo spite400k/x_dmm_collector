@@ -77,11 +77,18 @@ def run_script(
     )
     with RotatingLogFile(log_path) as log_file:
         log_file.write(header)
+        log_file.flush()
 
         result = subprocess.run(
             [python_exe, str(script)],
             cwd=ROOT,
-            env={**os.environ, "PYTHONPATH": str(ROOT)},
+            env={
+                **os.environ,
+                "PYTHONPATH": str(ROOT),
+                # 子プロセスの標準出力を UTF-8 に統一し、ログの文字化けを防ぐ。
+                "PYTHONUTF8": "1",
+                "PYTHONIOENCODING": "utf-8",
+            },
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )

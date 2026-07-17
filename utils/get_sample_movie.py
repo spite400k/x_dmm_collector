@@ -16,13 +16,15 @@ from selenium.webdriver.support import expected_conditions as EC
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)  
 
+from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("tweet.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+        logging.FileHandler("tweet.log", encoding=LOG_ENCODING),
+        create_utf8_stream_handler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 

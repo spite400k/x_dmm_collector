@@ -10,14 +10,16 @@ import logging
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
 
+from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+
 # ログ設定
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("logs/fetch_items_indi.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+        logging.FileHandler("logs/fetch_items_indi.log", encoding=LOG_ENCODING),
+        create_utf8_stream_handler(),
+    ],
 )
 
 def main():

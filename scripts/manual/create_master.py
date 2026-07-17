@@ -171,9 +171,12 @@ def sync_genre_master(floor_id):
 
 # ---------------------------------------------
 def main():
+    from utils.logger import create_utf8_stream_handler
+
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s"
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[create_utf8_stream_handler()],
     )
 
     try:

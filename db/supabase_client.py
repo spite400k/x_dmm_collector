@@ -14,7 +14,8 @@ def _create_supabase(url: str | None, key: str | None) -> Client:
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# service_role キーがあれば優先（RLS/GRANT の影響を受けないサーバー側実行のため）
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 
 supabase: Client = _create_supabase(SUPABASE_URL, SUPABASE_KEY)
 

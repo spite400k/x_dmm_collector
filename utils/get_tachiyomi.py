@@ -13,12 +13,15 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from PIL import Image
 
+from utils.logger import create_utf8_stream_handler
+
 # ---------------------
 # ログ設定
 # ---------------------
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d | %(message)s"
+    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d | %(message)s",
+    handlers=[create_utf8_stream_handler()],
 )
 
 def save_page_source(driver, idx, log_dir="logs"):
@@ -140,8 +143,9 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             driver.get(tachiyomi_url)
             # logging.info("試し読みページを開く完了")
         except Exception as e:
-            logging.error(f"driver.get 失敗: {e}")
-            raise
+            # 試し読みページのオープン失敗は致命的にせず、空リストで継続させる。
+            logging.error(f"driver.get 失敗（立ち読みをスキップ）: {e!r}")
+            return []
 
         time.sleep(5)
 
@@ -151,15 +155,21 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         # logging.info("viewer要素を待機")
         # viewer要素にフォーカス
-        viewer = WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.ID, "viewer"))
-        )
-        # driver.save_screenshot("debug3.png")  
+        # ビューア表示待ちのタイムアウトは致命的にせず、空リストを返して呼び出し元の処理を継続させる。
+        try:
+            viewer = WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.ID, "viewer"))
+            )
+            # driver.save_screenshot("debug3.png")
 
-        WebDriverWait(driver, 30).until_not(
-            EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
-        )
-        # driver.save_screenshot("debug4.png")  
+            WebDriverWait(driver, 30).until_not(
+                EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
+            )
+            # driver.save_screenshot("debug4.png")
+        except (TimeoutException, NoSuchElementException) as e:
+            logging.error(f"ビューア表示待ちに失敗（立ち読みをスキップ）: {e!r}")
+            save_page_source(driver, idx=0)
+            return images
 
         _, total_page = get_page_counter(driver)
         logging.info(f"総ページ数: {total_page}")

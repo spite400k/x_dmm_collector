@@ -9,6 +9,27 @@ LOG_DIR = "logs"
 BACKUP_COUNT = 7
 ROTATE_WHEN = "midnight"
 ROTATE_INTERVAL = 1
+LOG_ENCODING = "utf-8"
+
+
+def ensure_utf8_stdio() -> None:
+    """stdout / stderr のエンコーディングを UTF-8 に揃える（Windows cp932 対策）。"""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding=LOG_ENCODING, errors="replace")
+        except (OSError, ValueError, AttributeError):
+            pass
+
+
+def create_utf8_stream_handler(
+    stream=None,
+) -> logging.StreamHandler:
+    """コンソール出力用 StreamHandler（UTF-8）。"""
+    ensure_utf8_stdio()
+    return logging.StreamHandler(stream=stream)
 
 
 def _resolve_log_path(log_file: str | Path) -> str:
@@ -25,7 +46,7 @@ def create_rotating_file_handler(log_file: str | Path) -> TimedRotatingFileHandl
         when=ROTATE_WHEN,
         interval=ROTATE_INTERVAL,
         backupCount=BACKUP_COUNT,
-        encoding="utf-8",
+        encoding=LOG_ENCODING,
         delay=True,
     )
 
@@ -54,7 +75,7 @@ def _try_create_rotating_file_handler(
 def setup_logger(log_file: str) -> None:
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    handlers: list[logging.Handler] = [create_utf8_stream_handler()]
     file_handler = _try_create_rotating_file_handler(log_file)
     if file_handler is not None:
         handlers.insert(0, file_handler)
@@ -81,6 +102,12 @@ class RotatingLogFile:
         if self.handler.shouldRollover(record):
             self.handler.doRollover()
 
+    def _ensure_stream(self):
+        # delay=True や doRollover 後は stream が None になるため再オープンする。
+        if self.handler.stream is None:
+            self.handler.stream = self.handler._open()
+        return self.handler.stream
+
     def write(self, s: str) -> int:
         if not s:
             return 0
@@ -88,7 +115,7 @@ class RotatingLogFile:
             assert self._fallback is not None
             return self._fallback.write(s)
         self._maybe_rollover()
-        return self.handler.stream.write(s)
+        return self._ensure_stream().write(s)
 
     def flush(self) -> None:
         if self.handler is None:
@@ -96,12 +123,12 @@ class RotatingLogFile:
                 sys.stderr.write(self._fallback.getvalue())
                 self._fallback = StringIO()
             return
-        self.handler.stream.flush()
+        self._ensure_stream().flush()
 
     def fileno(self) -> int:
         if self.handler is None:
             return sys.stderr.fileno()
-        return self.handler.stream.fileno()
+        return self._ensure_stream().fileno()
 
     def close(self) -> None:
         if self.handler is not None:

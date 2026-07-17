@@ -4,6 +4,8 @@ from logging.handlers import TimedRotatingFileHandler
 import zipfile
 import os
 
+from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+
 
 class ZipRotator:
     """Rotator: ローテートされたログを ZIP 圧縮する"""
@@ -41,7 +43,7 @@ class ZipRotatingLogger:
             when="midnight",
             interval=1,
             backupCount=backupCount,
-            encoding="utf-8",
+            encoding=LOG_ENCODING,
             utc=False,
         )
 
@@ -62,7 +64,7 @@ class ZipRotatingLogger:
             logger.addHandler(handler)
 
             # コンソール出力も付ける
-            console = logging.StreamHandler()
+            console = create_utf8_stream_handler()
             console.setFormatter(formatter)
             logger.addHandler(console)
 

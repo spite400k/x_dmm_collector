@@ -2,17 +2,17 @@ import requests
 import logging
 from db.supabase_client import supabase
 import os
-import logging
-from db.supabase_client import supabase
+
+from utils.logger import LOG_ENCODING, create_utf8_stream_handler
 
 # ログ設定（ファイル + コンソール出力）
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("logs/storage.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
+        logging.FileHandler("logs/storage.log", encoding=LOG_ENCODING),
+        create_utf8_stream_handler(),
+    ],
 )
 
 # ---------------------------------------------------------------------

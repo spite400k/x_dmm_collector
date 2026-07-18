@@ -35,24 +35,33 @@
 
 ## process/
 
-### 定期（`tasks.yaml` → process）
+### 定期（`tasks.yaml` → process / Windows bat）
 
 | スクリプト | 説明 | DB 接続 | 実行 |
 |-----------|------|---------|------|
 | [`update_items.py`](process/update_items.py) | 作品情報・AI テキスト更新 | 通常 | `python scripts/process/update_items.py` |
-| [`create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成 | 通常 | `python scripts/process/create_ai_review.py` |
-| [`create_weekly_rankings.py`](process/create_weekly_rankings.py) | 週次ランキング生成 | 通常（Postgres 直結） | `python scripts/process/create_weekly_rankings.py` |
-| [`create_weekly_rankings_mesugaki.py`](process/create_weekly_rankings_mesugaki.py) | メスガキ週次ランキング | メスガキ（Postgres 直結） | `python scripts/process/create_weekly_rankings_mesugaki.py` |
+| [`update_mesugaki.py`](process/update_mesugaki.py) | メスガキ DB の作品情報更新 | メスガキ | `python scripts/process/update_mesugaki.py` |
+| [`create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成（Selenium / DMM） | 通常 | `python scripts/process/create_ai_review.py` |
+| [`create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ AI レビュー（Selenium / DMM） | メスガキ | 下記 |
+
+### GitHub Actions（`tasks.yaml` → gha / bat 除外）
+
+DMM・日本ドメイン非依存のため **bat / タスクスケジューラからは除外**し、`.github/workflows/process-gha.yml` で実行する。
+
+| スクリプト | 説明 | DB 接続 | 実行 |
+|-----------|------|---------|------|
+| [`create_weekly_rankings.py`](process/create_weekly_rankings.py) | 週次ランキング生成 | 通常（Postgres 直結） | `python run.py --phase gha` または単体 |
+| [`create_weekly_rankings_mesugaki.py`](process/create_weekly_rankings_mesugaki.py) | メスガキ週次ランキング | メスガキ（Postgres 直結） | 同上 |
+| [`create_weekly_rankings_actress.py`](process/create_weekly_rankings_actress.py) | 女優週次ランキング | 通常（Postgres 直結） | 同上 |
+| [`create_actress_review.py`](process/create_actress_review.py) | 女優 AI レビュー生成 | 通常 | 下記 |
 
 ### 手動（`tasks.yaml` → manual）
 
 | スクリプト | 説明 | DB 接続 | 実行 |
 |-----------|------|---------|------|
-| [`update_mesugaki.py`](process/update_mesugaki.py) | メスガキ DB の作品情報更新 | メスガキ | `python scripts/process/update_mesugaki.py` |
 | [`update_actress.py`](process/update_actress.py) | 女優プロフィール（osusume スクレイピング）更新 | 通常 | `python scripts/process/update_actress.py` |
 | [`enrich_actress.py`](process/enrich_actress.py) | 女優情報 enrich（DMM API 等） | 通常 | `python scripts/process/enrich_actress.py` |
-| [`create_actress_review.py`](process/create_actress_review.py) | 女優 AI レビュー生成 | 通常 | 下記 |
-| [`create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ AI レビュー | メスガキ | 下記 |
+| [`create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ AI レビュー（手動再実行用） | メスガキ | 下記 |
 
 #### create_actress_review.py
 

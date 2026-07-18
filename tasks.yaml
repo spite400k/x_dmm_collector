@@ -19,7 +19,7 @@ phases:
 
   process:
     schedule: daily
-    description: 取得済みデータの AI 加工・ランキング生成
+    description: 取得済みデータの AI 加工（Windows bat / タスクスケジューラ）
     scripts:
       - path: scripts/process/update_items.py
         name: アイテムの情報更新・AIテキスト(auto_summary, auto_point)生成
@@ -32,23 +32,27 @@ phases:
       - path: scripts/process/create_ai_review.py
         name: 作品のAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review.log
-      
-      - path: scripts/process/create_weekly_rankings.py
-        name: 週次ランキング
-        log: logs/task_run_create_weekly_rankings.log
-      
-      - path: scripts/process/create_actress_review.py
-        name: 女優のAIレビュー(summary, career, appeal)生成
-        log: logs/task_run_create_actress_review.log
-      
-      - path: scripts/process/create_weekly_rankings_actress.py
-        name: 女優週次ランキング
-        log: logs/task_run_create_weekly_rankings_actress.log
-      
+
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキのAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review_mesugaki.log
-      
+
+  gha:
+    schedule: daily
+    description: GitHub Actions 実行（DMM 非依存・海外 runner 可）。bat / タスクスケジューラからは除外
+    scripts:
+      - path: scripts/process/create_weekly_rankings.py
+        name: 週次ランキング
+        log: logs/task_run_create_weekly_rankings.log
+
+      - path: scripts/process/create_actress_review.py
+        name: 女優のAIレビュー(summary, career, appeal)生成
+        log: logs/task_run_create_actress_review.log
+
+      - path: scripts/process/create_weekly_rankings_actress.py
+        name: 女優週次ランキング
+        log: logs/task_run_create_weekly_rankings_actress.log
+
       - path: scripts/process/create_weekly_rankings_mesugaki.py
         name: メスガキ週次ランキング
         log: logs/task_run_create_weekly_rankings_mesugaki.log
@@ -60,9 +64,6 @@ phases:
       - path: scripts/process/enrich_actress.py
         name: 女優情報 enrich（DMM API）
         log: logs/task_run_enrich_actress.log
-      - path: scripts/process/create_actress_review.py
-        name: 女優 AI レビュー生成
-        log: logs/task_run_create_actress_review.log
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキ AI レビュー生成
         log: logs/task_run_create_ai_review_mesugaki.log

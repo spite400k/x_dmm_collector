@@ -9,8 +9,17 @@ load_dotenv()
 
 
 def _create_supabase(url: str | None, key: str | None) -> Client:
+    if not url or not key:
+        raise ValueError("supabase_url and supabase_key are required")
     options = ClientOptions(httpx_client=create_supabase_httpx_client())
     return create_client(url, key, options=options)
+
+
+def _create_optional_supabase(url: str | None, key: str | None) -> Client | None:
+    """URL/KEY 未設定時は None（GHA など副系統が不要な環境向け）。"""
+    if not url or not key:
+        return None
+    return _create_supabase(url, key)
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -23,9 +32,9 @@ supabase: Client = _create_supabase(SUPABASE_URL, SUPABASE_KEY)
 SUPABASE_URL2 = os.getenv("SUPABASE_URL2")
 SUPABASE_KEY2 = os.getenv("SUPABASE_KEY2")
 
-supabase2: Client = _create_supabase(SUPABASE_URL2, SUPABASE_KEY2)
+supabase2: Client | None = _create_optional_supabase(SUPABASE_URL2, SUPABASE_KEY2)
 
 SUPABASE_URL3 = os.getenv("SUPABASE_URL3")
 SUPABASE_KEY3 = os.getenv("SUPABASE_KEY3")
 
-supabase3: Client = _create_supabase(SUPABASE_URL3, SUPABASE_KEY3)
+supabase3: Client | None = _create_optional_supabase(SUPABASE_URL3, SUPABASE_KEY3)

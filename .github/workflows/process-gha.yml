@@ -49,3 +49,16 @@ jobs:
       - name: Run GHA process scripts
         run: |
           python run.py --phase gha --continue-on-error
+
+      # 子プロセス詳細は run.py がコンソールへ tee / 失敗時に再出力する。
+      # 加えて logs/ 全体を残し、Actions 画面からダウンロードできるようにする。
+      - name: Upload process logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gha-process-logs
+          path: |
+            logs/
+            run.log
+          if-no-files-found: warn
+          retention-days: 14

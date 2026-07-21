@@ -22,6 +22,44 @@ RUN_LOG = "run.log"
 logger = logging.getLogger(__name__)
 
 
+def should_echo_child_output(*, echo_output: bool = False) -> bool:
+    """GHA 上、または --echo-output 指定時は子プロセス出力をコンソールへも出す。"""
+    return echo_output or os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def stream_script_output(
+    proc: subprocess.Popen[str],
+    log_file: RotatingLogFile,
+    *,
+    echo: bool,
+) -> str:
+    """子プロセス stdout をログへ書き、必要ならコンソールへも tee する。"""
+    chunks: list[str] = []
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        chunks.append(line)
+        log_file.write(line)
+        log_file.flush()
+        if echo:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+    return "".join(chunks)
+
+
+def log_child_output_on_failure(script_path: str, output: str) -> None:
+    """失敗時に子プロセス出力を親ロガーへ出す（ファイル専用実行時の調査用）。"""
+    body = output.rstrip()
+    if not body:
+        logger.error("子プロセス出力なし: %s", script_path)
+        return
+    logger.error(
+        "----- 子プロセス出力 (%s) -----\n%s\n----- 出力終了 (%s) -----",
+        script_path,
+        body,
+        script_path,
+    )
+
+
 def load_tasks() -> dict:
     with TASKS_FILE.open(encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -59,10 +97,13 @@ def run_script(
     continue_on_error: bool,
     index: int,
     total: int,
+    *,
+    echo_output: bool = False,
 ) -> int:
     script = ROOT / entry["path"]
     log_path = ROOT / entry.get("log", f"logs/{script.stem}.log")
     label = entry.get("name") or entry["path"]
+    echo = should_echo_child_output(echo_output=echo_output)
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     header = f"{'=' * 48}\n{timestamp} - タスク開始 ({entry['path']})\n"
@@ -75,11 +116,12 @@ def run_script(
         entry["path"],
         log_path,
     )
+    child_output = ""
     with RotatingLogFile(log_path) as log_file:
         log_file.write(header)
         log_file.flush()
 
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [python_exe, str(script)],
             cwd=ROOT,
             env={
@@ -89,26 +131,34 @@ def run_script(
                 "PYTHONUTF8": "1",
                 "PYTHONIOENCODING": "utf-8",
             },
-            stdout=log_file,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
+        child_output = stream_script_output(proc, log_file, echo=echo)
+        returncode = proc.wait()
 
         footer = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - タスク終了 ({entry['path']})\n{'=' * 48}\n"
         log_file.write(footer)
 
-    if result.returncode != 0:
+    if returncode != 0:
         logger.error(
             "[%d/%d] スクリプト失敗: %s (exit %d)",
             index,
             total,
             entry["path"],
-            result.returncode,
+            returncode,
         )
+        # ライブ tee 済みでも、失敗箇所が探しやすいよう明示ブロックを出す
+        log_child_output_on_failure(entry["path"], child_output)
         if not continue_on_error:
-            return result.returncode
+            return returncode
     else:
         logger.info("[%d/%d] スクリプト完了: %s", index, total, entry["path"])
-    return result.returncode
+    return returncode
 
 
 def list_scripts(tasks: dict) -> None:
@@ -137,6 +187,11 @@ def main() -> None:
         "--continue-on-error",
         action="store_true",
         help="エラーがあっても後続スクリプトを実行",
+    )
+    parser.add_argument(
+        "--echo-output",
+        action="store_true",
+        help="子プロセスの標準出力をコンソールにも出す（GITHUB_ACTIONS 時は自動有効）",
     )
     args = parser.parse_args()
 
@@ -174,7 +229,14 @@ def main() -> None:
             logger.info("--- フェーズ開始: %s ---", phase)
             prev_phase = phase
 
-        code = run_script(entry, args.python, args.continue_on_error, i, total)
+        code = run_script(
+            entry,
+            args.python,
+            args.continue_on_error,
+            i,
+            total,
+            echo_output=args.echo_output,
+        )
         if code != 0 and not args.continue_on_error:
             logger.error("エラーにより実行を中断 (exit %d)", code)
             sys.exit(code)

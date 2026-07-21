@@ -31,9 +31,7 @@ x_dmm_collector/
 ├── tests/                  … pytest
 ├── logs/                   … タスク実行ログ（git 管理外）
 │
-├── .github/workflows/      … CI / 定期バッチ（GitHub Actions）
-│   ├── main.yml            … collect（参考。DMM は海外 runner から到達不可に注意）
-│   └── process-gha.yml     … 週次ランキング・女優 AI レビュー（bat 除外分）
+├── .github/workflows/      … CI（GitHub Actions）
 └── .vscode/                … エディタ設定
 ```
 
@@ -65,9 +63,8 @@ tasks.yaml  →  run.py  →  scripts/**/*.py
 | 手段 | 用途 |
 |------|------|
 | `run.py` | 開発・CI。フェーズ単位または単一スクリプト実行 |
-| `run_*.bat` | Windows タスクスケジューラからの定期実行（`collect` / `process` のみ。`gha` は含まない） |
+| `run_*.bat` | Windows タスクスケジューラからの定期実行 |
 | `.github/workflows/main.yml` | GitHub Actions による collect フェーズの定期実行 |
-| `.github/workflows/process-gha.yml` | DMM 非依存 process（週次ランキング・女優 AI レビュー） |
 
 ```bash
 # 登録スクリプト一覧
@@ -76,9 +73,8 @@ python run.py --list
 # フェーズ単位
 python run.py --phase collect
 python run.py --phase process
-python run.py --phase gha          # GitHub Actions 用（bat からは呼ばない）
 python run.py --phase manual
-python run.py --phase all          # collect + process（gha は含まない）
+python run.py --phase all          # collect + process
 
 # 単一スクリプト
 python run.py --script scripts/collect/default.py
@@ -96,24 +92,11 @@ python run.py --phase all --continue-on-error
 | bat | 実行内容 | 呼び出し元 |
 |-----|----------|------------|
 | [`run_collect.bat`](run_collect.bat) | 収集フェーズ 4 本 | — |
-| [`run_process.bat`](run_process.bat) | 加工フェーズ（DMM 依存のみ。下記「bat 除外」参照） | — |
+| [`run_process.bat`](run_process.bat) | 加工フェーズ全本 | — |
 | [`run_all.bat`](run_all.bat) | 収集 → 加工 | — |
 | [`run_x_dmm_collector.bat`](run_x_dmm_collector.bat) | `run_all.bat` と同じ | 後方互換エイリアス |
 | [`run_x_dmm_collector_process.bat`](run_x_dmm_collector_process.bat) | `run_process.bat` と同じ | 後方互換エイリアス |
 | [`run_x_dmm_collector_btlt.bat`](run_x_dmm_collector_btlt.bat) | BL/TL 収集のみ | — |
-
-### bat / タスクスケジューラからの除外（GHA 移行）
-
-次の 4 本は **DMM API・日本ドメインに依存しない**ため、`tasks.yaml` の `gha` フェーズへ移し、`run_process.bat` / `run_all.bat`（および互換エイリアス）からは **実行されない**。
-
-| スクリプト | 実行先 |
-|------------|--------|
-| `scripts/process/create_weekly_rankings.py` | GitHub Actions（`process-gha.yml`） |
-| `scripts/process/create_weekly_rankings_mesugaki.py` | 同上 |
-| `scripts/process/create_weekly_rankings_actress.py` | 同上 |
-| `scripts/process/create_actress_review.py` | 同上 |
-
-手動でローカル実行する場合は `python run.py --phase gha` または各 `.py` を直接呼ぶ。
 
 ### 各 bat の詳細
 
@@ -125,15 +108,14 @@ python run.py --phase all --continue-on-error
 #### run_process.bat
 
 - **コマンド**: `run.py --phase process --continue-on-error`
-- **対象**: `tasks.yaml` の process フェーズ（`update_*` / `create_ai_review*` など DMM 依存の加工）
-- **含まない**: 週次ランキング 3 本・女優 AI レビュー（`gha` フェーズ / GitHub Actions）
+- **対象**: `tasks.yaml` の process フェーズ（AI 更新・レビュー・ランキング等）
 - **Python**: `venv\Scripts\python.exe` を使用（他 bat はシステム Python）
 
 #### run_all.bat
 
 - **コマンド**: `run.py --phase all --continue-on-error`
-- **順序**: collect 完了後に process を実行（`gha` は含まない）
-- **用途**: 日次のメインバッチ（PC タスクスケジューラ）
+- **順序**: collect 完了後に process を実行
+- **用途**: 日次のメインバッチ
 
 #### run_x_dmm_collector.bat / run_x_dmm_collector_process.bat
 

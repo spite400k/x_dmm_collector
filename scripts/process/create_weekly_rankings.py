@@ -4,10 +4,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from datetime import date, timedelta
 import os
-import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import logging
+from db.postgres_connect import connect_from_env
 from utils.logger import setup_logger
 from openai import OpenAI  # ← ★追加
 
@@ -27,21 +27,8 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 setup_logger("main_create_weekly_rankings.log")
 
 def get_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", 5432),
-            sslmode="require",  # Supabaseは必須
-        )
-        conn.autocommit = False  # トランザクション制御
-        return conn
-
-    except Exception as e:
-        logging.exception("DB接続失敗")
-        raise
+    # GHA では DB_URL（Session pooler）推奨。直結 db.*.supabase.co は IPv6 のみ。
+    return connect_from_env("DB")
 
 #----------------------------------------------------
 # ユーティリティ関数

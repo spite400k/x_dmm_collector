@@ -7,11 +7,11 @@ from datetime import date, timedelta
 import logging
 import os
 
-import psycopg2
 from dotenv import load_dotenv
 from openai import OpenAI
 from psycopg2.extras import RealDictCursor
 
+from db.postgres_connect import connect_from_env
 from utils.logger import setup_logger
 
 load_dotenv()
@@ -26,20 +26,8 @@ TOP_N = 20
 
 
 def get_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", 5432),
-            sslmode="require",
-        )
-        conn.autocommit = False
-        return conn
-    except Exception:
-        logging.exception("DB接続失敗")
-        raise
+    # GHA では DB_URL（Session pooler）推奨。直結 db.*.supabase.co は IPv6 のみ。
+    return connect_from_env("DB")
 
 
 def get_year_week(target_date=None):

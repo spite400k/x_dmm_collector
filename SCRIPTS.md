@@ -115,6 +115,24 @@ python run.py --phase all --continue-on-error
 
 手動でローカル実行する場合は `python run.py --phase gha` または各 `.py` を直接呼ぶ。
 
+#### GHA からの Postgres 接続（IPv6 注意）
+
+`db.*.supabase.co:5432`（直結）は **IPv6 専用**のため、GitHub Actions（IPv4）からは `Network is unreachable` になる。
+
+| Secret | 内容 |
+|--------|------|
+| `DB_URL` | 通常 DB の **Session pooler** URI（推奨） |
+| `MESUGAKI_DB_URL` | メスガキ DB の Session pooler URI（推奨） |
+
+Dashboard → **Connect** → **Session pooler** の例:
+
+```text
+postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
+個別に置く場合は `DB_HOST=*.pooler.supabase.com` / `DB_USER=postgres.<project-ref>` / `DB_PORT=5432`。
+Windows ローカル（IPv6 可）では従来どおり `DB_HOST=db.<ref>.supabase.co` でも可。
+
 ### 各 bat の詳細
 
 #### run_collect.bat

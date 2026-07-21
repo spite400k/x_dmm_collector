@@ -19,8 +19,10 @@
 | BL/TL | `db.supabase_client.supabase2` | `SUPABASE_URL2`, `SUPABASE_KEY2` |
 | メスガキ収集 | `db.supabase_client.supabase3` | `SUPABASE_URL3`, `SUPABASE_KEY3` |
 | メスガキ加工 | `db.supabase_client_mesugaki.supabase` | `MESUGAKI_SUPABASE_URL`, `MESUGAKI_SUPABASE_SERVICE_ROLE_KEY` 等 |
-| 通常 Postgres | `psycopg2` | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` |
-| メスガキ Postgres | `psycopg2` | `MESUGAKI_DB_*` |
+| 通常 Postgres | `psycopg2`（`db.postgres_connect`） | `DB_URL`（GHA 推奨: Session pooler）または `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` |
+| メスガキ Postgres | `psycopg2`（`db.postgres_connect`） | `MESUGAKI_DB_URL`（GHA 推奨）または `MESUGAKI_DB_*` |
+
+> **GHA 注意**: `db.*.supabase.co` 直結は IPv6 専用。Actions では Session pooler URI を `DB_URL` / `MESUGAKI_DB_URL` に設定する（`SCRIPTS.md` 参照）。
 
 ---
 

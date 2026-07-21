@@ -1,5 +1,9 @@
 # DMM 非依存の process スクリプト（週次ランキング・女優 AI レビュー）
 # 海外 GitHub-hosted runner から実行する。bat / タスクスケジューラからは除外済み。
+#
+# 【重要】Supabase Postgres 直結 (db.*.supabase.co) は IPv6 専用のため GHA から到達不可。
+# Secrets には Dashboard → Connect → Session pooler の URI を DB_URL / MESUGAKI_DB_URL に設定する。
+# 例: postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 name: Process (GHA)
 
 on:
@@ -14,17 +18,19 @@ jobs:
 
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # 女優 AI レビュー（Supabase REST）
+      # 女優 AI レビュー（Supabase REST / HTTPS = IPv4 可）
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      # 通常・女優週次ランキング（Postgres 直結）
+      # 通常・女優週次ランキング（Session pooler URI 推奨）
+      DB_URL: ${{ secrets.DB_URL }}
       DB_HOST: ${{ secrets.DB_HOST }}
       DB_NAME: ${{ secrets.DB_NAME }}
       DB_USER: ${{ secrets.DB_USER }}
       DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
       DB_PORT: ${{ secrets.DB_PORT }}
       # メスガキ週次ランキング
+      MESUGAKI_DB_URL: ${{ secrets.MESUGAKI_DB_URL }}
       MESUGAKI_DB_HOST: ${{ secrets.MESUGAKI_DB_HOST }}
       MESUGAKI_DB_NAME: ${{ secrets.MESUGAKI_DB_NAME }}
       MESUGAKI_DB_USER: ${{ secrets.MESUGAKI_DB_USER }}

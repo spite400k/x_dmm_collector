@@ -7,19 +7,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 接続先はメスガキ用 Supabase Postgres（MESUGAKI_DB_* または MESUGAKI_SUPABASE_URL からホストを導出）。
 環境変数:
-  - MESUGAKI_DB_PASSWORD: 必須（メスガキ DB の postgres パスワード）
+  - MESUGAKI_DB_URL: 推奨（GHA では Session pooler の URI。直結は IPv6 のみで到達不可）
+  - MESUGAKI_DB_PASSWORD: MESUGAKI_DB_URL 未使用時は必須
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
 """
 from datetime import date, timedelta
 import os
 from urllib.parse import urlparse
-import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import logging
 from openai import OpenAI
 
+from db.postgres_connect import connect_from_env
 from utils.logger import setup_logger
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
@@ -45,26 +46,17 @@ def _mesugaki_db_host() -> str:
 
 
 def get_connection():
-    password = os.getenv("MESUGAKI_DB_PASSWORD")
-    if not password:
+    # GHA では MESUGAKI_DB_URL（Session pooler）推奨。
+    if not os.getenv("MESUGAKI_DB_URL") and not os.getenv("MESUGAKI_DB_PASSWORD"):
         raise RuntimeError(
-            "MESUGAKI_DB_PASSWORD が未設定です。"
-            "メスガキ用 Supabase の Database password を .env に設定してください。"
+            "MESUGAKI_DB_URL または MESUGAKI_DB_PASSWORD が未設定です。"
+            "メスガキ用 Supabase の Session pooler URI / Database password を設定してください。"
         )
-    try:
-        conn = psycopg2.connect(
-            host=_mesugaki_db_host(),
-            dbname=os.getenv("MESUGAKI_DB_NAME", "postgres"),
-            user=os.getenv("MESUGAKI_DB_USER", "postgres"),
-            password=password,
-            port=os.getenv("MESUGAKI_DB_PORT", 5432),
-            sslmode="require",
-        )
-        conn.autocommit = False
-        return conn
-    except Exception:
-        logging.exception("DB接続失敗（メスガキ）")
-        raise
+    return connect_from_env(
+        "MESUGAKI_DB",
+        host_fallback=_mesugaki_db_host,
+        label="MESUGAKI_DB",
+    )
 
 
 # ----------------------------------------------------

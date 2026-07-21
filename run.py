@@ -173,8 +173,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="tasks.yaml に基づいてスクリプトを実行")
     parser.add_argument(
         "--phase",
-        choices=["collect", "process", "gha", "manual", "all"],
-        help="実行するフェーズ（all = collect + process。gha は含まない）",
+        choices=["collect", "process", "manual", "all"],
+        help="実行するフェーズ（all = collect + process）",
     )
     parser.add_argument("--script", help="単一スクリプトのパス（tasks.yaml 内の path）")
     parser.add_argument("--list", action="store_true", help="登録スクリプト一覧を表示")

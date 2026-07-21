@@ -5,10 +5,10 @@ import run as run_mod
 
 
 def test_should_echo_child_output_flag():
-    with patch.dict("os.environ", {}, clear=False):
-        with patch.dict("os.environ", {"GITHUB_ACTIONS": ""}, clear=False):
-            assert run_mod.should_echo_child_output(echo_output=True) is True
-            assert run_mod.should_echo_child_output(echo_output=False) is False
+    env = {k: v for k, v in __import__("os").environ.items() if k != "GITHUB_ACTIONS"}
+    with patch.dict("os.environ", env, clear=True):
+        assert run_mod.should_echo_child_output(echo_output=True) is True
+        assert run_mod.should_echo_child_output(echo_output=False) is False
 
 
 def test_should_echo_child_output_on_github_actions():
@@ -53,8 +53,11 @@ def test_log_child_output_on_failure_with_body():
     with patch.object(run_mod.logger, "error") as err:
         run_mod.log_child_output_on_failure("scripts/x.py", "Traceback\nboom\n")
         err.assert_called_once()
-        assert "Traceback" in err.call_args[0][0]
-        assert "boom" in err.call_args[0][2]
+        args = err.call_args[0]
+        assert "子プロセス出力" in args[0]
+        assert args[1] == "scripts/x.py"
+        assert "Traceback" in args[2]
+        assert "boom" in args[2]
 
 
 def test_run_script_dumps_output_on_failure(tmp_path):

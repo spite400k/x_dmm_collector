@@ -14,12 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from datetime import date, timedelta
 import os
 from urllib.parse import urlparse
-import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import logging
 from openai import OpenAI
 
+from db.postgres_connect import connect_from_env
 from utils.logger import setup_logger
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
@@ -46,25 +46,17 @@ def _mesugaki_db_host() -> str:
 
 def get_connection():
     password = os.getenv("MESUGAKI_DB_PASSWORD")
-    if not password:
+    if not password and not os.getenv("MESUGAKI_DB_URL"):
         raise RuntimeError(
-            "MESUGAKI_DB_PASSWORD が未設定です。"
-            "メスガキ用 Supabase の Database password を .env に設定してください。"
+            "MESUGAKI_DB_PASSWORD または MESUGAKI_DB_URL が未設定です。"
+            "メスガキ用 Supabase の Database password / Session pooler URI を .env に設定してください。"
         )
-    try:
-        conn = psycopg2.connect(
-            host=_mesugaki_db_host(),
-            dbname=os.getenv("MESUGAKI_DB_NAME", "postgres"),
-            user=os.getenv("MESUGAKI_DB_USER", "postgres"),
-            password=password,
-            port=os.getenv("MESUGAKI_DB_PORT", 5432),
-            sslmode="require",
-        )
-        conn.autocommit = False
-        return conn
-    except Exception:
-        logging.exception("DB接続失敗（メスガキ）")
-        raise
+    # MESUGAKI_DB_URL（Session pooler）推奨。直結は IPv6 のみ。
+    return connect_from_env(
+        "MESUGAKI_DB",
+        host_fallback=_mesugaki_db_host,
+        label="MESUGAKI_DB",
+    )
 
 
 # ----------------------------------------------------

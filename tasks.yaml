@@ -66,6 +66,9 @@ phases:
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキ AI レビュー生成
         log: logs/task_run_create_ai_review_mesugaki.log
+      - path: scripts/manual/backfill_mst_actress.py
+        name: mst_actress 未登録 ID 補完
+        log: logs/task_run_backfill_mst_actress.log
       - path: scripts/manual/check_campaign.py
         name: キャンペーンチェック
         log: logs/task_run_check_campaign.log

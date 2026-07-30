@@ -7,11 +7,11 @@ from datetime import date, timedelta
 import logging
 import os
 
-import psycopg2
 from dotenv import load_dotenv
 from openai import OpenAI
 from psycopg2.extras import RealDictCursor
 
+from db.postgres_connect import connect_from_env
 from utils.logger import setup_logger
 
 load_dotenv()
@@ -26,20 +26,8 @@ TOP_N = 20
 
 
 def get_connection():
-    try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", 5432),
-            sslmode="require",
-        )
-        conn.autocommit = False
-        return conn
-    except Exception:
-        logging.exception("DB接続失敗")
-        raise
+    # DB_URL（Session pooler）推奨。直結 db.*.supabase.co は IPv6 のみ。
+    return connect_from_env("DB")
 
 
 def get_year_week(target_date=None):
@@ -134,13 +122,28 @@ def fetch_top_actresses(cur, release_date: str, snapshot_date: date) -> list[dic
                 ORDER BY s.snapshot_date DESC
                 LIMIT 1
             ) s ON true
-            CROSS JOIN LATERAL jsonb_array_elements_text(c.actress_ids::jsonb) AS actress_id_text(value)
-            WHERE c.actress_ids IS NOT NULL
-              AND btrim(c.actress_ids) NOT IN ('', '[]')
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+                CASE
+                    WHEN c.actress_ids IS NOT NULL
+                         AND btrim(c.actress_ids) NOT IN ('', '[]')
+                    THEN c.actress_ids::jsonb
+                    WHEN c.actress IS NOT NULL
+                         AND btrim(c.actress::text) NOT IN ('', '[]', 'null')
+                    THEN COALESCE(
+                        (
+                            SELECT jsonb_agg(elem->>'id')
+                            FROM jsonb_array_elements(c.actress::jsonb) AS elem
+                            WHERE (elem->>'id') ~ '^[0-9]+$'
+                        ),
+                        '[]'::jsonb
+                    )
+                    ELSE '[]'::jsonb
+                END
+            ) AS actress_id_text(value)
+            WHERE s.final_score IS NOT NULL
               AND c.release_date >= %s
               AND c.service = 'digital'
               AND c.floor IN ('videoc', 'videoa')
-              AND s.final_score IS NOT NULL
               AND actress_id_text.value ~ '^[0-9]+$'
         ),
         actress_scores AS (

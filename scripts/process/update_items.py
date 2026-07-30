@@ -223,18 +223,24 @@ def upsert_actresses(actresses: list[dict]):
         actress_id = a.get("id")
         if not actress_id:
             continue
-        detail = fetch_actress_detail(actress_id) or a
+        detail = fetch_actress_detail(actress_id) or {}
+        name = detail.get("name") or a.get("name")
+        if not name:
+            logging.warning("⏭ 女優UPSERTスキップ (nameなし): actress_id=%s", actress_id)
+            continue
+        ruby = detail.get("ruby") or a.get("ruby")
+        image = detail.get("imageURL") if isinstance(detail.get("imageURL"), dict) else {}
         try:
             supabase.table("mst_actress").upsert(
                 {
-                    "actress_id": detail.get("id"),
-                    "name": detail.get("name"),
-                    "name_kana": detail.get("ruby"),
-                    "name_en": to_romanized(detail.get("ruby")),
-                    "image_url": detail.get("imageURL", {}).get("large"),
+                    "actress_id": detail.get("id") or actress_id,
+                    "name": name,
+                    "name_kana": ruby,
+                    "name_en": to_romanized(ruby),
+                    "image_url": image.get("large"),
                     "updated_at": datetime.utcnow().isoformat(),
                 },
-                on_conflict=["actress_id"],
+                on_conflict="actress_id",
             ).execute()
         except Exception as e:
             logging.error(f"❌ 女優UPSERT失敗: {a} ({e})")
@@ -253,7 +259,7 @@ def upsert_genres(genres: list[dict], service_code: str, floor_code: str):
                     "floor_id": g.get("floor_id"),
                     "created_at": datetime.utcnow().isoformat(),
                 },
-                on_conflict=["genre_id"],
+                on_conflict="genre_id",
             ).execute()
         except Exception as e:
             logging.error(f"❌ ジャンルUPSERT失敗: {g} ({e})")
@@ -268,7 +274,7 @@ def upsert_genres(genres: list[dict], service_code: str, floor_code: str):
                     "genre_ruby": g.get("ruby"),
                     "created_at": datetime.utcnow().isoformat(),
                 },
-                on_conflict=["service_code,floor_code,genre_id"],
+                on_conflict="service_code,floor_code,genre_id",
             ).execute()
         except Exception as e:
             logging.error(f"❌ ジャンルソート順UPSERT失敗: {g} ({e})")
@@ -285,7 +291,7 @@ def upsert_directors(directors: list[dict]):
                     "name": d.get("name"),
                     "updated_at": datetime.utcnow().isoformat(),
                 },
-                on_conflict=["director_id"],
+                on_conflict="director_id",
             ).execute()
         except Exception as e:
             logging.error(f"❌ 監督UPSERT失敗: {d} ({e})")
@@ -338,8 +344,8 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
             .get("image", [])
         )
 
-        # マスタ更新
-        # upsert_actresses(actresses)
+        # マスタ更新（女優は週間ランキングの JOIN 対象のため必須）
+        upsert_actresses(actresses)
         # upsert_genres(genres,item.get("service_code"),item.get("floor_code"))
         # upsert_directors(directors)
 

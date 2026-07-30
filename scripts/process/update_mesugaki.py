@@ -257,18 +257,24 @@ def upsert_actresses(actresses: list[dict]):
         actress_id = a.get("id")
         if not actress_id:
             continue
-        detail = fetch_actress_detail(actress_id) or a
+        detail = fetch_actress_detail(actress_id) or {}
+        name = detail.get("name") or a.get("name")
+        if not name:
+            logging.warning("⏭ 女優UPSERTスキップ (nameなし): actress_id=%s", actress_id)
+            continue
+        ruby = detail.get("ruby") or a.get("ruby")
+        image = detail.get("imageURL") if isinstance(detail.get("imageURL"), dict) else {}
         try:
             supabase.table("mst_actress").upsert(
                 {
-                    "actress_id": detail.get("id"),
-                    "name": detail.get("name"),
-                    "name_kana": detail.get("ruby"),
-                    "name_en": to_romanized(detail.get("ruby")),
-                    "image_url": (detail.get("imageURL") or {}).get("large"),
+                    "actress_id": detail.get("id") or actress_id,
+                    "name": name,
+                    "name_kana": ruby,
+                    "name_en": to_romanized(ruby),
+                    "image_url": image.get("large"),
                     "updated_at": datetime.utcnow().isoformat(),
                 },
-                on_conflict=["actress_id"],
+                on_conflict="actress_id",
             ).execute()
         except Exception as e:
             logging.error(f"❌ 女優UPSERT失敗: {a} ({e})")
@@ -389,8 +395,8 @@ def update_dmm_item(
         if not isinstance(sample_images, list):
             sample_images = []
 
-        # マスタ更新
-        # upsert_actresses(actresses)
+        # マスタ更新（女優は週間ランキングの JOIN 対象のため必須）
+        upsert_actresses(actresses)
         # upsert_genres(genres,item.get("service_code"),item.get("floor_code"))
         # upsert_directors(directors)
 

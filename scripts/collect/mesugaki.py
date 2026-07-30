@@ -12,6 +12,7 @@ import logging
 from utils.get_sample_movie import get_sample_movie
 from utils.get_tachiyomi import capture_all_tachiyomi_pages
 from utils.logger import setup_logger
+from scripts.collect._filter import filter_unregistered_items, supabase_exists_checker
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
@@ -74,23 +75,11 @@ def main():
             )
             logging.info("データ取得完了")
 
-            items = []
-            for item in top_items:
-                content_id = item.get("content_id")
-                title = item.get("title")
-                url = item.get("URL")
-
-                if not content_id:
-                    logging.warning(f"[SKIP] content_id が存在しない: {title} : {url}")
-                    return
-                exists = supabase3.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
-                if exists.data:
-                    logging.info(f"[SKIP] 既に登録済: {title} ({content_id}) : {url}")
-                    return
-                else:
-                    items.append(item)
-
-            
+            items = filter_unregistered_items(
+                top_items,
+                exists_by_content_id=supabase_exists_checker(supabase3.table("trn_dmm_items")),
+            )
+            logging.info("未登録 %d 件 / 取得 %d 件", len(items), len(top_items))
             for item in items:
                 # 立ち読みデータの取得
                 # 立ち読みURLが存在する場合のみ処理

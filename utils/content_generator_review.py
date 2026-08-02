@@ -10,7 +10,6 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
@@ -19,20 +18,13 @@ from openai import OpenAI
 from bs4 import BeautifulSoup
 
 from openai_api.content_generator import extract_synopsis_from_soup
+from utils.chromedriver import chromedriver_path
 from utils.dmm_review_scraper import get_doujin_reviews, get_video_reviews
 from utils.screenshot import save_debug_files
 
 client = OpenAI()
 
-_CHROMEDRIVER_PATH = None
 SUMMARY_MAX_CHARS_FOR_AI = 4000
-
-
-def _chromedriver_path() -> str:
-    global _CHROMEDRIVER_PATH
-    if _CHROMEDRIVER_PATH is None:
-        _CHROMEDRIVER_PATH = ChromeDriverManager().install()
-    return _CHROMEDRIVER_PATH
 
 
 # =========================
@@ -48,7 +40,7 @@ def create_driver() -> webdriver.Chrome:
     options.add_argument("--disable-images")
     options.page_load_strategy = "eager"
 
-    service = Service(_chromedriver_path())
+    service = Service(chromedriver_path())
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_page_load_timeout(20)
 

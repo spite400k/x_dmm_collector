@@ -9,10 +9,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from PIL import Image
 
+from utils.chromedriver import chromedriver_path
 from utils.logger import create_utf8_stream_handler
 
 # ---------------------
@@ -107,7 +107,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     options.add_argument("--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) \
                             AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
 
     try:
         logging.info("DMMトップページを開く")

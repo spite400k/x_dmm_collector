@@ -9,7 +9,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+
+from utils.chromedriver import chromedriver_path
 
 # ログ設定
 os.makedirs("logs", exist_ok=True)
@@ -29,7 +30,7 @@ def get_page_source_with_age_verification(url: str) -> str:
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
 
     try:
         driver.get(url)

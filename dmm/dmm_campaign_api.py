@@ -175,7 +175,8 @@ def _fetch_html_with_selenium(url: str) -> Optional[str]:
         from selenium.webdriver.chrome.options import Options
         from selenium.webdriver.chrome.service import Service
         from selenium.webdriver.common.by import By
-        from webdriver_manager.chrome import ChromeDriverManager
+
+        from utils.chromedriver import chromedriver_path
     except ImportError as exc:
         logging.warning("[WARN] Selenium 未インストールのため video TOP 取得をスキップ: %s", exc)
         return None
@@ -184,7 +185,7 @@ def _fetch_html_with_selenium(url: str) -> Optional[str]:
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
 
     try:
         driver.get(url)

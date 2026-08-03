@@ -491,14 +491,19 @@ def _parse_comic_reviews(driver, max_reviews: int) -> list:
 def get_doujin_reviews(driver, product_url, max_reviews=10):
 
     try:
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "#review_anchor"))
-        )
+        # scrape_review_comments 側でも待機済みのため短めにする
+        try:
+            WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#review_anchor"))
+            )
+        except Exception:
+            logging.info("同人レビュー: #review_anchor 未検出")
+            return []
 
         units = driver.find_elements(By.CSS_SELECTOR, "#review_anchor li.dcd-review__unit")
         if not units:
             try:
-                WebDriverWait(driver, 4).until(
+                WebDriverWait(driver, 3).until(
                     lambda d: d.find_elements(
                         By.CSS_SELECTOR, "#review_anchor li.dcd-review__unit"
                     )

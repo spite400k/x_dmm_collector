@@ -108,15 +108,11 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                             AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
 
     driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
+    driver.set_page_load_timeout(60)
 
     try:
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
-
-        # with open("debug1.html", "w", encoding="utf-8") as f:
-        #     f.write(driver.page_source)
-        # driver.save_screenshot("debug1.png")   
-        # logging.info("debug1.html 保存完了")
 
         # 年齢認証
         try:
@@ -128,97 +124,67 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             )
             driver.execute_script("arguments[0].click();", button)
             logging.info("年齢認証成功")
-            # with open("debug2.html", "w", encoding="utf-8") as f:
-            #     f.write(driver.page_source)
-            # driver.save_screenshot("debug2.png")
-            time.sleep(2)
+            time.sleep(1)
         except (TimeoutException, StaleElementReferenceException):
             logging.info("年齢認証不要 or 既認証済み")
-            # with open("debug1_e.html", "w", encoding="utf-8") as f:
-            #     f.write(driver.page_source)
-            # driver.save_screenshot("debug1_e.png")
 
         try:
-            # logging.info("試し読みページを開く")
             driver.get(tachiyomi_url)
-            # logging.info("試し読みページを開く完了")
         except Exception as e:
             # 試し読みページのオープン失敗は致命的にせず、空リストで継続させる。
             logging.error(f"driver.get 失敗（立ち読みをスキップ）: {e!r}")
             return []
 
-        time.sleep(5)
+        time.sleep(2)
 
         images = []
         page_idx = 1
         current_page = 0
 
-        # logging.info("viewer要素を待機")
-        # viewer要素にフォーカス
         # ビューア表示待ちのタイムアウトは致命的にせず、空リストを返して呼び出し元の処理を継続させる。
         try:
-            viewer = WebDriverWait(driver, 30).until(
+            WebDriverWait(driver, 12).until(
                 EC.presence_of_element_located((By.ID, "viewer"))
             )
-            # driver.save_screenshot("debug3.png")
 
-            WebDriverWait(driver, 30).until_not(
+            WebDriverWait(driver, 12).until_not(
                 EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
             )
-            # driver.save_screenshot("debug4.png")
         except (TimeoutException, NoSuchElementException) as e:
             logging.error(f"ビューア表示待ちに失敗（立ち読みをスキップ）: {e!r}")
             save_page_source(driver, idx=0)
             return images
 
-        _, total_page = get_page_counter(driver)
+        _, total_page = get_page_counter(driver, timeout=10)
         logging.info(f"総ページ数: {total_page}")
 
         actions = ActionChains(driver)
-        # logging.info("viewer要素をクリックしてフォーカス")
-
-        # viewer.click()
-        # driver.save_screenshot("debug7.png")  
-        time.sleep(5)  # ページ描画待ち
-        # logging.info("初期ページ描画待ち完了")
-
+        time.sleep(2)  # ページ描画待ち
 
         while True:
             try:
                 logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
-                # ページ処理の最後にチェックを追加
-                try:
-                    purchase_button = WebDriverWait(driver, 30).until(
-                        # EC.presence_of_element_located(By.XPATH, "//span[text()='購入する']")
-                        EC.presence_of_element_located((By.ID, "endOfBook"))
-                    )
-
-                    if purchase_button.is_displayed():
-                        logging.info("最終ページを検出 → スクリーンショット終了")
-                        break
-                except:
-                    # 要素がない場合はエラーになるので無視して続行
-                    # logging.info("最終ページではないようです → 続行")
-                    pass
+                # 最終ページ判定は待機せず即時チェック（旧実装は毎回最大30秒待っていた）
+                end_els = driver.find_elements(By.ID, "endOfBook")
+                if end_els and end_els[0].is_displayed():
+                    logging.info("最終ページを検出 → スクリーンショット終了")
+                    break
 
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
                 screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
-                
-                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
-                # ✅ PNG → WebP に変換して削除
+
+                # PNG → WebP に変換して削除
                 webp_path = screenshot_path.replace(".png", ".webp")
                 with Image.open(screenshot_path) as im:
-                    im.save(webp_path, "webp", quality=90)  # quality=90は好みで調整可能
-                os.remove(screenshot_path)  # PNG削除して整理
+                    im.save(webp_path, "webp", quality=90)
+                os.remove(screenshot_path)
 
                 images.append(webp_path)
                 logging.info(f"保存成功 (WebP): {webp_path}")
 
-
-                # ページ番号更新
                 if current_page == 0:
-                    current_page, _ = get_page_counter(driver)
+                    current_page, _ = get_page_counter(driver, timeout=5)
 
                 if current_page >= total_page:
                     logging.info("最後のページに到達 → 終了")
@@ -232,27 +198,18 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
             except (TimeoutException, NoSuchElementException) as e:
                 logging.error(f"canvas取得失敗 idx={page_idx}: {e}")
-                save_page_source(driver, idx=page_idx)  # ページソース保存
+                save_page_source(driver, idx=page_idx)
                 break
             except Exception as e:
                 logging.exception(f"予期せぬエラー idx={page_idx}: {e}")
                 save_page_source(driver, idx=page_idx)
                 break
 
-        # 画像をPDF化
-        # if images:
-        #     try:
-        #         pil_images = [Image.open(p).convert("RGB") for p in images]
-        #         pil_images[0].save(output_pdf_path, save_all=True, append_images=pil_images[1:])
-        #         images.append(output_pdf_path)
-        #         logging.info(f"PDF保存完了: {output_pdf_path}")
-        #     except Exception as e:
-        #         logging.exception(f"PDF保存失敗: {e}")
-        # else:
-        #     logging.warning("画像が1枚も取得できなかったためPDF作成はスキップ")
-
     finally:
-        driver.quit()
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
     return images
 

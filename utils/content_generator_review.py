@@ -124,7 +124,7 @@ def scrape_review_comments(product_url: str, driver, service: str, floor: str, m
             driver.get(review_url)
             handle_safe_mode(driver)
             try:
-                WebDriverWait(driver, 15).until(
+                WebDriverWait(driver, 8).until(
                     EC.presence_of_element_located(
                         (By.CSS_SELECTOR, "#review_anchor")
                     )

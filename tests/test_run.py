@@ -91,3 +91,8 @@ def test_run_script_success(tmp_path):
                     assert code == 0
                     err.assert_not_called()
                     assert any("完了" in str(c) for c in info.call_args_list)
+
+
+def test_run_lock_path_default():
+    assert run_mod.RUN_LOCK_PATH.name == "run.lock"
+    assert run_mod.RUN_LOCK_PATH.parent.name == "logs"

@@ -14,10 +14,12 @@ from pathlib import Path
 import yaml
 
 from utils.logger import RotatingLogFile, setup_logger
+from utils.run_lock import RunLock, RunLockError
 
 ROOT = Path(__file__).resolve().parent
 TASKS_FILE = ROOT / "tasks.yaml"
 RUN_LOG = "run.log"
+RUN_LOCK_PATH = ROOT / "logs" / "run.lock"
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +195,11 @@ def main() -> None:
         action="store_true",
         help="子プロセスの標準出力をコンソールにも出す（GITHUB_ACTIONS 時は自動有効）",
     )
+    parser.add_argument(
+        "--no-lock",
+        action="store_true",
+        help="多重起動防止ロックを取得しない（緊急時のみ）",
+    )
     args = parser.parse_args()
 
     tasks = load_tasks()
@@ -208,46 +215,59 @@ def main() -> None:
 
     setup_logger(RUN_LOG)
 
-    mode = f"phase={args.phase}" if args.phase else f"script={args.script}"
-    logger.info(
-        "実行開始 (%s, python=%s, continue_on_error=%s)",
-        mode,
-        args.python,
-        args.continue_on_error,
-    )
-    logger.info("実行対象: %d 件", len(entries))
-    for i, entry in enumerate(entries, 1):
-        label = entry.get("name") or entry["path"]
-        logger.info("  予定 [%d] [%s] %s - %s", i, entry["phase"], entry["path"], label)
+    lock: RunLock | None = None
+    if not args.no_lock:
+        lock = RunLock(RUN_LOCK_PATH)
+        try:
+            lock.acquire()
+        except RunLockError as exc:
+            logger.error("%s", exc)
+            sys.exit(2)
 
-    total = len(entries)
-    exit_code = 0
-    prev_phase: str | None = None
-    for i, entry in enumerate(entries, 1):
-        phase = entry["phase"]
-        if phase != prev_phase:
-            logger.info("--- フェーズ開始: %s ---", phase)
-            prev_phase = phase
-
-        code = run_script(
-            entry,
+    try:
+        mode = f"phase={args.phase}" if args.phase else f"script={args.script}"
+        logger.info(
+            "実行開始 (%s, python=%s, continue_on_error=%s)",
+            mode,
             args.python,
             args.continue_on_error,
-            i,
-            total,
-            echo_output=args.echo_output,
         )
-        if code != 0 and not args.continue_on_error:
-            logger.error("エラーにより実行を中断 (exit %d)", code)
-            sys.exit(code)
-        if code != 0:
-            exit_code = code
+        logger.info("実行対象: %d 件", len(entries))
+        for i, entry in enumerate(entries, 1):
+            label = entry.get("name") or entry["path"]
+            logger.info("  予定 [%d] [%s] %s - %s", i, entry["phase"], entry["path"], label)
 
-    if exit_code == 0:
-        logger.info("全 %d 件のスクリプトが正常終了しました", total)
-    else:
-        logger.warning("実行完了（失敗あり）: exit %d", exit_code)
-    sys.exit(exit_code)
+        total = len(entries)
+        exit_code = 0
+        prev_phase: str | None = None
+        for i, entry in enumerate(entries, 1):
+            phase = entry["phase"]
+            if phase != prev_phase:
+                logger.info("--- フェーズ開始: %s ---", phase)
+                prev_phase = phase
+
+            code = run_script(
+                entry,
+                args.python,
+                args.continue_on_error,
+                i,
+                total,
+                echo_output=args.echo_output,
+            )
+            if code != 0 and not args.continue_on_error:
+                logger.error("エラーにより実行を中断 (exit %d)", code)
+                sys.exit(code)
+            if code != 0:
+                exit_code = code
+
+        if exit_code == 0:
+            logger.info("全 %d 件のスクリプトが正常終了しました", total)
+        else:
+            logger.warning("実行完了（失敗あり）: exit %d", exit_code)
+        sys.exit(exit_code)
+    finally:
+        if lock is not None:
+            lock.release()
 
 
 if __name__ == "__main__":

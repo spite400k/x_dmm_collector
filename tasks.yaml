@@ -78,6 +78,9 @@ phases:
       - path: scripts/manual/individual_search.py
         name: 個別検索
         log: logs/task_run_individual_search.log
+      - path: scripts/manual/regenerate_empty_summaries.py
+        name: 空の auto_summary / auto_point 再生成
+        log: logs/task_run_regenerate_empty_summaries.log
       - path: scripts/manual/supabase2storj.py
         name: Supabase → Storj 移行
         log: logs/task_run_supabase2storj.log

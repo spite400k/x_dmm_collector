@@ -241,7 +241,6 @@ def generate_content(item: dict) -> dict:
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.85
         )
 
         content = response.choices[0].message.content.strip()

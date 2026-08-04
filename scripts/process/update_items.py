@@ -12,6 +12,7 @@ import requests
 from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
+from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
 
 # ----------------------------------------------------
@@ -85,16 +86,21 @@ def safe_text_by_word_mapping(auto_summary: str, auto_point: str) -> tuple[str, 
         safe_auto_point = safe_auto_point.replace(r18_word, safe_word)
     return safe_auto_summary, safe_auto_point
 
-def generate_safe_summary_point(title: str, auto_summary: str, auto_point ) -> tuple[str, str]:
+
+def generate_safe_summary_point(
+    title: str, auto_summary: str, auto_point
+) -> tuple[str, str, bool]:
     """
-    ワード置換済み文章で要約・ポイント生成
-    - AIには直接的R18表現は渡さない
-    - Safe化文章を要約・ポイント化
+    ワード置換済み文章で要約・ポイント生成。
+    戻り値: (summary, point, ai_ok)
+    - 入力が空: ("", "", False)
+    - OpenAI 成功: (生成文, 生成文, True)
+    - OpenAI 失敗: ("", "", False)
     """
-    safe_auto_summary, safe_auto_point = safe_text_by_word_mapping(auto_summary,auto_point)
+    safe_auto_summary, safe_auto_point = safe_text_by_word_mapping(auto_summary, auto_point)
 
     if not safe_auto_summary.strip() and not safe_auto_point.strip():
-        return "", ""
+        return "", "", False
 
     prompt = f"""
 次の成人向け作品紹介文を、性的表現を避けつつ内容を維持したSafeSearch対応テキストに変換してください。
@@ -117,23 +123,21 @@ def generate_safe_summary_point(title: str, auto_summary: str, auto_point ) -> t
 
     try:
         res = client.chat.completions.create(
-            # model="gpt-4o-nano",
-            # model="gpt-5.4-nano-2025-08-07",
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             # temperature=0.7,
         )
         text = res.choices[0].message.content.strip()
 
         match = re.split(r"【おすすめポイント】", text)
-        auto_summary = match[0].replace("【あらすじ・概要】", "").strip() if len(match) > 0 else text
-        auto_point = match[1].strip() if len(match) > 1 else ""
+        out_summary = match[0].replace("【あらすじ・概要】", "").strip() if len(match) > 0 else text
+        out_point = match[1].strip() if len(match) > 1 else ""
 
-        return auto_summary, auto_point
+        return out_summary, out_point, True
 
     except Exception as e:
         logging.error(f"❌ Safe化AI生成失敗: {e}")
-        return "", ""
+        return "", "", False
 
 # ----------------------------------------------------
 # 🧠 Safe化AI生成関数
@@ -161,7 +165,7 @@ def generate_safe_text(title: str, summary: str = "") -> tuple[str, str]:
 {summary}
 """
         res = client.chat.completions.create(
-            model="gpt-5.4-nano",  # 高速・低コストで十分
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
@@ -321,7 +325,13 @@ def fetch_item_by_content_id(content_id: str):
 # ----------------------------------------------------
 # trn_dmm_items 更新
 # ----------------------------------------------------
-def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: str):
+def update_dmm_item(
+    content_id: str,
+    item: dict,
+    auto_summary: str,
+    auto_point: str,
+    safe_generated_at=None,
+):
     try:
         review_count = item.get("review", {}).get("count")
         review_average = item.get("review", {}).get("average")
@@ -350,26 +360,17 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
         # upsert_directors(directors)
 
         title = item.get("title", "")
-        # 🧠 Safe化AI生成
-        auto_summary, auto_point = generate_safe_summary_point(title, auto_summary, auto_point )
-
         raw_json = item
         actress_ids = [a.get("id") for a in actresses] if actresses else None
-        actress_names = [a.get("name") for a in actresses] if actresses else None
         director_ids = [d.get("id") for d in directors] if directors else None
-        director_names = [d.get("name") for d in directors] if directors else None
         genre_ids = [g.get("id") for g in genres] if genres else None
         genre_names = [g.get("name") for g in genres] if genres else None
-
-        # ★ 更新データに sample_images を追加
 
         update_data = {
             "review_count": review_count,
             "review_average": review_average,
             "price": price,
             "list_price": list_price,
-            "auto_summary": auto_summary,
-            "auto_point": auto_point,
             "campaign": campaign,
             "actress_ids": actress_ids,
             "actress": actresses,
@@ -378,10 +379,26 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
             "genre_ids": genre_ids,
             "genres": genre_names,
             "delivery": delivery,
-            "sample_images": sample_images,  # ← 追加（配列カラム）
+            "sample_images": sample_images,
             "raw_json": raw_json,
             "updated_at": datetime.utcnow().isoformat(),
         }
+
+        if safe_generated_at:
+            logging.info("safe_generated_at 済みのため Safe AI をスキップ: %s", content_id)
+        else:
+            new_summary, new_point, ai_ok = generate_safe_summary_point(
+                title, auto_summary, auto_point
+            )
+            if ai_ok:
+                update_data["auto_summary"] = new_summary
+                update_data["auto_point"] = new_point
+                update_data["safe_generated_at"] = datetime.utcnow().isoformat()
+            elif (auto_summary or "").strip() or (auto_point or "").strip():
+                logging.warning(
+                    "Safe AI 未完了のため auto_summary/auto_point は据え置き: %s",
+                    content_id,
+                )
 
         res = (
             supabase.table("trn_dmm_items")
@@ -408,7 +425,13 @@ def process_batch(batch_items, batch_index,total):
         logging.info(f"[{i}/{total}] {content_id} 処理中...")
         item = fetch_item_by_content_id(content_id)
         if item:
-            update_dmm_item(content_id, item, row["auto_summary"], row["auto_point"])
+            update_dmm_item(
+                content_id,
+                item,
+                row.get("auto_summary"),
+                row.get("auto_point"),
+                row.get("safe_generated_at"),
+            )
         else:
             logging.warning(f"⚠️ データ取得失敗: {content_id}")
         time.sleep(0.5)
@@ -431,7 +454,7 @@ def main():
         response = (
             supabase
             .table("trn_dmm_items")
-            .select("content_id, auto_summary, auto_point")
+            .select("content_id, auto_summary, auto_point, safe_generated_at")
             .order("content_id")
             .range(start, start + limit - 1)
             .execute()

@@ -136,7 +136,7 @@ python run.py --phase all --continue-on-error
 | `WORK_DIR` | `C:\Users\kazuk\python\x_dmm_collector` |
 | `PYTHON_EXE` | システム Python または `venv\Scripts\python.exe` |
 
-`.env` や OS 環境変数（`DMM_API_ID`、`SUPABASE_URL`、`OPENAI_API_KEY` 等）は bat では設定せず、実行環境側で用意する。
+`.env` や OS 環境変数（`DMM_API_ID`、`SUPABASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL` 等）は bat では設定せず、実行環境側で用意する。
 
 ---
 

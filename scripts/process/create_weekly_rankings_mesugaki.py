@@ -20,6 +20,7 @@ import logging
 from openai import OpenAI
 
 from db.postgres_connect import connect_from_env
+from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
@@ -119,7 +120,7 @@ def generate_ai_summary(service, floor, year, week, rows):
 """
 
         response = client.chat.completions.create(
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": "あなたはプロのランキング分析ライターです。"},
                 {"role": "user", "content": prompt},

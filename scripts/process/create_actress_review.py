@@ -14,6 +14,7 @@ from datetime import datetime
 import httpx
 from openai import OpenAI
 from db.supabase_client import supabase
+from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 from utils.supabase_retry import execute_with_retry
 
@@ -117,7 +118,7 @@ def generate_actress_ai_profile(actress):
     try:
 
         response = client.chat.completions.create(
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": ACTRESS_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}

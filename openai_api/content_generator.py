@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 
+from openai_api.config import OPENAI_MODEL
 from utils.chromedriver import chromedriver_path
 
 # ログ設定
@@ -238,7 +239,7 @@ def generate_content(item: dict) -> dict:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.85
         )

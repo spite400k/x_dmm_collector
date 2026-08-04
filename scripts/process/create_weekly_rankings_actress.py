@@ -12,6 +12,7 @@ from openai import OpenAI
 from psycopg2.extras import RealDictCursor
 
 from db.postgres_connect import connect_from_env
+from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
 load_dotenv()
@@ -93,7 +94,7 @@ def generate_ai_summary(year: int, week: int, rows: list[dict]) -> str | None:
 """
 
         response = client.chat.completions.create(
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": "あなたはプロのランキング分析ライターです。"},
                 {"role": "user", "content": prompt},

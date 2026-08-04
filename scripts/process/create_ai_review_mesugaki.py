@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
   - OPENAI_API_KEY: AIレビュー時は必須（--raw-only 時は不要）
+  - OPENAI_MODEL: 任意（未設定時は gpt-5.4-nano）
   - DMM_API_ID, DMM_AFFILIATE_ID: 任意（DMM API 利用時）
 
 実行例:
@@ -29,6 +30,7 @@ from openai import OpenAI
 
 import httpx
 from db.supabase_client_mesugaki import supabase
+from openai_api.config import OPENAI_MODEL
 from utils.content_generator_review import (
     create_driver,
     ensure_driver_alive,
@@ -298,7 +300,7 @@ def process_content(
             "review_count": len(reviews),
             "avg_rating": avg_rating,
             "summary_text": html_summary,
-            "ai_model": "gpt-5.4-nano",
+            "ai_model": OPENAI_MODEL,
             "prompt_version": "v3_structured",
             "updated_at": datetime.utcnow().isoformat(),
         }

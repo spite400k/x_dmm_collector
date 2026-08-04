@@ -17,6 +17,7 @@ from openai import OpenAI
 
 from bs4 import BeautifulSoup
 
+from openai_api.config import OPENAI_MODEL
 from openai_api.content_generator import extract_synopsis_from_soup
 from utils.chromedriver import chromedriver_path
 from utils.dmm_review_scraper import get_doujin_reviews, get_video_reviews
@@ -576,7 +577,7 @@ def generate_review_insights(
 """
     try:
         response = client.chat.completions.create(
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": REVIEW_INSIGHTS_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt}

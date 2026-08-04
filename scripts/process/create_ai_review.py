@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
+from openai_api.config import OPENAI_MODEL
 from openai_api.content_generator import scrape_product_details
 from utils.content_generator_review import (
     create_driver,
@@ -243,7 +244,7 @@ def process_content(content_id: str, product_url: str, service_code: str, floor_
             "review_count": len(reviews),
             "avg_rating": avg_rating,
             "summary_text": html_summary,
-            "ai_model": "gpt-5.4-nano",
+            "ai_model": OPENAI_MODEL,
             "prompt_version": "v3_structured",
             "updated_at": datetime.utcnow().isoformat()
         }

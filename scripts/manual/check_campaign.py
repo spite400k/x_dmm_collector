@@ -12,6 +12,7 @@ import requests
 from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
+from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
 
 # ----------------------------------------------------
@@ -117,9 +118,7 @@ def generate_safe_summary_point(title: str, auto_summary: str, auto_point ) -> t
 
     try:
         res = client.chat.completions.create(
-            # model="gpt-4o-nano",
-            # model="gpt-5.4-nano-2025-08-07",
-            model="gpt-5.4-nano",
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             # temperature=0.7,
         )
@@ -161,7 +160,7 @@ def generate_safe_text(title: str, summary: str = "") -> tuple[str, str]:
 {summary}
 """
         res = client.chat.completions.create(
-            model="gpt-5.4-nano",  # 高速・低コストで十分
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )

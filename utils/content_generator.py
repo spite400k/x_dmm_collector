@@ -14,6 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from openai import OpenAI
 
+from openai_api.config import OPENAI_MODEL
 from utils.chromedriver import chromedriver_path
 from utils.screenshot import save_debug_files
 
@@ -311,7 +312,7 @@ def generate_review_insights(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-nano",
+            model=OPENAI_MODEL,
             temperature=0.3,
             messages=[
                 {"role": "system", "content": "JSONのみ出力してください。"},

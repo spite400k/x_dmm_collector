@@ -4,6 +4,8 @@ import logging
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from openai_api.config import OPENAI_MODEL
+
 # ログ設定
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
@@ -100,7 +102,7 @@ def generate_content(item: dict) -> dict:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.85
         )

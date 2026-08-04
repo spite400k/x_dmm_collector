@@ -10,8 +10,4 @@ comment on column public.trn_dmm_items.safe_generated_at is
 create index if not exists trn_dmm_items_safe_generated_at_idx
   on public.trn_dmm_items (safe_generated_at);
 
--- 任意: 既存であらすじがある行を Safe 済み扱いにする（必要な環境だけ実行）
--- update public.trn_dmm_items
--- set safe_generated_at = coalesce(updated_at, now())
--- where safe_generated_at is null
---   and coalesce(auto_summary, '') <> '';
+-- 任意バックフィルは ddl6_safe_generated_at_backfill.sql を参照

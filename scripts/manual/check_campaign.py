@@ -398,11 +398,13 @@ def update_dmm_item(content_id: str, item: dict, auto_summary: str, auto_point: 
 # ----------------------------------------------------
 # バッチ処理・メイン
 # ----------------------------------------------------
-def process_batch(batch_items, batch_index,total):
+def process_batch(batch_items, batch_index, total, range_start=0):
+    """range_start: 全体リスト上のこのバッチ先頭の0-basedインデックス"""
     logging.info(f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) ===")
     for i, row in enumerate(batch_items, start=1):
         content_id = row["content_id"]
-        logging.info(f"[{i}/{total}] {content_id} 処理中...")
+        global_num = range_start + i
+        logging.info(f"[{global_num}/{total}] {content_id} 処理中...")
         item = fetch_item_by_content_id(content_id)
         if item:
             update_dmm_item(content_id, item, row["auto_summary"], row["auto_point"])
@@ -460,7 +462,7 @@ def main():
         batch_items = all_items[i : i + BATCH_SIZE]
         batch_index = (i // BATCH_SIZE) + 1
 
-        process_batch(batch_items, batch_index,total)
+        process_batch(batch_items, batch_index, total, range_start=i)
         update_count += len(batch_items)
 
         if i + BATCH_SIZE < total:

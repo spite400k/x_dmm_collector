@@ -149,3 +149,74 @@ class TestUpdateDmmItemSafeFlag:
         payload = table.update.call_args[0][0]
         assert "auto_summary" not in payload
         assert "safe_generated_at" not in payload
+
+
+class TestProcessBatchProgress:
+    def test_logs_global_index_across_batches(self, update_items, caplog):
+        update_items.fetch_item_by_content_id = MagicMock(return_value=None)
+        batch_items = [{"content_id": "a"}, {"content_id": "b"}]
+        with patch.object(update_items.time, "sleep"), caplog.at_level("INFO"):
+            update_items.process_batch(batch_items, batch_index=2, total=3466, range_start=100)
+
+        messages = [r.message for r in caplog.records]
+        assert any("[101/3466] a 処理中..." in m for m in messages)
+        assert any("[102/3466] b 処理中..." in m for m in messages)
+        assert not any("[1/3466]" in m for m in messages)
+        assert not any("[2/3466]" in m for m in messages)
+
+    def test_passes_service_floor_to_fetch(self, update_items):
+        update_items.fetch_item_by_content_id = MagicMock(return_value=None)
+        batch_items = [
+            {"content_id": "13dsvr01798", "service": "digital", "floor": "videoa"}
+        ]
+        with patch.object(update_items.time, "sleep"):
+            update_items.process_batch(batch_items, batch_index=1, total=1, range_start=0)
+
+        update_items.fetch_item_by_content_id.assert_called_once_with(
+            "13dsvr01798", service="digital", floor="videoa"
+        )
+
+
+class TestFetchItemByContentId:
+    def test_uses_service_floor_first(self, update_items):
+        found = MagicMock()
+        found.raise_for_status = MagicMock()
+        found.json.return_value = {"result": {"items": [{"content_id": "13dsvr01798"}]}}
+
+        with patch.object(update_items.requests, "get", return_value=found) as get_mock:
+            item = update_items.fetch_item_by_content_id(
+                "13dsvr01798", service="digital", floor="videoa"
+            )
+
+        assert item == {"content_id": "13dsvr01798"}
+        assert get_mock.call_count == 1
+        assert get_mock.call_args.kwargs["params"]["service"] == "digital"
+        assert get_mock.call_args.kwargs["params"]["floor"] == "videoa"
+
+    def test_falls_back_to_cid_only_when_service_floor_empty(self, update_items):
+        empty = MagicMock()
+        empty.raise_for_status = MagicMock()
+        empty.json.return_value = {"result": {"items": []}}
+        found = MagicMock()
+        found.raise_for_status = MagicMock()
+        found.json.return_value = {"result": {"items": [{"content_id": "x"}]}}
+
+        with patch.object(
+            update_items.requests, "get", side_effect=[empty, found]
+        ) as get_mock:
+            item = update_items.fetch_item_by_content_id(
+                "x", service="digital", floor="videoa"
+            )
+
+        assert item == {"content_id": "x"}
+        assert get_mock.call_count == 2
+        assert "service" not in get_mock.call_args_list[1].kwargs["params"]
+
+    def test_returns_none_and_logs_on_http_error(self, update_items, caplog):
+        with patch.object(
+            update_items.requests,
+            "get",
+            side_effect=RuntimeError("timeout"),
+        ), caplog.at_level("ERROR"):
+            assert update_items.fetch_item_by_content_id("bad") is None
+        assert any("DMM API呼び出し失敗" in r.message for r in caplog.records)

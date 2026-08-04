@@ -303,21 +303,35 @@ def upsert_directors(directors: list[dict]):
 # ----------------------------------------------------
 # DMM API
 # ----------------------------------------------------
-def fetch_item_by_content_id(content_id: str):
+def fetch_item_by_content_id(
+    content_id: str,
+    service: str | None = None,
+    floor: str | None = None,
+):
+    """
+    cid のみでは 0 件になる作品があるため、DB の service/floor 付きで再試行する。
+    """
     url = "https://api.dmm.com/affiliate/v3/ItemList"
-    params = {
+    base_params = {
         "api_id": DMM_API_ID,
         "affiliate_id": DMM_AFFILIATE_ID,
         "site": "DMM.R18",
         "cid": content_id,
         "output": "json",
     }
+    param_sets = []
+    if service and floor:
+        param_sets.append({**base_params, "service": service, "floor": floor})
+    param_sets.append(base_params)
+
     try:
-        res = requests.get(url, params=params, timeout=10)
-        res.raise_for_status()
-        data = res.json()
-        items = data.get("result", {}).get("items", [])
-        return items[0] if items else None
+        for params in param_sets:
+            res = requests.get(url, params=params, timeout=10)
+            res.raise_for_status()
+            items = res.json().get("result", {}).get("items", [])
+            if items:
+                return items[0]
+        return None
     except Exception as e:
         logging.error(f"❌ DMM API呼び出し失敗: {content_id} ({e})")
         return None
@@ -418,12 +432,18 @@ def update_dmm_item(
 # ----------------------------------------------------
 # バッチ処理・メイン
 # ----------------------------------------------------
-def process_batch(batch_items, batch_index,total):
+def process_batch(batch_items, batch_index, total, range_start=0):
+    """range_start: 全体リスト上のこのバッチ先頭の0-basedインデックス"""
     logging.info(f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) ===")
     for i, row in enumerate(batch_items, start=1):
         content_id = row["content_id"]
-        logging.info(f"[{i}/{total}] {content_id} 処理中...")
-        item = fetch_item_by_content_id(content_id)
+        global_num = range_start + i
+        logging.info(f"[{global_num}/{total}] {content_id} 処理中...")
+        item = fetch_item_by_content_id(
+            content_id,
+            service=row.get("service"),
+            floor=row.get("floor"),
+        )
         if item:
             update_dmm_item(
                 content_id,
@@ -454,7 +474,7 @@ def main():
         response = (
             supabase
             .table("trn_dmm_items")
-            .select("content_id, auto_summary, auto_point, safe_generated_at")
+            .select("content_id, auto_summary, auto_point, safe_generated_at, service, floor")
             .order("content_id")
             .range(start, start + limit - 1)
             .execute()
@@ -486,7 +506,7 @@ def main():
         batch_items = all_items[i : i + BATCH_SIZE]
         batch_index = (i // BATCH_SIZE) + 1
 
-        process_batch(batch_items, batch_index,total)
+        process_batch(batch_items, batch_index, total, range_start=i)
         update_count += len(batch_items)
 
         if i + BATCH_SIZE < total:

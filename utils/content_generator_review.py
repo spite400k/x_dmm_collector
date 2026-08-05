@@ -74,27 +74,44 @@ def ensure_driver_alive(driver):
     return create_driver()
 
 def handle_safe_mode(driver):
-    print("現在URL:", driver.current_url)
-    print("title:", driver.title)
+    current_url = driver.current_url or ""
+    logging.info("現在URL: %s", current_url)
+    logging.info("title: %s", driver.title)
+
+    # 通常ページは何もしない
+    if "age_check" not in current_url:
+        return
+
+    selectors = [
+        (By.XPATH, "//button[.//span[normalize-space(text())='はい']]"),
+        (By.XPATH, "//button[normalize-space(text())='はい']"),
+        (By.XPATH, "//a[normalize-space(text())='はい']"),
+        (By.LINK_TEXT, "はい"),
+        (By.XPATH, "//input[@type='submit' and (@value='はい' or @name='yes')]"),
+    ]
+
+    clicked = False
+    for by, selector in selectors:
+        try:
+            yes_button = WebDriverWait(driver, 3).until(
+                EC.element_to_be_clickable((by, selector))
+            )
+            driver.execute_script("arguments[0].click();", yes_button)
+            clicked = True
+            logging.info("✅ セーフモード突破クリック")
+            break
+        except Exception:
+            continue
+
+    if not clicked:
+        logging.warning("⚠ 年齢確認の「はい」ボタンを検出できませんでした")
+        return
+
     try:
-        yes_button = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable(
-                (By.XPATH, "//button[.//span[text()='はい']]")
-            )
-        )
-
-        driver.execute_script("arguments[0].click();", yes_button)
-        print("✅ セーフモード突破")
-
-        # モーダルが消えるまで待機
-        WebDriverWait(driver, 5).until_not(
-            EC.presence_of_element_located(
-                (By.XPATH, "//span[text()='表示しますか？']")
-            )
-        )
-
+        WebDriverWait(driver, 10).until(lambda d: "age_check" not in (d.current_url or ""))
+        logging.info("✅ 年齢確認ページ離脱: %s", driver.current_url)
     except Exception:
-        pass
+        logging.warning("⚠ 年齢確認ページ離脱を確認できませんでした: %s", driver.current_url)
 
 
         

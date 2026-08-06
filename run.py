@@ -21,7 +21,75 @@ TASKS_FILE = ROOT / "tasks.yaml"
 RUN_LOG = "run.log"
 RUN_LOCK_PATH = ROOT / "logs" / "run.lock"
 
+# 加工フェーズを系統分割して並列実行するためのフェーズ名
+PROCESS_PIPELINE_PHASES = ("process_main", "process_actress", "process_mesugaki")
+
+PHASE_CHOICES = [
+    "collect",
+    "process",
+    "process_main",
+    "process_actress",
+    "process_mesugaki",
+    "manual",
+    "all",
+]
+
+# --script 実行時にどの系統ロックを取るか
+SCRIPT_PIPELINE: dict[str, str] = {
+    "scripts/process/update_items.py": "process_main",
+    "scripts/process/create_ai_review.py": "process_main",
+    "scripts/process/create_weekly_rankings.py": "process_main",
+    "scripts/process/create_actress_review.py": "process_actress",
+    "scripts/process/create_weekly_rankings_actress.py": "process_actress",
+    "scripts/process/update_mesugaki.py": "process_mesugaki",
+    "scripts/process/create_ai_review_mesugaki.py": "process_mesugaki",
+    "scripts/process/create_weekly_rankings_mesugaki.py": "process_mesugaki",
+}
+
 logger = logging.getLogger(__name__)
+
+
+def pipeline_lock_path(phase: str) -> Path:
+    return ROOT / "logs" / f"run_{phase}.lock"
+
+
+def resolve_lock_paths(phase: str | None, script_path: str | None) -> list[Path]:
+    """実行対象に応じたロックファイルパスを返す（複数可）。"""
+    if phase in PROCESS_PIPELINE_PHASES:
+        return [pipeline_lock_path(phase)]
+    if phase == "process":
+        # 全系統直列実行時は各系統ロックをすべて取得し、分割 bat と衝突させない
+        return [pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES]
+    if phase == "all":
+        return [RUN_LOCK_PATH, *[pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES]]
+    if script_path:
+        normalized = script_path.replace("\\", "/")
+        pipeline = SCRIPT_PIPELINE.get(normalized)
+        if pipeline:
+            return [pipeline_lock_path(pipeline)]
+        return [RUN_LOCK_PATH]
+    return [RUN_LOCK_PATH]
+
+
+class LockSet:
+    """複数の RunLock をまとめて取得・解放する。"""
+
+    def __init__(self, paths: list[Path]):
+        self._locks = [RunLock(p) for p in paths]
+        self._acquired: list[RunLock] = []
+
+    def acquire(self) -> None:
+        try:
+            for lock in self._locks:
+                lock.acquire()
+                self._acquired.append(lock)
+        except RunLockError:
+            self.release()
+            raise
+
+    def release(self) -> None:
+        while self._acquired:
+            self._acquired.pop().release()
 
 
 def should_echo_child_output(*, echo_output: bool = False) -> bool:
@@ -70,10 +138,19 @@ def load_tasks() -> dict:
 def resolve_scripts(tasks: dict, phase: str | None, script_path: str | None) -> list[dict]:
     if script_path:
         normalized = script_path.replace("\\", "/")
+        # process（全系統）より系統フェーズを優先し、ログ上の phase 名を明確にする
+        fallback: dict | None = None
         for phase_name, phase_def in tasks["phases"].items():
             for entry in phase_def.get("scripts", []):
-                if entry["path"].replace("\\", "/") == normalized:
-                    return [{**entry, "phase": phase_name}]
+                if entry["path"].replace("\\", "/") != normalized:
+                    continue
+                matched = {**entry, "phase": phase_name}
+                if phase_name == "process":
+                    fallback = matched
+                    continue
+                return [matched]
+        if fallback is not None:
+            return [fallback]
         raise SystemExit(f"tasks.yaml に未定義のスクリプト: {script_path}")
 
     if not phase:
@@ -175,8 +252,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="tasks.yaml に基づいてスクリプトを実行")
     parser.add_argument(
         "--phase",
-        choices=["collect", "process", "manual", "all"],
-        help="実行するフェーズ（all = collect + process）",
+        choices=PHASE_CHOICES,
+        help="実行するフェーズ（all = collect + process。並列用: process_main / process_actress / process_mesugaki）",
     )
     parser.add_argument("--script", help="単一スクリプトのパス（tasks.yaml 内の path）")
     parser.add_argument("--list", action="store_true", help="登録スクリプト一覧を表示")
@@ -215,11 +292,11 @@ def main() -> None:
 
     setup_logger(RUN_LOG)
 
-    lock: RunLock | None = None
+    lock_set: LockSet | None = None
     if not args.no_lock:
-        lock = RunLock(RUN_LOCK_PATH)
+        lock_set = LockSet(resolve_lock_paths(args.phase, args.script))
         try:
-            lock.acquire()
+            lock_set.acquire()
         except RunLockError as exc:
             logger.error("%s", exc)
             sys.exit(2)
@@ -266,8 +343,8 @@ def main() -> None:
             logger.warning("実行完了（失敗あり）: exit %d", exit_code)
         sys.exit(exit_code)
     finally:
-        if lock is not None:
-            lock.release()
+        if lock_set is not None:
+            lock_set.release()
 
 
 if __name__ == "__main__":

@@ -72,9 +72,12 @@ python run.py --list
 
 # フェーズ単位
 python run.py --phase collect
-python run.py --phase process
+python run.py --phase process              # 全系統直列（互換）
+python run.py --phase process_main         # 通常系統のみ
+python run.py --phase process_actress      # 女優系統のみ
+python run.py --phase process_mesugaki     # メスガキ系統のみ
 python run.py --phase manual
-python run.py --phase all          # collect + process
+python run.py --phase all                  # collect + process
 
 # 単一スクリプト
 python run.py --script scripts/collect/default.py
@@ -92,11 +95,29 @@ python run.py --phase all --continue-on-error
 | bat | 実行内容 | 呼び出し元 |
 |-----|----------|------------|
 | [`run_collect.bat`](run_collect.bat) | 収集フェーズ 4 本 | — |
-| [`run_process.bat`](run_process.bat) | 加工フェーズ全本 | — |
-| [`run_all.bat`](run_all.bat) | 収集 → 加工 | — |
+| [`run_process_main.bat`](run_process_main.bat) | 加工・通常系統 3 本 | 定期（並列推奨） |
+| [`run_process_actress.bat`](run_process_actress.bat) | 加工・女優系統 2 本 | 定期（並列推奨） |
+| [`run_process_mesugaki.bat`](run_process_mesugaki.bat) | 加工・メスガキ系統 3 本 | 定期（並列推奨） |
+| [`run_process.bat`](run_process.bat) | 加工フェーズ全本を直列 | 互換用 |
+| [`run_all.bat`](run_all.bat) | 収集 → 加工（直列） | — |
 | [`run_x_dmm_collector.bat`](run_x_dmm_collector.bat) | `run_all.bat` と同じ | 後方互換エイリアス |
 | [`run_x_dmm_collector_process.bat`](run_x_dmm_collector_process.bat) | `run_process.bat` と同じ | 後方互換エイリアス |
 | [`run_x_dmm_collector_btlt.bat`](run_x_dmm_collector_btlt.bat) | BL/TL 収集のみ | — |
+
+### 加工フェーズの並列実行
+
+タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。
+
+| タスク名 | bat | 開始時刻 |
+|----------|-----|----------|
+| `\self\x-dmm-collector-process-main` | `run_process_main.bat` | 01:00 |
+| `\self\x-dmm-collector-process-actress` | `run_process_actress.bat` | 02:00 |
+| `\self\x-dmm-collector-process-mesugaki` | `run_process_mesugaki.bat` | 03:00 |
+
+再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`  
+旧の `\self\x-dmm-collector-modify`（`run_process.bat` 直列）は無効化すること。
+
+系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。
 
 ### 各 bat の詳細
 
@@ -105,17 +126,24 @@ python run.py --phase all --continue-on-error
 - **コマンド**: `run.py --phase collect --continue-on-error`
 - **対象**: `tasks.yaml` の collect フェーズ（通常 / メスガキ / BL・TL / キャンペーン収集）
 
+#### run_process_main.bat / run_process_actress.bat / run_process_mesugaki.bat
+
+- **コマンド**: `run.py --phase process_{main|actress|mesugaki} --continue-on-error`
+- **Python**: `venv\Scripts\python.exe`
+- **用途**: 日次加工の並列実行（推奨）
+
 #### run_process.bat
 
 - **コマンド**: `run.py --phase process --continue-on-error`
-- **対象**: `tasks.yaml` の process フェーズ（AI 更新・レビュー・ランキング等）
+- **対象**: `tasks.yaml` の process フェーズ全本を直列
+- **用途**: 互換・手動での一括実行。定期は上記 3 本を推奨
 - **Python**: `venv\Scripts\python.exe` を使用（他 bat はシステム Python）
 
 #### run_all.bat
 
 - **コマンド**: `run.py --phase all --continue-on-error`
 - **順序**: collect 完了後に process を実行
-- **用途**: 日次のメインバッチ
+- **用途**: 日次のメインバッチ（加工は直列）
 
 #### run_x_dmm_collector.bat / run_x_dmm_collector_process.bat
 

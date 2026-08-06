@@ -17,6 +17,7 @@ RETRYABLE_ERRORS = (
     httpx.ReadTimeout,
     httpx.WriteTimeout,
     httpx.NetworkError,
+    httpx.RemoteProtocolError,
     OSError,
 )
 

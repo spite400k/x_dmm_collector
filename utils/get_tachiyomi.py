@@ -1,28 +1,21 @@
 import os
 import time
 import logging
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
 from PIL import Image
 
-from utils.chromedriver import chromedriver_path
-from utils.logger import create_utf8_stream_handler
+from utils.chromedriver import create_chrome_driver, quit_chrome_driver
+from utils.logger import setup_logger
 
 # ---------------------
 # ログ設定
 # ---------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d | %(message)s",
-    handlers=[create_utf8_stream_handler()],
-)
+setup_logger("get_tachiyomi.log")
 
 def save_page_source(driver, idx, log_dir="logs"):
     # ログディレクトリがなければ作成
@@ -89,6 +82,12 @@ def get_page_counter(driver, timeout=30):
 # ---------------------
 # Tachiyomiページキャプチャ関数
 # ---------------------
+_MOBILE_USER_AGENT = (
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) "
+    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+)
+
+
 def capture_all_tachiyomi_pages(tachiyomi_url: str):
     logging.info(f"立ち読み対象URL: {tachiyomi_url}")
 
@@ -96,20 +95,17 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
     TEMP_DIR = os.path.join(BASE_DIR, "temp")
     os.makedirs(TEMP_DIR, exist_ok=True)
 
-    # output_pdf_path = os.path.join(BASE_DIR, "tachiyomi_pages.pdf")
+    try:
+        driver = create_chrome_driver(
+            page_load_timeout=60,
+            window_size="440,932",
+            user_agent=_MOBILE_USER_AGENT,
+        )
+    except Exception as e:
+        logging.warning("Chrome 起動失敗（立ち読みをスキップ）: %s", e)
+        return []
 
-    options = Options()
-    options.add_argument("--headless=new")  # 新しいヘッドレスモード
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=440,932")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) \
-                            AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1")
-
-    driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
-    driver.set_page_load_timeout(60)
-
+    images: list[str] = []
     try:
         logging.info("DMMトップページを開く")
         driver.get("https://www.dmm.co.jp/top/")
@@ -137,7 +133,6 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         time.sleep(2)
 
-        images = []
         page_idx = 1
         current_page = 0
 
@@ -205,11 +200,11 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 save_page_source(driver, idx=page_idx)
                 break
 
+    except Exception as e:
+        logging.warning("立ち読み処理失敗（空リストで続行）: %s", e)
+        return []
     finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+        quit_chrome_driver(driver)
 
     return images
 

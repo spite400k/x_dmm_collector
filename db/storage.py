@@ -3,17 +3,9 @@ import logging
 from db.supabase_client import supabase
 import os
 
-from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+from utils.logger import setup_logger
 
-# ログ設定（ファイル + コンソール出力）
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/storage.log", encoding=LOG_ENCODING),
-        create_utf8_stream_handler(),
-    ],
-)
+setup_logger("storage.log")
 
 # ---------------------------------------------------------------------
 # ローカル画像ファイルをSupabase Storageにアップロード

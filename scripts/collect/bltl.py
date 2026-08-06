@@ -13,7 +13,11 @@ import logging
 from utils.get_sample_movie import get_sample_movie
 from utils.get_tachiyomi import capture_all_tachiyomi_pages
 from utils.logger import setup_logger
-from scripts.collect._filter import filter_unregistered_items, supabase_exists_checker
+from scripts.collect._filter import (
+    filter_unregistered_items,
+    run_items_isolated,
+    supabase_exists_checker,
+)
 
 # ログ用ディレクトリを作成（存在しなければ）
 os.makedirs("logs", exist_ok=True)
@@ -75,38 +79,39 @@ def main():
                 exists_by_content_id=supabase_exists_checker(supabase2.table("trn_dmm_items")),
             )
             logging.info("未登録 %d 件 / 取得 %d 件", len(items), len(top_items))
-            for item in items:
-                # 立ち読みデータの取得
-                # 立ち読みURLが存在する場合のみ処理
-                tachiyomi_url = item.get("tachiyomi", {}).get("URL")  # ← .get を安全化
-                # logging.info("立ち読みデータ取得開始")
-                tachiyomi_image_paths = []
-                if tachiyomi_url:
-                    logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
-                    tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url=tachiyomi_url)
-                # logging.info("立ち読みデータ取得完了")
-
-                sample_movie_url = item.get("sampleMovieURL_highest")
-                # sample_movie_path = ""
-                # if sample_movie_url:
-                #     logging.info("サンプル動画URL: %s", sample_movie_url)
-                #     sample_movie_path = get_sample_movie(sample_movie_url)
-
-                insert_dmm_item(item, tachiyomi_image_paths, sample_movie_url,site=site, service=service, floor=floor)
-                logging.info("データ登録完了")
-
-                for image_path in tachiyomi_image_paths:
-                    cleanup_file(image_path)
-
-                # cleanup_file(sample_movie_path)
-                logging.info("不要ファイル削除完了")
-
         except Exception as e:
-            # logging.error(" Failed to fetch or insert items for floor=%s: %s", floor, str(e))
             logging.error("登録処理に失敗: %s", str(e))
             has_error = True
-        # finally :
-            
+            continue
+
+        def process_one(item: dict) -> None:
+            # 立ち読みデータの取得
+            # 立ち読みURLが存在する場合のみ処理
+            tachiyomi_url = item.get("tachiyomi", {}).get("URL")  # ← .get を安全化
+            # logging.info("立ち読みデータ取得開始")
+            tachiyomi_image_paths = []
+            if tachiyomi_url:
+                logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
+                tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url=tachiyomi_url)
+            # logging.info("立ち読みデータ取得完了")
+
+            sample_movie_url = item.get("sampleMovieURL_highest")
+            # sample_movie_path = ""
+            # if sample_movie_url:
+            #     logging.info("サンプル動画URL: %s", sample_movie_url)
+            #     sample_movie_path = get_sample_movie(sample_movie_url)
+
+            insert_dmm_item(item, tachiyomi_image_paths, sample_movie_url,site=site, service=service, floor=floor)
+            logging.info("データ登録完了")
+
+            for image_path in tachiyomi_image_paths:
+                cleanup_file(image_path)
+
+            # cleanup_file(sample_movie_path)
+            logging.info("不要ファイル削除完了")
+
+        if run_items_isolated(items, process_one):
+            has_error = True
 
     if has_error:
         logging.error("処理中にエラーが発生しました")

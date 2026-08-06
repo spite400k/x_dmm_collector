@@ -24,11 +24,18 @@ def ensure_utf8_stdio() -> None:
             pass
 
 
+def configure_utf8_environment() -> None:
+    """子プロセス継承用の環境変数と、現プロセスの stdio を UTF-8 に揃える。"""
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    ensure_utf8_stdio()
+
+
 def create_utf8_stream_handler(
     stream=None,
 ) -> logging.StreamHandler:
     """コンソール出力用 StreamHandler（UTF-8）。"""
-    ensure_utf8_stdio()
+    configure_utf8_environment()
     return logging.StreamHandler(stream=stream)
 
 
@@ -73,6 +80,7 @@ def _try_create_rotating_file_handler(
 
 
 def setup_logger(log_file: str) -> None:
+    configure_utf8_environment()
     os.makedirs(LOG_DIR, exist_ok=True)
 
     handlers: list[logging.Handler] = [create_utf8_stream_handler()]
@@ -86,6 +94,10 @@ def setup_logger(log_file: str) -> None:
         handlers=handlers,
         force=True,
     )
+
+
+# import 時点で UTF-8 を有効化（setup_logger 未使用の経路でも効かせる）
+configure_utf8_environment()
 
 
 class RotatingLogFile:

@@ -5,14 +5,9 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 from openai_api.config import OPENAI_MODEL
+from utils.logger import setup_logger
 
-# ログ設定
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    filename="logs/test_generate.log",
-    level=logging.INFO,
-    encoding="utf-8",
-)
+setup_logger("test_generate.log")
 
 # 環境変数読み込み
 load_dotenv()

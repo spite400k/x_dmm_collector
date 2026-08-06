@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
       DMM_API_ID: ${{ secrets.DMM_API_ID }}
       DMM_AFFILIATE_ID: ${{ secrets.DMM_AFFILIATE_ID }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

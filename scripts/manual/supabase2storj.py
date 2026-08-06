@@ -35,7 +35,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 ENABLE_BOTO_DEBUG = False
 if ENABLE_BOTO_DEBUG:
     # botocore の HTTP レベルのやり取りを出す（ヘッダ確認に便利）
-    logging.basicConfig(level=logging.DEBUG)
+    from utils.logger import setup_logger
+
+    setup_logger("supabase2storj.log")
+    logging.getLogger().setLevel(logging.DEBUG)
     boto3.set_stream_logger('botocore', level='DEBUG')
 
 # --- boto3/botocore バージョン確認（任意出力） ---

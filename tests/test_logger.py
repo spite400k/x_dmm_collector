@@ -1,10 +1,12 @@
 import logging
+import os
 from logging.handlers import TimedRotatingFileHandler
 from unittest.mock import patch
 
 from utils.logger import (
     LOG_ENCODING,
     RotatingLogFile,
+    configure_utf8_environment,
     create_rotating_file_handler,
     create_utf8_stream_handler,
     ensure_utf8_stdio,
@@ -75,6 +77,16 @@ def test_rotating_log_file_reopens_stream_after_rollover(tmp_path, monkeypatch):
 
     assert nbytes == len("after-rollover\n")
     assert "after-rollover" in log_file.read_text(encoding="utf-8")
+
+
+def test_configure_utf8_environment_sets_env_and_stdio(monkeypatch):
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    monkeypatch.delenv("PYTHONIOENCODING", raising=False)
+
+    configure_utf8_environment()
+
+    assert os.environ.get("PYTHONUTF8") == "1"
+    assert os.environ.get("PYTHONIOENCODING") == "utf-8"
 
 
 def test_file_handler_uses_utf8_encoding(tmp_path, monkeypatch):

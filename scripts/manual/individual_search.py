@@ -4,23 +4,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from dmm.dmm_api import fetch_items, fetch_items_search_keyword
 from db.trn_dmm_items_repository import insert_dmm_item
-import os
 import logging
 
-# ログ用ディレクトリを作成（存在しなければ）
-os.makedirs("logs", exist_ok=True)
+from utils.logger import setup_logger
 
-from utils.logger import LOG_ENCODING, create_utf8_stream_handler
-
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/fetch_items_indi.log", encoding=LOG_ENCODING),
-        create_utf8_stream_handler(),
-    ],
-)
+setup_logger("fetch_items_indi.log")
 
 def main():
     # site = "FANZA"

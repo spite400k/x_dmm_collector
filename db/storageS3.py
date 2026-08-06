@@ -7,17 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+from utils.logger import setup_logger
 
-# ログ設定
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("logs/storage.log", encoding=LOG_ENCODING),
-        create_utf8_stream_handler(),
-    ],
-)
+setup_logger("storage.log")
 
 # S3 設定（環境変数から取得）
 S3_BUCKET = os.environ.get("S3_BUCKET")

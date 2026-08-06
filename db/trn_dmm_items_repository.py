@@ -12,6 +12,7 @@ from typing import Callable, Optional
 from supabase import Client
 
 from utils.logger import setup_logger
+from utils.supabase_retry import execute_with_retry
 
 # ZIP ローテート付きログ設定
 setup_logger("trn_dmm_items_repository.log")
@@ -60,11 +61,10 @@ def _insert_dmm_item(
             return
 
         # 重複チェック
-        exists = (
-            supabase_client.table("trn_dmm_items")
+        exists = execute_with_retry(
+            lambda: supabase_client.table("trn_dmm_items")
             .select("id")
             .eq("content_id", content_id)
-            .execute()
         )
         if exists.data:
             logging.info(f"[SKIP] 既に登録済: {title} ({content_id}) : {url}")
@@ -152,7 +152,7 @@ def _insert_dmm_item(
             "raw_json": item,
         }
 
-        supabase_client.table("trn_dmm_items").insert(data).execute()
+        execute_with_retry(lambda: supabase_client.table("trn_dmm_items").insert(data))
         logging.info(f"[INSERT] 成功: {title} ({content_id}) : {url}")
 
     except Exception as e:

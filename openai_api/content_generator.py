@@ -5,21 +5,13 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 
 from openai_api.config import OPENAI_MODEL
-from utils.chromedriver import chromedriver_path
+from utils.chromedriver import create_chrome_driver, quit_chrome_driver
+from utils.logger import setup_logger
 
-# ログ設定
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    filename="logs/scraper.log",
-    level=logging.INFO,
-    encoding="utf-8",
-)
+setup_logger("scraper.log")
 
 # 環境変数読み込み
 load_dotenv()
@@ -27,11 +19,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def get_page_source_with_age_verification(url: str) -> str:
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(chromedriver_path()), options=options)
+    driver = create_chrome_driver(page_load_timeout=60)
 
     try:
         driver.get(url)
@@ -47,7 +35,7 @@ def get_page_source_with_age_verification(url: str) -> str:
 
         return driver.page_source
     finally:
-        driver.quit()
+        quit_chrome_driver(driver)
 
 def get_dmm_comment_text(url: str) -> str:
     headers = {

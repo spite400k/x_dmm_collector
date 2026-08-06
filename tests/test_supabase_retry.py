@@ -39,3 +39,17 @@ def test_execute_with_retry_raises_after_exhausted_retries():
             execute_with_retry(lambda: builder, retries=2, base_delay=0.01)
 
     assert builder.execute.call_count == 2
+
+
+def test_execute_with_retry_recovers_after_remote_protocol_error():
+    builder = MagicMock()
+    builder.execute.side_effect = [
+        httpx.RemoteProtocolError("Server disconnected without sending a response."),
+        {"ok": True},
+    ]
+
+    with patch("utils.supabase_retry.time.sleep"):
+        result = execute_with_retry(lambda: builder, retries=3, base_delay=0.01)
+
+    assert result == {"ok": True}
+    assert builder.execute.call_count == 2

@@ -171,13 +171,9 @@ def sync_genre_master(floor_id):
 
 # ---------------------------------------------
 def main():
-    from utils.logger import create_utf8_stream_handler
+    from utils.logger import setup_logger
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[create_utf8_stream_handler()],
-    )
+    setup_logger("create_master.log")
 
     try:
         sync_site_and_service_master()

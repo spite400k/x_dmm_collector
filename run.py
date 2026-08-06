@@ -13,8 +13,10 @@ from pathlib import Path
 
 import yaml
 
-from utils.logger import RotatingLogFile, setup_logger
+from utils.logger import RotatingLogFile, configure_utf8_environment, setup_logger
 from utils.run_lock import RunLock, RunLockError
+
+configure_utf8_environment()
 
 ROOT = Path(__file__).resolve().parent
 TASKS_FILE = ROOT / "tasks.yaml"

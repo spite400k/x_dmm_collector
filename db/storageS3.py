@@ -112,6 +112,36 @@ def _upload_image_to_s3(
         return ""
 
 
+def tachiyomi_s3_prefix(floor: str, content_id: str) -> str:
+    """立ち読み画像の S3 プレフィックス（末尾スラッシュ付き）。"""
+    return f"{floor}/{content_id}/"
+
+
+def count_objects_under_prefix(
+    floor: str,
+    content_id: str,
+    *,
+    bucket: str | None = None,
+    max_keys: int = 1000,
+) -> int:
+    """`{floor}/{content_id}/` 配下のオブジェクト数を返す（最大 max_keys まで）。"""
+    target_bucket = bucket or S3_BUCKET
+    if not target_bucket:
+        logging.error("S3 バケット名が未設定です")
+        return 0
+    prefix = tachiyomi_s3_prefix(floor, content_id)
+    try:
+        resp = s3_client.list_objects_v2(
+            Bucket=target_bucket,
+            Prefix=prefix,
+            MaxKeys=max_keys,
+        )
+    except ClientError as e:
+        logging.error("S3 list_objects_v2 エラー prefix=%s: %s", prefix, e)
+        return 0
+    return len(resp.get("Contents") or [])
+
+
 # ---------------------------------------------------------------------
 # ローカル画像ファイルを S3 にアップロード（既定バケット S3_BUCKET）
 # ---------------------------------------------------------------------

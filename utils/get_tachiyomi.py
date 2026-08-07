@@ -17,6 +17,59 @@ from utils.logger import setup_logger
 # ---------------------
 setup_logger("get_tachiyomi.log")
 
+# DMM book は 2026-06 頃から Publus（Web Components + Shadow DOM）へ移行。
+# 旧 #viewer / #pageSliderCounter / #endOfBook は残っていない。
+_VIEWER_KIND_JS = """
+const publus = document.querySelector('publus-viewer');
+if (publus && publus.shadowRoot && publus.shadowRoot.querySelector('canvas')) {
+  return 'publus';
+}
+if (document.getElementById('viewer')) {
+  return 'legacy';
+}
+return null;
+"""
+
+_PUBLUS_CURRENT_CANVAS_JS = """
+const viewer = document.querySelector('publus-viewer');
+if (!viewer || !viewer.shadowRoot) return null;
+const canvases = [...viewer.shadowRoot.querySelectorAll('canvas')];
+let best = null;
+let bestAbs = Infinity;
+for (const c of canvases) {
+  const rect = c.getBoundingClientRect();
+  if (rect.width < 50 || rect.height < 50) continue;
+  const left = Math.abs(parseFloat(c.style.left || '0'));
+  if (left < bestAbs) {
+    bestAbs = left;
+    best = c;
+  }
+}
+return best;
+"""
+
+_PUBLUS_PAGE_COUNTER_JS = """
+const ctrl = document.querySelector('publus-controller');
+if (!ctrl || !ctrl.shadowRoot) return null;
+const cur = ctrl.shadowRoot.querySelector('.pages-indicator-rect .current');
+const mx = ctrl.shadowRoot.querySelector('.pages-indicator-rect .max');
+if (!cur || !mx) return null;
+const current = parseInt((cur.textContent || '').trim(), 10);
+const total = parseInt((mx.textContent || '').trim(), 10);
+if (!Number.isFinite(current) || !Number.isFinite(total)) return null;
+return [current, total];
+"""
+
+_PUBLUS_END_OF_BOOK_JS = """
+const ctrl = document.querySelector('publus-controller');
+if (!ctrl || !ctrl.shadowRoot) return false;
+const el = ctrl.shadowRoot.querySelector('.last-page-screen');
+if (!el) return false;
+const st = getComputedStyle(el);
+return st.visibility !== 'hidden' && st.display !== 'none' && Number(st.opacity || '1') > 0;
+"""
+
+
 def save_page_source(driver, idx, log_dir="logs"):
     # ログディレクトリがなければ作成
     os.makedirs(log_dir, exist_ok=True)
@@ -30,11 +83,37 @@ def save_page_source(driver, idx, log_dir="logs"):
 
     print(f"✅ ページソースを保存しました: {log_file}")
 
+
+def detect_viewer_kind(driver):
+    """'publus' / 'legacy' / None"""
+    return driver.execute_script(_VIEWER_KIND_JS)
+
+
+def wait_for_viewer_ready(driver, timeout=20):
+    """Publus または旧ビューアの描画完了を待つ。戻り値は kind。"""
+    return WebDriverWait(driver, timeout).until(
+        lambda d: detect_viewer_kind(d)
+    )
+
+
+def is_end_of_book(driver) -> bool:
+    if detect_viewer_kind(driver) == "publus":
+        return bool(driver.execute_script(_PUBLUS_END_OF_BOOK_JS))
+    end_els = driver.find_elements(By.ID, "endOfBook")
+    return bool(end_els and end_els[0].is_displayed())
+
+
 # ---------------------
 # 表示中のcanvas取得関数
 # ---------------------
 def get_visible_canvas(driver):
     logging.debug("canvas探索開始")
+    if detect_viewer_kind(driver) == "publus":
+        canvas = driver.execute_script(_PUBLUS_CURRENT_CANVAS_JS)
+        if canvas is not None:
+            return canvas
+        raise Exception("Publus の表示中 canvas が見つかりません")
+
     candidates = driver.find_elements(By.CSS_SELECTOR, "canvas")
     logging.debug(f"候補canvas数: {len(candidates)}")
 
@@ -48,29 +127,29 @@ def get_visible_canvas(driver):
             logging.warning(f"canvas[{i}] 可視チェック失敗: {e}")
     raise Exception("表示中のcanvasが見つかりません")
 
+
 # ---------------------
 # ページカウンタ取得関数
 # ---------------------
 def get_page_counter(driver, timeout=30):
-    """pageSliderCounter から現在/総ページ数を取得する（非表示でもOK）"""
+    """現在/総ページ数を取得する（Publus / 旧 viewer 両対応）。"""
     try:
-        counter_elem = WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.ID, "pageSliderCounter"))
-        )
-        logging.info(f"取得した counter_elem: '{counter_elem.get_attribute('outerHTML')}'")
+        def _read(d):
+            if detect_viewer_kind(d) == "publus":
+                return d.execute_script(_PUBLUS_PAGE_COUNTER_JS)
+            elem = d.find_elements(By.ID, "pageSliderCounter")
+            if not elem:
+                return None
+            text = (elem[0].text or "").strip()
+            if "/" not in text:
+                return None
+            current_page, total_page = map(int, text.split("/"))
+            return [current_page, total_page]
 
-        counter_text = counter_elem.text.strip()  # e.g., "1/27"
-        logging.info(f"取得した pageSliderCounter: '{counter_text}'")
-
-        if "/" in counter_text:
-            current_page, total_page = map(int, counter_text.split("/"))
-            return current_page, total_page
-        else:
-            logging.warning(f"ページカウンタの形式が不正: '{counter_text}'")
-            with open("debug_get_page_counter1.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-            driver.save_screenshot("debug_get_page_counter1.png")
-            return 1, 50  # 仮値
+        pair = WebDriverWait(driver, timeout).until(_read)
+        current_page, total_page = int(pair[0]), int(pair[1])
+        logging.info("取得した page counter: %s/%s", current_page, total_page)
+        return current_page, total_page
     except Exception as e:
         logging.error(f"ページカウンタ取得失敗: {e}")
         with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
@@ -138,13 +217,12 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
 
         # ビューア表示待ちのタイムアウトは致命的にせず、空リストを返して呼び出し元の処理を継続させる。
         try:
-            WebDriverWait(driver, 12).until(
-                EC.presence_of_element_located((By.ID, "viewer"))
-            )
-
-            WebDriverWait(driver, 12).until_not(
-                EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
-            )
+            kind = wait_for_viewer_ready(driver, timeout=20)
+            logging.info("ビューア準備完了: kind=%s", kind)
+            if kind == "legacy":
+                WebDriverWait(driver, 12).until_not(
+                    EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
+                )
         except (TimeoutException, NoSuchElementException) as e:
             logging.error(f"ビューア表示待ちに失敗（立ち読みをスキップ）: {e!r}")
             save_page_source(driver, idx=0)
@@ -160,8 +238,7 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
             try:
                 logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
                 # 最終ページ判定は待機せず即時チェック（旧実装は毎回最大30秒待っていた）
-                end_els = driver.find_elements(By.ID, "endOfBook")
-                if end_els and end_els[0].is_displayed():
+                if is_end_of_book(driver):
                     logging.info("最終ページを検出 → スクリーンショット終了")
                     break
 

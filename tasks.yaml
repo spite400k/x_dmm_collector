@@ -121,6 +121,9 @@ phases:
       - path: scripts/manual/regenerate_empty_summaries.py
         name: 空の auto_summary / auto_point 再生成
         log: logs/task_run_regenerate_empty_summaries.log
+      - path: scripts/process/backfill_tachiyomi.py
+        name: 立ち読み画像の後埋め（tachiyomi_page_count=0）
+        log: logs/task_run_backfill_tachiyomi.log
       - path: scripts/manual/supabase2storj.py
         name: Supabase → Storj 移行
         log: logs/task_run_supabase2storj.log

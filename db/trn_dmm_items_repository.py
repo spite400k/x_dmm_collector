@@ -39,6 +39,16 @@ def normalize_field(v):
     return None if v in (None, [], "") else v
 
 
+def resolve_tachiyomi_page_count(
+    tachiyomi_url: str | None,
+    uploaded_count: int,
+) -> int | None:
+    """tachiyomi_url があるときだけ取得枚数を返す（無しは NULL=対象外）。"""
+    if not tachiyomi_url:
+        return None
+    return int(uploaded_count)
+
+
 def _insert_dmm_item(
     item: dict,
     tachiyomi_image_paths,
@@ -115,6 +125,7 @@ def _insert_dmm_item(
             image_large_url = item.get("imageURL", {}).get("large")
             image_small_url = item.get("imageURL", {}).get("small")
 
+        tachiyomi_url = item.get("tachiyomi", {}).get("URL")
         data = {
             "content_id": content_id,
             "product_id": item.get("product_id"),
@@ -144,8 +155,11 @@ def _insert_dmm_item(
             "director": normalize_field(iteminfo.get("director")),
             "author": item.get("author"),
             "category_name": item.get("category_name"),
-            "tachiyomi_url": item.get("tachiyomi", {}).get("URL"),
+            "tachiyomi_url": tachiyomi_url,
             "tachiyomi_affiliate_url": item.get("tachiyomi", {}).get("affiliateURL"),
+            "tachiyomi_page_count": resolve_tachiyomi_page_count(
+                tachiyomi_url, len(uploaded_paths)
+            ),
             "auto_comment": ai_content.get("auto_comment", ""),
             "auto_summary": ai_content.get("auto_summary", ""),
             "auto_point": ai_content.get("auto_point", ""),

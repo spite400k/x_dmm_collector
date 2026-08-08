@@ -55,6 +55,29 @@ SLEEP_BETWEEN_BATCH = 5
 # ユーティリティ関数
 # =========================
 
+def normalize_review_count(value) -> int:
+    """DB / API の review_count を 0 以上の int にする（None・不正値は 0）。"""
+    if value is None or value == "":
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def should_skip_selenium_precheck(
+    db_review_count,
+    *,
+    has_saved_summary: bool,
+) -> bool:
+    """update_items 反映後の DB レビュー件数を見て Selenium を省略できるか判定する。
+
+    review_count == 0 かつあらすじ保存済みなら、ページを開いても最終的にスキップされるため
+    Chrome 起動前に打ち切る。件数が増えた日は review_count > 0 になるので再取得する。
+    """
+    return normalize_review_count(db_review_count) == 0 and bool(has_saved_summary)
+
+
 # 既存のあらすじ取得
 def get_saved_summary(content_id):
     result = supabase.table("dmm_ai_review_summaries")\
@@ -153,7 +176,25 @@ def save_ai_summary(summary: dict):
 # 🎯 メイン処理
 # =========================
 
-def process_content(content_id: str, product_url: str, service_code: str, floor_code: str):
+def process_content(
+    content_id: str,
+    product_url: str,
+    service_code: str,
+    floor_code: str,
+    db_review_count=None,
+):
+    # ①' DB事前判定（Chrome 起動前）
+    saved_summary = get_saved_summary(content_id)
+    if should_skip_selenium_precheck(
+        db_review_count,
+        has_saved_summary=bool(saved_summary),
+    ):
+        logging.info(
+            "⏭ DBレビュー0件かつあらすじ保存済 → Seleniumスキップ: %s (review_count=%s)",
+            content_id,
+            db_review_count,
+        )
+        return
 
     driver = create_driver()
 
@@ -166,14 +207,8 @@ def process_content(content_id: str, product_url: str, service_code: str, floor_
         if not reviews:
             logging.info("⚠ レビューなしでもあらすじとAI分析は行う: %s", content_id)
             # return  # レビューなしでもあらすじとAI分析は行うため、ここではreturnしない
-        
-        # logging.info(f"レビュー: {len(reviews)}件")
 
         # ② 変更チェック
-        # logging.info("🤖 レビュー変更チェック中...")
-        # logging.info(f"レビュー件数: {len(reviews)}件")
-        # logging.info(f"content_id: {content_id}")
-        # logging.info(f"レビュー変更チェック結果: {has_no_review_changed(content_id, reviews)}")
         if len(reviews) > 0 and has_no_review_changed(content_id, reviews):
             logging.info("レビュー変更なし → スキップ")
             return
@@ -182,9 +217,8 @@ def process_content(content_id: str, product_url: str, service_code: str, floor_
         logging.info("🤖 rawレビュー保存中...")
         save_raw_reviews(content_id, reviews)
 
-        # ④ あらすじ取得
+        # ④ あらすじ取得（事前取得済みなら再利用）
         logging.info("🤖 あらすじ取得中...")
-        saved_summary = get_saved_summary(content_id)
         if saved_summary:
             logging.info("既存あらすじ使用")
             html_summary = saved_summary
@@ -193,7 +227,6 @@ def process_content(content_id: str, product_url: str, service_code: str, floor_
                 return
         else:
             logging.info("初回あらすじ取得")
-            # save_debug_files(driver, product_url, prefix="summary")
             if service_code == "doujin" and floor_code == "digital_doujin":
                 logging.info("同人誌あらすじ取得")
                 html_summary = scrape_product_details(product_url)
@@ -224,9 +257,6 @@ def process_content(content_id: str, product_url: str, service_code: str, floor_
 
         logging.info(f"AI分析: {insight}")
 
-        # ===============================
-        # ★ ここが新5軸対応部分
-        # ===============================
         # ⑥ 保存整形
         logging.info("💾 AIレビュー保存中...")
         summary = {
@@ -342,8 +372,15 @@ def process_batch(batch_items, batch_index, total):
         service_code = row["service"]
         floor_code = row["floor"]
         product_url = row["item_url"]
+        db_review_count = row.get("review_count")
         logging.info(f"{batch_index}週目 [{i + (batch_index-1) * BATCH_SIZE}/{total}] {content_id} 処理中...")
-        process_content(content_id, product_url, service_code, floor_code)
+        process_content(
+            content_id,
+            product_url,
+            service_code,
+            floor_code,
+            db_review_count=db_review_count,
+        )
 
         time.sleep(0.5)
     logging.info(f"=== ✅ バッチ {batch_index} 完了 ===")
@@ -371,7 +408,7 @@ def main():
             response = (
                 supabase
                 .table("trn_dmm_items")
-                .select("content_id, item_url,service,floor")
+                .select("content_id, item_url, service, floor, review_count")
                 .eq("service", target["service"])
                 .eq("floor", target["floor"])
                 .gte("release_date", release_date) # 31日前の作品から取得

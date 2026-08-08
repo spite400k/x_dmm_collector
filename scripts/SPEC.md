@@ -21,6 +21,7 @@
 | メスガキ加工 | `db.supabase_client_mesugaki.supabase` | `MESUGAKI_SUPABASE_URL`, `MESUGAKI_SUPABASE_SERVICE_ROLE_KEY` 等 |
 | 通常 Postgres | `psycopg2` | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` |
 | メスガキ Postgres | `psycopg2` | `MESUGAKI_DB_*` |
+| BL/TL Postgres | `psycopg2` | `DB2_*`（`SUPABASE_URL2` と同じプロジェクト。DDL 適用用） |
 
 ---
 
@@ -102,15 +103,15 @@
 
 | 種別 | 対象 |
 |------|------|
-| **READ** | `trn_dmm_items` — 直近 31 日・対象 service/floor の `content_id`, `item_url`, `service`, `floor` |
+| **READ** | `trn_dmm_items` — 直近 31 日・対象 service/floor の `content_id`, `item_url`, `service`, `floor`, `review_count` |
 | **READ** | `dmm_raw_reviews` — 既存 `review_id`（差分判定） |
-| **READ** | `dmm_ai_review_summaries` — 既存 `summary_text`（あらすじ再利用） |
+| **READ** | `dmm_ai_review_summaries` — 既存 `summary_text`（あらすじ再利用・事前スキップ判定） |
 | **WRITE** | `dmm_raw_reviews` — UPSERT（`content_id`, `review_id`） |
 | **WRITE** | `dmm_ai_review_summaries` — UPSERT（`content_id`） |
 | **WRITE** | `trn_dmm_score_history` — UPSERT（`content_id`, `snapshot_date`） |
 | **外部 API** | OpenAI、DMM 商品ページ（レビュー・あらすじ、Selenium） |
 
-**処理概要**: 対象作品のレビューを取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。
+**処理概要**: `review_count == 0` かつあらすじ保存済の作品は Selenium を起動せずスキップ。それ以外はレビュー取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。
 
 **`dmm_ai_review_summaries` 更新カラム**: `review_digest`, `content_score`, `emotion_score`, `attraction_score`, `genre_axis1_score`, `genre_axis2_score`, `reader_types`, `warning_points`, `review_count`, `avg_rating`, `summary_text`, `ai_model`, `prompt_version`, `updated_at`
 

@@ -4,6 +4,7 @@
 例:
   .venv\\Scripts\\python.exe scripts/manual/run_sql.py db/DDL/ddl6_safe_generated_at.sql
   .venv\\Scripts\\python.exe scripts/manual/run_sql.py db/DDL/ddl6_safe_generated_at.sql --prefix MESUGAKI_DB
+  .venv\\Scripts\\python.exe scripts/manual/run_sql.py db/DDL/ddl7_tachiyomi_page_count.sql --prefix DB2
 """
 
 from __future__ import annotations
@@ -52,7 +53,7 @@ def main() -> None:
     parser.add_argument(
         "--prefix",
         default="DB",
-        help="接続環境変数プレフィックス（DB / MESUGAKI_DB など）。デフォルト: DB",
+        help="接続環境変数プレフィックス（DB / MESUGAKI_DB / DB2 など）。デフォルト: DB",
     )
     args = parser.parse_args()
 

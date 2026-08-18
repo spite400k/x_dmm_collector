@@ -6,6 +6,7 @@ import re
 import time
 import logging
 from typing import List, Dict
+from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -26,6 +27,10 @@ from utils.screenshot import save_debug_files
 client = OpenAI()
 
 SUMMARY_MAX_CHARS_FOR_AI = 4000
+AGE_GATE_SYNOPSIS_MARKERS = (
+    "アダルトサイトとなります",
+    "18歳未満の方のアクセスは固くお断り",
+)
 
 
 # =========================
@@ -73,6 +78,30 @@ def ensure_driver_alive(driver):
     quit_driver_safe(driver)
     return create_driver()
 
+
+def is_age_check_url(url: str | None) -> bool:
+    """path / host で判定する。rurl クエリに video.dmm が含まれても年齢確認ページとみなす。"""
+    parsed = urlparse(url or "")
+    path = (parsed.path or "").lower()
+    host = (parsed.hostname or "").lower()
+    return "age_check" in path or "age_check" in host
+
+
+def is_video_dmm_host(url: str | None) -> bool:
+    host = (urlparse(url or "").hostname or "").lower()
+    return host == "video.dmm.co.jp" or host.endswith(".video.dmm.co.jp")
+
+
+def is_book_dmm_host(url: str | None) -> bool:
+    host = (urlparse(url or "").hostname or "").lower()
+    return host == "book.dmm.co.jp" or host.endswith(".book.dmm.co.jp")
+
+
+def is_age_gate_synopsis(text: str | None) -> bool:
+    t = text or ""
+    return any(marker in t for marker in AGE_GATE_SYNOPSIS_MARKERS)
+
+
 def apply_age_check_cookie(driver) -> None:
     try:
         driver.add_cookie(
@@ -102,7 +131,7 @@ def handle_safe_mode(driver):
         (By.XPATH, "//input[@type='submit' and (@value='はい' or @name='yes')]"),
     ]
 
-    on_age_check = "age_check" in current_url
+    on_age_check = is_age_check_url(current_url)
     if not on_age_check:
         # 商品ページの「参考になりましたか？ はい」は触らない。
         # 年齢確認モーダル固有のリンクだけを探す。
@@ -135,7 +164,7 @@ def handle_safe_mode(driver):
         return
 
     try:
-        WebDriverWait(driver, 10).until(lambda d: "age_check" not in (d.current_url or ""))
+        WebDriverWait(driver, 10).until(lambda d: not is_age_check_url(d.current_url))
         logging.info("✅ 年齢確認ページ離脱: %s", driver.current_url)
     except Exception:
         logging.warning("⚠ 年齢確認ページ離脱を確認できませんでした: %s", driver.current_url)
@@ -229,16 +258,22 @@ def scrape_doujin_synopsis(driver, product_url: str) -> str:
         except Exception:
             pass
 
+    if is_age_check_url(driver.current_url):
+        logging.warning(
+            "⚠ 年齢確認ページのため同人あらすじ取得を中止: %s", driver.current_url
+        )
+        return ""
+
     soup = BeautifulSoup(driver.page_source, "html.parser")
     synopsis = extract_synopsis_from_soup(soup, base_url or driver.current_url)
-    if synopsis:
+    if synopsis and not is_age_gate_synopsis(synopsis):
         return synopsis
 
     for selector in ("motion.div.productDetail", "div.mg-b20.lh4"):
         el = soup.select_one(selector)
         if el:
             text = el.get_text(separator="\n").strip()
-            if len(text) >= 40:
+            if len(text) >= 40 and not is_age_gate_synopsis(text):
                 return text
     return ""
 
@@ -258,7 +293,7 @@ def _try_video_dmm_synopsis_block(driver) -> str:
     video.dmm（ビデオ videoa 等）: あらすじは <p> ではなく <br> 区切りの div に入っている。
     参考: summary_snos00168_*.html — 「特集」h2 直前の兄弟 div。
     """
-    if "video.dmm.co.jp" not in (driver.current_url or ""):
+    if not is_video_dmm_host(driver.current_url) or is_age_check_url(driver.current_url):
         return ""
     xpaths = (
         "//h2[contains(@class,'font-bold')][normalize-space(.)='特集']/parent::div/preceding-sibling::div[1]",
@@ -271,7 +306,7 @@ def _try_video_dmm_synopsis_block(driver) -> str:
                 continue
             t = _summary_text_content(driver, els[0])
             t = re.sub(r"\s+", " ", t).strip()
-            if len(t) >= 40:
+            if len(t) >= 40 and not is_age_gate_synopsis(t):
                 return t
         except Exception:
             continue
@@ -279,7 +314,7 @@ def _try_video_dmm_synopsis_block(driver) -> str:
     try:
         meta = driver.find_element(By.CSS_SELECTOR, 'meta[name="description"]')
         t = (meta.get_attribute("content") or "").strip()
-        if len(t) >= 40:
+        if len(t) >= 40 and not is_age_gate_synopsis(t):
             return t
     except Exception:
         pass
@@ -292,7 +327,7 @@ def _try_comic_synopsis_block(driver) -> str:
     meta description は約200文字で切れるため、折りたたみ本文 / JSON-LD を優先する。
     """
     current_url = driver.current_url or ""
-    if "book.dmm.co.jp" not in current_url:
+    if not is_book_dmm_host(current_url) or is_age_check_url(current_url):
         return ""
 
     try:
@@ -302,14 +337,14 @@ def _try_comic_synopsis_block(driver) -> str:
         container = toggle.find_element(By.XPATH, "./..")
         for paragraph in container.find_elements(By.TAG_NAME, "p"):
             t = re.sub(r"\s+", " ", _summary_text_content(driver, paragraph)).strip()
-            if len(t) >= 40:
+            if len(t) >= 40 and not is_age_gate_synopsis(t):
                 return t
     except Exception:
         pass
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
     synopsis = extract_synopsis_from_soup(soup, current_url)
-    if synopsis:
+    if synopsis and not is_age_gate_synopsis(synopsis):
         return synopsis
 
     return ""
@@ -318,16 +353,14 @@ def _try_comic_synopsis_block(driver) -> str:
 def scrape_product_summary(product_url: str, driver) -> str:
     try:
         driver.get(product_url)
+        handle_safe_mode(driver)
         wait = WebDriverWait(driver, 15)
 
-        # 年齢確認があれば突破
-        try:
-            yes_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
+        if is_age_check_url(driver.current_url):
+            logging.warning(
+                "⚠ 年齢確認ページのためあらすじ取得を中止: %s", driver.current_url
             )
-            yes_button.click()
-        except:
-            pass
+            return ""
 
         wait.until(
             lambda d: d.find_elements(By.CSS_SELECTOR, 'meta[name="description"]')
@@ -354,6 +387,7 @@ def scrape_product_summary(product_url: str, driver) -> str:
             text = re.sub(r"\s+", " ", text).strip()
             if (
                 len(text) > min_len
+                and not is_age_gate_synopsis(text)
                 and "※この商品" not in text
                 and "特集" not in text
                 and "動作環境" not in text

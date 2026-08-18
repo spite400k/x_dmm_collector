@@ -102,6 +102,52 @@ def is_age_gate_synopsis(text: str | None) -> bool:
     return any(marker in t for marker in AGE_GATE_SYNOPSIS_MARKERS)
 
 
+def usable_saved_summary(text: str | None) -> str | None:
+    """再利用できるあらすじだけ返す。空・年齢確認定型文は未取得扱い。"""
+    t = (text or "").strip()
+    if not t or is_age_gate_synopsis(t):
+        return None
+    return t
+
+
+def _format_genres(genres) -> str:
+    if genres is None:
+        return ""
+    if isinstance(genres, str):
+        return genres.strip()
+    names = []
+    for g in genres:
+        if isinstance(g, str) and g.strip():
+            names.append(g.strip())
+        elif isinstance(g, dict):
+            name = str(g.get("name") or "").strip()
+            if name:
+                names.append(name)
+    return " / ".join(names)
+
+
+def build_fallback_synopsis(
+    *,
+    auto_summary: str | None = None,
+    title: str | None = None,
+    genres=None,
+) -> str | None:
+    """スクレイプ失敗時の入力。auto_summary・タイトル・ジャンルを結合する。"""
+    parts = []
+    t = (title or "").strip()
+    if t:
+        parts.append(f"タイトル: {t}")
+    genre_text = _format_genres(genres)
+    if genre_text:
+        parts.append(f"ジャンル: {genre_text}")
+    summary = usable_saved_summary(auto_summary)
+    if summary:
+        parts.append(summary)
+    if not parts:
+        return None
+    return "\n".join(parts)
+
+
 def apply_age_check_cookie(driver) -> None:
     try:
         driver.add_cookie(

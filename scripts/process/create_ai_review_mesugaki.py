@@ -32,6 +32,7 @@ import httpx
 from db.supabase_client_mesugaki import supabase
 from openai_api.config import OPENAI_MODEL
 from utils.content_generator_review import (
+    AGE_GATE_SYNOPSIS_MARKERS,
     create_driver,
     ensure_driver_alive,
     quit_driver_safe,
@@ -39,6 +40,8 @@ from utils.content_generator_review import (
     scrape_product_summary,
     scrape_review_comments,
     generate_review_insights,
+    usable_saved_summary,
+    build_fallback_synopsis,
 )
 from selenium.common.exceptions import InvalidSessionIdException
 from utils.logger import setup_logger
@@ -226,6 +229,9 @@ def process_content(
     service_code: str,
     floor_code: str,
     driver,
+    fallback_summary=None,
+    title=None,
+    genres=None,
 ):
     try:
         logging.info("🔍 処理開始: %s (URL: %s)", content_id, product_url)
@@ -239,7 +245,8 @@ def process_content(
                 "⚠ レビューなしでもあらすじとAI分析は行う: %s", content_id
             )
 
-        if len(reviews) > 0 and has_no_review_changed(content_id, reviews):
+        saved_summary = usable_saved_summary(get_saved_summary(content_id))
+        if len(reviews) > 0 and saved_summary and has_no_review_changed(content_id, reviews):
             logging.info("レビュー変更なし → スキップ")
             return
 
@@ -247,7 +254,6 @@ def process_content(
         save_raw_reviews(content_id, reviews)
 
         logging.info("🤖 あらすじ取得中...")
-        saved_summary = get_saved_summary(content_id)
         if saved_summary:
             logging.info("既存あらすじ使用")
             html_summary = saved_summary
@@ -262,7 +268,21 @@ def process_content(
             else:
                 logging.info("動画あらすじ取得")
                 html_summary = scrape_product_summary(product_url, driver)
+            html_summary = usable_saved_summary(html_summary)
+            if not html_summary:
+                html_summary = build_fallback_synopsis(
+                    auto_summary=fallback_summary,
+                    title=title,
+                    genres=genres,
+                )
+                if html_summary:
+                    logging.info(
+                        "あらすじスクレイプ失敗 → auto_summary / タイトル / ジャンルを使用"
+                    )
             logging.info("初回あらすじ取得: %s", html_summary)
+            if not html_summary:
+                logging.warning("⚠ あらすじなし → AI生成をスキップ: %s", content_id)
+                return
 
         logging.info("🤖 AIレビュー生成中...")
 
@@ -355,6 +375,9 @@ def _process_item_with_retry(
     product_url: str,
     service_code: str,
     floor_code: str,
+    fallback_summary=None,
+    title=None,
+    genres=None,
 ):
     """セッション切れ時は driver を再作成して1回リトライする。"""
     for attempt in range(2):
@@ -366,7 +389,14 @@ def _process_item_with_retry(
                 )
             else:
                 process_content(
-                    content_id, product_url, service_code, floor_code, driver
+                    content_id,
+                    product_url,
+                    service_code,
+                    floor_code,
+                    driver,
+                    fallback_summary=fallback_summary,
+                    title=title,
+                    genres=genres,
                 )
             return driver
         except InvalidSessionIdException:
@@ -410,6 +440,9 @@ def process_batch(batch_items, batch_index, total, raw_only: bool = False):
                 product_url,
                 service_code,
                 floor_code,
+                fallback_summary=row.get("auto_summary"),
+                title=row.get("title"),
+                genres=row.get("genres"),
             )
             logging.info(
                 "⏱ %s 処理時間: %.1f秒",
@@ -431,7 +464,7 @@ def fetch_all_items():
         while True:
             response = execute_with_retry(
                 lambda target=target, start=start: supabase.table("trn_dmm_items")
-                .select("content_id, item_url,service,floor")
+                .select("content_id, item_url,service,floor,auto_summary,title,genres")
                 .eq("service", target["service"])
                 .eq("floor", target["floor"])
                 .order("created_at")
@@ -458,6 +491,48 @@ def fetch_all_items():
     return all_items
 
 
+def fetch_age_gate_items(limit: int | None = None):
+    summaries = []
+    start = 0
+    page = 1000
+    or_filter = ",".join(
+        f"summary_text.ilike.%{marker}%" for marker in AGE_GATE_SYNOPSIS_MARKERS
+    )
+    while True:
+        response = execute_with_retry(
+            lambda start=start: supabase.table("dmm_ai_review_summaries")
+            .select("content_id")
+            .or_(or_filter)
+            .range(start, start + page - 1)
+        )
+        data = response.data or []
+        if not data:
+            break
+        summaries.extend(data)
+        start += page
+        if len(data) < page:
+            break
+
+    content_ids = [row["content_id"] for row in summaries]
+    if limit is not None:
+        content_ids = content_ids[:limit]
+    logging.info("年齢確認あらすじ件数: %s", len(content_ids))
+    if not content_ids:
+        return []
+
+    items = []
+    chunk_size = 50
+    for i in range(0, len(content_ids), chunk_size):
+        chunk = content_ids[i : i + chunk_size]
+        response = execute_with_retry(
+            lambda chunk=chunk: supabase.table("trn_dmm_items")
+            .select("content_id, item_url,service,floor,auto_summary,title,genres")
+            .in_("content_id", chunk)
+        )
+        items.extend(response.data or [])
+    return items
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="メスガキ向け AI レビュー / 生レビュー保存バッチ",
@@ -467,6 +542,13 @@ def main():
         action="store_true",
         help="生レビュー（dmm_raw_reviews）の保存のみ実行（AI・あらすじなし）",
     )
+    parser.add_argument(
+        "--regenerate-age-gate",
+        action="store_true",
+        help="年齢確認ページの定型文があらすじとして保存された作品だけ再生成",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="対象 content_id を表示して終了")
+    parser.add_argument("--limit", type=int, default=None, help="処理件数の上限")
     args = parser.parse_args()
     raw_only = args.raw_only
 
@@ -484,7 +566,12 @@ def main():
             sys.exit(1)
 
     try:
-        all_items = fetch_all_items()
+        if args.regenerate_age_gate:
+            all_items = fetch_age_gate_items(limit=args.limit)
+        else:
+            all_items = fetch_all_items()
+            if args.limit is not None:
+                all_items = all_items[: args.limit]
     except httpx.ConnectError as exc:
         logging.error(
             "Supabase への接続に失敗しました。ネットワーク/DNS を確認してください: %s",
@@ -495,6 +582,12 @@ def main():
     if not all_items:
         logging.info("対象データが存在しません。処理を終了します。")
         sys.exit(0)
+
+    if args.dry_run:
+        preview = [row["content_id"] for row in all_items]
+        logging.info("dry-run: %s 件 %s", len(preview), preview)
+        print("\n".join(preview))
+        return
 
     total = len(all_items)
     mode_label = "生レビュー保存" if raw_only else "AIレビュー更新"

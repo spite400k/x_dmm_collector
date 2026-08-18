@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import argparse
 import json
 import math
 import os
@@ -15,10 +16,13 @@ from db.supabase_client import supabase
 from openai_api.config import OPENAI_MODEL
 from openai_api.content_generator import scrape_product_details
 from utils.content_generator_review import (
+    AGE_GATE_SYNOPSIS_MARKERS,
     create_driver,
     scrape_review_comments,
     scrape_product_summary,
-    generate_review_insights
+    generate_review_insights,
+    usable_saved_summary,
+    build_fallback_synopsis,
 )
 from utils.logger import setup_logger
 import hashlib
@@ -182,9 +186,12 @@ def process_content(
     service_code: str,
     floor_code: str,
     db_review_count=None,
+    fallback_summary=None,
+    title=None,
+    genres=None,
 ):
     # ①' DB事前判定（Chrome 起動前）
-    saved_summary = get_saved_summary(content_id)
+    saved_summary = usable_saved_summary(get_saved_summary(content_id))
     if should_skip_selenium_precheck(
         db_review_count,
         has_saved_summary=bool(saved_summary),
@@ -208,8 +215,8 @@ def process_content(
             logging.info("⚠ レビューなしでもあらすじとAI分析は行う: %s", content_id)
             # return  # レビューなしでもあらすじとAI分析は行うため、ここではreturnしない
 
-        # ② 変更チェック
-        if len(reviews) > 0 and has_no_review_changed(content_id, reviews):
+        # ② 変更チェック（誤あらすじは未保存扱いなので再生成する）
+        if len(reviews) > 0 and saved_summary and has_no_review_changed(content_id, reviews):
             logging.info("レビュー変更なし → スキップ")
             return
 
@@ -233,7 +240,21 @@ def process_content(
             else:
                 logging.info("動画あらすじ取得")
                 html_summary = scrape_product_summary(product_url, driver)
+            html_summary = usable_saved_summary(html_summary)
+            if not html_summary:
+                html_summary = build_fallback_synopsis(
+                    auto_summary=fallback_summary,
+                    title=title,
+                    genres=genres,
+                )
+                if html_summary:
+                    logging.info(
+                        "あらすじスクレイプ失敗 → auto_summary / タイトル / ジャンルを使用"
+                    )
             logging.info(f"初回あらすじ取得: {html_summary}")
+            if not html_summary:
+                logging.warning("⚠ あらすじなし → AI生成をスキップ: %s", content_id)
+                return
 
         # ⑤ AI分析
         logging.info("🤖 AIレビュー生成中...")
@@ -365,6 +386,108 @@ def save_weekly_score(summary: dict):
 # ----------------------------------------------------
 # バッチ処理・メイン
 # ----------------------------------------------------
+ITEM_SELECT = "content_id, item_url, service, floor, review_count, auto_summary, title, genres"
+
+
+def _age_gate_or_filter() -> str:
+    return ",".join(
+        f"summary_text.ilike.%{marker}%" for marker in AGE_GATE_SYNOPSIS_MARKERS
+    )
+
+
+def fetch_items_by_content_ids(content_ids: list[str]) -> list[dict]:
+    items = []
+    chunk_size = 50
+    for i in range(0, len(content_ids), chunk_size):
+        chunk = content_ids[i : i + chunk_size]
+        response = (
+            supabase.table("trn_dmm_items")
+            .select(ITEM_SELECT)
+            .in_("content_id", chunk)
+            .execute()
+        )
+        items.extend(response.data or [])
+    found = {row["content_id"] for row in items}
+    missing = [cid for cid in content_ids if cid not in found]
+    for cid in missing:
+        logging.warning("⚠ trn_dmm_items に無いためスキップ: %s", cid)
+    return items
+
+
+def fetch_age_gate_items(limit: int | None = None) -> list[dict]:
+    """年齢確認定型文が summary_text に残っている作品を取得する。"""
+    summaries = []
+    start = 0
+    page = 1000
+    or_filter = _age_gate_or_filter()
+    while True:
+        response = (
+            supabase.table("dmm_ai_review_summaries")
+            .select("content_id")
+            .or_(or_filter)
+            .range(start, start + page - 1)
+            .execute()
+        )
+        data = response.data or []
+        if not data:
+            break
+        summaries.extend(data)
+        start += page
+        if len(data) < page:
+            break
+
+    content_ids = [row["content_id"] for row in summaries]
+    if limit is not None:
+        content_ids = content_ids[:limit]
+    logging.info("年齢確認あらすじ件数: %s", len(content_ids))
+    return fetch_items_by_content_ids(content_ids)
+
+
+def fetch_item_by_content_id(content_id: str) -> list[dict]:
+    response = (
+        supabase.table("trn_dmm_items")
+        .select(ITEM_SELECT)
+        .eq("content_id", content_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data or []
+
+
+def fetch_recent_items() -> list[dict]:
+    all_items = []
+    page = 1000
+    release_date = (date.today() - timedelta(days=31)).isoformat()
+
+    for target in targets:
+        start = 0
+        while True:
+            response = (
+                supabase.table("trn_dmm_items")
+                .select(ITEM_SELECT)
+                .eq("service", target["service"])
+                .eq("floor", target["floor"])
+                .gte("release_date", release_date)
+                .order("created_at")
+                .range(start, start + page - 1)
+                .execute()
+            )
+            data = response.data or []
+            logging.info(
+                "%s %s 取得件数: %s 件 (start=%s)",
+                target["service"],
+                target["floor"],
+                len(data),
+                start,
+            )
+            if not data:
+                break
+            all_items.extend(data)
+            start += page
+        logging.info("取得済み件数: %s 件", len(all_items))
+    return all_items
+
+
 def process_batch(batch_items, batch_index, total):
     logging.info(f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) ===")
     for i, row in enumerate(batch_items, start=1):
@@ -380,6 +503,9 @@ def process_batch(batch_items, batch_index, total):
             service_code,
             floor_code,
             db_review_count=db_review_count,
+            fallback_summary=row.get("auto_summary"),
+            title=row.get("title"),
+            genres=row.get("genres"),
         )
 
         time.sleep(0.5)
@@ -389,62 +515,45 @@ def process_batch(batch_items, batch_index, total):
 # ----------------------------------------------------
 # メイン
 # ----------------------------------------------------
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="作品 AI レビュー生成")
+    parser.add_argument("--content-id", help="指定 content_id のみ再生成")
+    parser.add_argument(
+        "--regenerate-age-gate",
+        action="store_true",
+        help="年齢確認ページの定型文があらすじとして保存された作品だけ再生成",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="対象 content_id を表示して終了")
+    parser.add_argument("--limit", type=int, default=None, help="処理件数の上限")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
     logging.info("=== trn_dmm_items のAPI更新を開始 ===")
 
-    # -----------------------------
-    # 全件取得（1000件制限対策）
-    # -----------------------------
-    all_items = []
-    limit = 1000
-    # start = 0
-
-    release_date = (date.today() - timedelta(days=31)).isoformat()
-
-    for target in targets:
-        start=0
-        while True:
-
-            response = (
-                supabase
-                .table("trn_dmm_items")
-                .select("content_id, item_url, service, floor, review_count")
-                .eq("service", target["service"])
-                .eq("floor", target["floor"])
-                .gte("release_date", release_date) # 31日前の作品から取得
-                #  .eq("content_id", "k568agotp12163")
-                # .in_("content_id", ["d_7323132","dejo006","d_730232","d_723897","d_723141","b915awnmg04125","d_692522","k568agotp12114","k924aruuu14637","pfes00115","simw005","k740aplst08540","d_607638","deas044","deas044","orecz448","orecz469","d_708748","d_738130","d_671925","s788ahmlj00067","s011akamj02815","orecz469","orecz482","d_603074","simw005","d_727814","d_603074","d_738312","d_672378","b472abnen03917","d_744379","b472abnen03947","d_740374"])
-                .order("created_at")
-                .range(start, start + limit - 1)
-                .execute()
-            )
-
-            data = response.data or []
-            logging.info(
-                f"{target['service']} {target['floor']} 取得件数: {len(data)} 件 (start={start})"
-            )
-
-            if not data:
-                break
-
-            all_items.extend(data)
-            start += limit
-
-            # if start >= limit:
-            #     break
-
-        logging.info(f"取得済み件数: {len(all_items)} 件")
+    if args.content_id:
+        all_items = fetch_item_by_content_id(args.content_id)
+    elif args.regenerate_age_gate:
+        all_items = fetch_age_gate_items(limit=args.limit)
+    else:
+        all_items = fetch_recent_items()
+        if args.limit is not None:
+            all_items = all_items[: args.limit]
 
     if not all_items:
         logging.info("対象データが存在しません。処理を終了します。")
         sys.exit(0)
 
+    if args.dry_run:
+        preview = [row["content_id"] for row in all_items]
+        logging.info("dry-run: %s 件 %s", len(preview), preview)
+        print("\n".join(preview))
+        return
+
     total = len(all_items)
     logging.info(f"全 {total} 件の作品を更新対象として処理します。")
 
-    # -----------------------------
-    # バッチ処理
-    # -----------------------------
     update_count = 0
 
     for i in range(0, total, BATCH_SIZE):

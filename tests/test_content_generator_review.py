@@ -147,6 +147,36 @@ def test_is_age_gate_synopsis(review_module):
     assert review_module.is_age_gate_synopsis("") is False
 
 
+def test_usable_saved_summary(review_module):
+    gate = "ここから先は、アダルト商品を扱うアダルトサイトとなります。18歳未満の方のアクセスは固くお断りします。"
+    assert review_module.usable_saved_summary(gate) is None
+    assert review_module.usable_saved_summary("  ") is None
+    assert review_module.usable_saved_summary(None) is None
+    assert review_module.usable_saved_summary("作品固有のあらすじ") == "作品固有のあらすじ"
+
+
+def test_format_genres_and_build_fallback_synopsis(review_module):
+    assert review_module._format_genres(None) == ""
+    assert review_module._format_genres("") == ""
+    assert review_module._format_genres("素人 / カップル") == "素人 / カップル"
+    assert review_module._format_genres(["素人", " ハイビジョン ", ""]) == "素人 / ハイビジョン"
+    assert review_module._format_genres([{"name": "フェチ"}, {"name": ""}]) == "フェチ"
+    assert review_module.build_fallback_synopsis() is None
+    assert review_module.build_fallback_synopsis(auto_summary="  ") is None
+    gate = "ここから先は、アダルト商品を扱うアダルトサイトとなります。18歳未満の方のアクセスは固くお断りします。"
+    combined = review_module.build_fallback_synopsis(
+        auto_summary="交際2年の素人が初めてカメラの前で。",
+        title="みな",
+        genres=["素人配信", "ハメ撮り"],
+    )
+    assert "タイトル: みな" in combined
+    assert "ジャンル: 素人配信 / ハメ撮り" in combined
+    assert "交際2年の素人" in combined
+    title_only = review_module.build_fallback_synopsis(title="みな", genres=["素人"])
+    assert title_only == "タイトル: みな\nジャンル: 素人"
+    assert review_module.build_fallback_synopsis(auto_summary=gate, title="みな") == "タイトル: みな"
+
+
 def test_try_video_dmm_synopsis_rejects_age_check_rurl(review_module):
     driver = MagicMock()
     driver.current_url = (

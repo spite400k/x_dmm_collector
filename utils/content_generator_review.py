@@ -73,22 +73,49 @@ def ensure_driver_alive(driver):
     quit_driver_safe(driver)
     return create_driver()
 
+def apply_age_check_cookie(driver) -> None:
+    try:
+        driver.add_cookie(
+            {
+                "name": "age_check_done",
+                "value": "1",
+                "path": "/",
+                "domain": ".dmm.co.jp",
+            }
+        )
+    except Exception:
+        logging.debug("age_check_done cookie 設定をスキップ", exc_info=True)
+
+
 def handle_safe_mode(driver):
     current_url = driver.current_url or ""
     logging.info("現在URL: %s", current_url)
     logging.info("title: %s", driver.title)
 
-    # 通常ページは何もしない
-    if "age_check" not in current_url:
-        return
-
     selectors = [
+        (By.XPATH, "//a[contains(normalize-space(.),'18歳以上なので進む')]"),
+        (By.XPATH, "//a[contains(@href,'declared=yes')]"),
         (By.XPATH, "//button[.//span[normalize-space(text())='はい']]"),
         (By.XPATH, "//button[normalize-space(text())='はい']"),
         (By.XPATH, "//a[normalize-space(text())='はい']"),
         (By.LINK_TEXT, "はい"),
         (By.XPATH, "//input[@type='submit' and (@value='はい' or @name='yes')]"),
     ]
+
+    on_age_check = "age_check" in current_url
+    if not on_age_check:
+        # 商品ページの「参考になりましたか？ はい」は触らない。
+        # 年齢確認モーダル固有のリンクだけを探す。
+        try:
+            age_only = selectors[:2]
+            for by, selector in age_only:
+                if driver.find_elements(by, selector):
+                    on_age_check = True
+                    break
+        except Exception:
+            pass
+        if not on_age_check:
+            return
 
     clicked = False
     for by, selector in selectors:
@@ -112,6 +139,8 @@ def handle_safe_mode(driver):
         logging.info("✅ 年齢確認ページ離脱: %s", driver.current_url)
     except Exception:
         logging.warning("⚠ 年齢確認ページ離脱を確認できませんでした: %s", driver.current_url)
+
+    apply_age_check_cookie(driver)
 
 
         
@@ -153,13 +182,8 @@ def scrape_review_comments(product_url: str, driver, service: str, floor: str, m
 
         # video / comic: Cookie 用に video.dmm 経由
         driver.get("https://video.dmm.co.jp/")
-        try:
-            yes_button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.LINK_TEXT, "はい"))
-            )
-            yes_button.click()
-        except Exception:
-            pass
+        handle_safe_mode(driver)
+        apply_age_check_cookie(driver)
 
         driver.get(review_url)
         handle_safe_mode(driver)

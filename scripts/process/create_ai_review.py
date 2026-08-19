@@ -443,6 +443,34 @@ def fetch_age_gate_items(limit: int | None = None) -> list[dict]:
     return fetch_items_by_content_ids(content_ids)
 
 
+def fetch_empty_summary_items(limit: int | None = None) -> list[dict]:
+    """あらすじが空のまま AI レビューされた作品を取得する。"""
+    summaries = []
+    start = 0
+    page = 1000
+    while True:
+        response = (
+            supabase.table("dmm_ai_review_summaries")
+            .select("content_id")
+            .or_("summary_text.eq.,summary_text.is.null")
+            .range(start, start + page - 1)
+            .execute()
+        )
+        data = response.data or []
+        if not data:
+            break
+        summaries.extend(data)
+        start += page
+        if len(data) < page:
+            break
+
+    content_ids = [row["content_id"] for row in summaries]
+    if limit is not None:
+        content_ids = content_ids[:limit]
+    logging.info("空あらすじ件数: %s", len(content_ids))
+    return fetch_items_by_content_ids(content_ids)
+
+
 def fetch_item_by_content_id(content_id: str) -> list[dict]:
     response = (
         supabase.table("trn_dmm_items")
@@ -523,6 +551,11 @@ def parse_args(argv=None):
         action="store_true",
         help="年齢確認ページの定型文があらすじとして保存された作品だけ再生成",
     )
+    parser.add_argument(
+        "--regenerate-empty-summary",
+        action="store_true",
+        help="あらすじが空のまま保存された作品だけ再生成",
+    )
     parser.add_argument("--dry-run", action="store_true", help="対象 content_id を表示して終了")
     parser.add_argument("--limit", type=int, default=None, help="処理件数の上限")
     return parser.parse_args(argv)
@@ -536,6 +569,8 @@ def main(argv=None):
         all_items = fetch_item_by_content_id(args.content_id)
     elif args.regenerate_age_gate:
         all_items = fetch_age_gate_items(limit=args.limit)
+    elif args.regenerate_empty_summary:
+        all_items = fetch_empty_summary_items(limit=args.limit)
     else:
         all_items = fetch_recent_items()
         if args.limit is not None:

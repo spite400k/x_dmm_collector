@@ -154,6 +154,7 @@ class TestUpdateDmmItemSafeFlag:
 class TestProcessBatchProgress:
     def test_logs_global_index_across_batches(self, update_items, caplog):
         update_items.fetch_item_by_content_id = MagicMock(return_value=None)
+        update_items.record_api_result = MagicMock()
         batch_items = [{"content_id": "a"}, {"content_id": "b"}]
         with patch.object(update_items.time, "sleep"), caplog.at_level("INFO"):
             update_items.process_batch(batch_items, batch_index=2, total=3466, range_start=100)
@@ -163,9 +164,12 @@ class TestProcessBatchProgress:
         assert any("[102/3466] b 処理中..." in m for m in messages)
         assert not any("[1/3466]" in m for m in messages)
         assert not any("[2/3466]" in m for m in messages)
+        assert update_items.record_api_result.call_count == 2
+        assert update_items.record_api_result.call_args_list[0].kwargs["ok"] is False
 
     def test_passes_service_floor_to_fetch(self, update_items):
         update_items.fetch_item_by_content_id = MagicMock(return_value=None)
+        update_items.record_api_result = MagicMock()
         batch_items = [
             {"content_id": "13dsvr01798", "service": "digital", "floor": "videoa"}
         ]
@@ -174,6 +178,17 @@ class TestProcessBatchProgress:
 
         update_items.fetch_item_by_content_id.assert_called_once_with(
             "13dsvr01798", service="digital", floor="videoa"
+        )
+
+    def test_records_ok_when_item_fetched(self, update_items):
+        update_items.fetch_item_by_content_id = MagicMock(return_value={"title": "x"})
+        update_items.update_dmm_item = MagicMock()
+        update_items.record_api_result = MagicMock()
+        row = {"content_id": "ok1", "auto_summary": "s", "auto_point": "p", "safe_generated_at": None}
+        with patch.object(update_items.time, "sleep"):
+            update_items.process_batch([row], batch_index=1, total=1, range_start=0)
+        update_items.record_api_result.assert_called_once_with(
+            "ok1", ok=True, current_state=row
         )
 
 
@@ -220,3 +235,193 @@ class TestFetchItemByContentId:
         ), caplog.at_level("ERROR"):
             assert update_items.fetch_item_by_content_id("bad") is None
         assert any("DMM API呼び出し失敗" in r.message for r in caplog.records)
+
+
+class TestFetchPaginatedRows:
+    def test_stops_on_empty_and_accumulates(self, update_items):
+        page1 = MagicMock(data=[{"content_id": "a"}])
+        page2 = MagicMock(data=[])
+        table = MagicMock()
+        table.select.return_value.order.return_value.range.return_value.execute.side_effect = [
+            page1,
+            page2,
+        ]
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+
+        rows = update_items.fetch_paginated_rows("trn_dmm_items", "content_id")
+        assert rows == [{"content_id": "a"}]
+        assert table.select.return_value.order.return_value.range.call_count == 2
+
+    def test_treats_none_data_as_empty(self, update_items):
+        table = MagicMock()
+        table.select.return_value.order.return_value.range.return_value.execute.return_value = (
+            MagicMock(data=None)
+        )
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        assert update_items.fetch_paginated_rows("t", "c") == []
+
+
+class TestRecordApiResult:
+    def test_upserts_success_payload(self, update_items):
+        table = MagicMock()
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        table.upsert.return_value.execute.return_value = MagicMock()
+        now = __import__("datetime").datetime(2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc)
+
+        update_items.record_api_result("cid1", ok=True, now=now)
+
+        payload = table.upsert.call_args[0][0]
+        assert payload["content_id"] == "cid1"
+        assert payload["miss_count"] == 0
+        assert payload["skip_until"] is None
+        assert table.upsert.call_args[1]["on_conflict"] == "content_id"
+
+    def test_upserts_miss_payload(self, update_items):
+        table = MagicMock()
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        table.upsert.return_value.execute.return_value = MagicMock()
+        now = __import__("datetime").datetime(2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc)
+
+        update_items.record_api_result(
+            "cid2", ok=False, current_state={"miss_count": 2}, now=now
+        )
+        payload = table.upsert.call_args[0][0]
+        assert payload["miss_count"] == 3
+        assert payload["skip_until"]
+
+    def test_logs_on_upsert_error(self, update_items, caplog):
+        table = MagicMock()
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        table.upsert.return_value.execute.side_effect = RuntimeError("db")
+        with caplog.at_level("ERROR"):
+            update_items.record_api_result("cid3", ok=True)
+        assert any("API状態の保存失敗" in r.message for r in caplog.records)
+
+
+class TestParseArgsAndMain:
+    def test_parse_args_defaults_to_daily(self, update_items):
+        args = update_items.parse_args([])
+        assert args.mode == "daily"
+        assert args.retry_skipped is False
+
+    def test_main_filters_daily_and_processes(self, update_items, caplog):
+        update_items.fetch_paginated_rows = MagicMock(
+            side_effect=[
+                [
+                    {
+                        "content_id": "old",
+                        "release_date": "2020-01-01",
+                        "campaign": None,
+                    },
+                    {
+                        "content_id": "new",
+                        "release_date": "2026-08-01",
+                        "campaign": None,
+                    },
+                ],
+                [],
+            ]
+        )
+        update_items.process_batch = MagicMock()
+        today = __import__("datetime").date(2026, 8, 19)
+        now = __import__("datetime").datetime(
+            2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        with patch.object(update_items.time, "sleep"), caplog.at_level("INFO"):
+            update_items.main([], today=today, now=now)
+
+        processed = update_items.process_batch.call_args[0][0]
+        assert [r["content_id"] for r in processed] == ["new"]
+        assert any("更新対象は 1 件" in r.message for r in caplog.records)
+
+    def test_main_continues_if_api_state_missing(self, update_items, caplog):
+        def fetch(table, columns):
+            if table == update_items.API_STATE_TABLE:
+                raise RuntimeError("relation does not exist")
+            return [
+                {
+                    "content_id": "new",
+                    "release_date": "2026-08-01",
+                    "campaign": None,
+                }
+            ]
+
+        update_items.fetch_paginated_rows = MagicMock(side_effect=fetch)
+        update_items.process_batch = MagicMock()
+        today = __import__("datetime").date(2026, 8, 19)
+        now = __import__("datetime").datetime(
+            2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        with patch.object(update_items.time, "sleep"), caplog.at_level("WARNING"):
+            update_items.main([], today=today, now=now)
+        update_items.process_batch.assert_called_once()
+        assert any("API状態を取得できませんでした" in r.message for r in caplog.records)
+
+    def test_main_exits_when_no_targets(self, update_items):
+        update_items.fetch_paginated_rows = MagicMock(side_effect=[[], []])
+        update_items.process_batch = MagicMock()
+        today = __import__("datetime").date(2026, 8, 19)
+        now = __import__("datetime").datetime(
+            2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        with pytest.raises(SystemExit) as exc:
+            update_items.main(["--mode", "weekly"], today=today, now=now)
+        assert exc.value.code == 0
+        update_items.process_batch.assert_not_called()
+
+    def test_main_content_id_logs_and_selects(self, update_items, caplog):
+        update_items.fetch_paginated_rows = MagicMock(
+            side_effect=[
+                [
+                    {
+                        "content_id": "old",
+                        "release_date": "2020-01-01",
+                        "campaign": None,
+                        "skip_until": "2026-09-18T00:00:00+00:00",
+                    }
+                ],
+                [
+                    {
+                        "content_id": "old",
+                        "miss_count": 3,
+                        "skip_until": "2026-09-18T00:00:00+00:00",
+                    }
+                ],
+            ]
+        )
+        update_items.process_batch = MagicMock()
+        today = __import__("datetime").date(2026, 8, 19)
+        now = __import__("datetime").datetime(
+            2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        with patch.object(update_items.time, "sleep"), caplog.at_level("INFO"):
+            update_items.main(["--content-id", "old"], today=today, now=now)
+        processed = update_items.process_batch.call_args[0][0]
+        assert processed[0]["content_id"] == "old"
+        assert any("content_id 指定" in r.message for r in caplog.records)
+
+    def test_main_sleeps_between_batches(self, update_items):
+        update_items.BATCH_SIZE = 1
+        update_items.fetch_paginated_rows = MagicMock(
+            side_effect=[
+                [
+                    {"content_id": "a", "release_date": "2026-08-01", "campaign": None},
+                    {"content_id": "b", "release_date": "2026-08-01", "campaign": None},
+                ],
+                [],
+            ]
+        )
+        update_items.process_batch = MagicMock()
+        today = __import__("datetime").date(2026, 8, 19)
+        now = __import__("datetime").datetime(
+            2026, 8, 19, 8, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        with patch.object(update_items.time, "sleep") as sleep_mock:
+            update_items.main(["--mode", "all"], today=today, now=now)
+        assert update_items.process_batch.call_count == 2
+        sleep_mock.assert_called()

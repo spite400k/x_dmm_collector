@@ -93,6 +93,24 @@ phases:
         name: メスガキ週次ランキング
         log: logs/task_run_create_weekly_rankings_mesugaki.log
 
+  process_main_weekly:
+    schedule: weekly
+    description: 通常系統のカタログ遅延更新（60日より古くキャンペーンなし）
+    scripts:
+      - path: scripts/process/update_items.py
+        args: ["--mode", "weekly"]
+        name: アイテム情報の週次更新（旧作・キャンペーンなし）
+        log: logs/task_run_update_items_weekly.log
+
+  process_mesugaki_weekly:
+    schedule: weekly
+    description: メスガキ系統のカタログ遅延更新（60日より古くキャンペーンなし）
+    scripts:
+      - path: scripts/process/update_mesugaki.py
+        args: ["--mode", "weekly"]
+        name: メスガキ情報の週次更新（旧作・キャンペーンなし）
+        log: logs/task_run_update_mesugaki_weekly.log
+
   manual:
     schedule: manual
     description: 必要時のみ手動実行

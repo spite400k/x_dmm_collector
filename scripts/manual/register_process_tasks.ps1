@@ -9,7 +9,9 @@ if (-not (Test-Path (Join-Path $base 'run_process_main.bat'))) {
 $tasks = @(
   @{ Name = 'x-dmm-collector-process-main';     Bat = 'run_process_main.bat';     At = '01:00' },
   @{ Name = 'x-dmm-collector-process-actress';  Bat = 'run_process_actress.bat';  At = '02:00' },
-  @{ Name = 'x-dmm-collector-process-mesugaki'; Bat = 'run_process_mesugaki.bat'; At = '03:00' }
+  @{ Name = 'x-dmm-collector-process-mesugaki'; Bat = 'run_process_mesugaki.bat'; At = '03:00' },
+  @{ Name = 'x-dmm-collector-process-main-weekly';     Bat = 'run_process_main_weekly.bat';     At = '12:00'; Weekly = $true },
+  @{ Name = 'x-dmm-collector-process-mesugaki-weekly'; Bat = 'run_process_mesugaki_weekly.bat'; At = '13:00'; Weekly = $true }
 )
 
 $settings = New-ScheduledTaskSettingsSet `
@@ -28,7 +30,11 @@ foreach ($t in $tasks) {
   $bat = Join-Path $base $t.Bat
   if (-not (Test-Path $bat)) { throw "missing: $bat" }
   $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $base
-  $trigger = New-ScheduledTaskTrigger -Daily -At $t.At
+  if ($t.Weekly) {
+    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $t.At
+  } else {
+    $trigger = New-ScheduledTaskTrigger -Daily -At $t.At
+  }
   Register-ScheduledTask `
     -TaskName $t.Name `
     -TaskPath '\self\' `

@@ -76,6 +76,8 @@ python run.py --phase process              # 全系統直列（互換）
 python run.py --phase process_main         # 通常系統のみ
 python run.py --phase process_actress      # 女優系統のみ
 python run.py --phase process_mesugaki     # メスガキ系統のみ
+python run.py --phase process_main_weekly  # 通常系統の旧作更新（週次）
+python run.py --phase process_mesugaki_weekly  # メスガキ系統の旧作更新（週次）
 python run.py --phase manual
 python run.py --phase all                  # collect + process
 
@@ -98,6 +100,8 @@ python run.py --phase all --continue-on-error
 | [`run_process_main.bat`](run_process_main.bat) | 加工・通常系統 3 本 | 定期（並列推奨） |
 | [`run_process_actress.bat`](run_process_actress.bat) | 加工・女優系統 2 本 | 定期（並列推奨） |
 | [`run_process_mesugaki.bat`](run_process_mesugaki.bat) | 加工・メスガキ系統 3 本 | 定期（並列推奨） |
+| [`run_process_main_weekly.bat`](run_process_main_weekly.bat) | 通常系統の旧作 API 更新 | 週次 |
+| [`run_process_mesugaki_weekly.bat`](run_process_mesugaki_weekly.bat) | メスガキ系統の旧作 API 更新 | 週次 |
 | [`run_process.bat`](run_process.bat) | 加工フェーズ全本を直列 | 互換用 |
 | [`run_all.bat`](run_all.bat) | 収集 → 加工（直列） | — |
 | [`run_x_dmm_collector.bat`](run_x_dmm_collector.bat) | `run_all.bat` と同じ | 後方互換エイリアス |
@@ -113,6 +117,8 @@ python run.py --phase all --continue-on-error
 | `\self\x-dmm-collector-process-main` | `run_process_main.bat` | 01:00 |
 | `\self\x-dmm-collector-process-actress` | `run_process_actress.bat` | 02:00 |
 | `\self\x-dmm-collector-process-mesugaki` | `run_process_mesugaki.bat` | 03:00 |
+| `\self\x-dmm-collector-process-main-weekly` | `run_process_main_weekly.bat` | 日曜 12:00 |
+| `\self\x-dmm-collector-process-mesugaki-weekly` | `run_process_mesugaki_weekly.bat` | 日曜 13:00 |
 
 再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`  
 旧の `\self\x-dmm-collector-modify`（`run_process.bat` 直列）は無効化すること。
@@ -131,6 +137,13 @@ python run.py --phase all --continue-on-error
 - **コマンド**: `run.py --phase process_{main|actress|mesugaki} --continue-on-error`
 - **Python**: `venv\Scripts\python.exe`
 - **用途**: 日次加工の並列実行（推奨）
+
+#### run_process_main_weekly.bat / run_process_mesugaki_weekly.bat
+
+- **コマンド**: `run.py --phase process_{main|mesugaki}_weekly --continue-on-error`
+- **対象**: `update_items` / `update_mesugaki` の `--mode weekly`（60日より古くキャンペーンなし）
+- **ロック**: 日次の同系統と共有（同時実行しない）
+- **用途**: 週次のカタログ遅延更新
 
 #### run_process.bat
 

@@ -278,6 +278,36 @@ class TestCreateAiReviewCli:
         assert args.limit == 3
         assert args.content_id == "pai436"
 
+    def test_main_dry_run_empty_summary(self, create_ai_review, capsys):
+        create_ai_review.fetch_empty_summary_items = MagicMock(
+            return_value=[{"content_id": "d_808452"}]
+        )
+        create_ai_review.main(["--regenerate-empty-summary", "--dry-run"])
+        assert "d_808452" in capsys.readouterr().out
+
+    def test_fetch_empty_summary_items(self, create_ai_review):
+        table = MagicMock()
+        table.select.return_value = table
+        table.or_.return_value = table
+        table.range.return_value = table
+        table.in_.return_value = table
+        table.execute.side_effect = [
+            MagicMock(data=[{"content_id": "d_808452"}]),
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "d_808452",
+                        "item_url": "https://x",
+                        "service": "doujin",
+                        "floor": "digital_doujin",
+                    }
+                ]
+            ),
+        ]
+        with patch.object(create_ai_review.supabase, "table", return_value=table):
+            rows = create_ai_review.fetch_empty_summary_items()
+        assert rows[0]["content_id"] == "d_808452"
+
     def test_main_dry_run_age_gate(self, create_ai_review, capsys):
         create_ai_review.fetch_age_gate_items = MagicMock(
             return_value=[{"content_id": "pai436"}]

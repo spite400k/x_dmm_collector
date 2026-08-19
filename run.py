@@ -32,9 +32,20 @@ PHASE_CHOICES = [
     "process_main",
     "process_actress",
     "process_mesugaki",
+    "process_main_weekly",
+    "process_mesugaki_weekly",
     "manual",
     "all",
 ]
+
+# 週次フェーズは日次と同じ系統ロックを使い、同時実行しない
+PHASE_LOCK = {
+    "process_main": "process_main",
+    "process_actress": "process_actress",
+    "process_mesugaki": "process_mesugaki",
+    "process_main_weekly": "process_main",
+    "process_mesugaki_weekly": "process_mesugaki",
+}
 
 # --script 実行時にどの系統ロックを取るか
 SCRIPT_PIPELINE: dict[str, str] = {
@@ -57,8 +68,8 @@ def pipeline_lock_path(phase: str) -> Path:
 
 def resolve_lock_paths(phase: str | None, script_path: str | None) -> list[Path]:
     """実行対象に応じたロックファイルパスを返す（複数可）。"""
-    if phase in PROCESS_PIPELINE_PHASES:
-        return [pipeline_lock_path(phase)]
+    if phase in PHASE_LOCK:
+        return [pipeline_lock_path(PHASE_LOCK[phase])]
     if phase == "process":
         # 全系統直列実行時は各系統ロックをすべて取得し、分割 bat と衝突させない
         return [pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES]
@@ -150,6 +161,8 @@ def resolve_scripts(tasks: dict, phase: str | None, script_path: str | None) -> 
                 if phase_name == "process":
                     fallback = matched
                     continue
+                if phase_name.endswith("_weekly"):
+                    continue
                 return [matched]
         if fallback is not None:
             return [fallback]
@@ -172,6 +185,14 @@ def resolve_scripts(tasks: dict, phase: str | None, script_path: str | None) -> 
     return [{**entry, "phase": phase} for entry in phase_def.get("scripts", [])]
 
 
+def script_cli_args(entry: dict) -> list[str]:
+    """tasks.yaml の args を子プロセス引数にする。"""
+    raw = entry.get("args") or []
+    if isinstance(raw, str):
+        return [raw]
+    return [str(a) for a in raw]
+
+
 def run_script(
     entry: dict,
     python_exe: str,
@@ -182,12 +203,14 @@ def run_script(
     echo_output: bool = False,
 ) -> int:
     script = ROOT / entry["path"]
+    extra_args = script_cli_args(entry)
     log_path = ROOT / entry.get("log", f"logs/{script.stem}.log")
     label = entry.get("name") or entry["path"]
     echo = should_echo_child_output(echo_output=echo_output)
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header = f"{'=' * 48}\n{timestamp} - タスク開始 ({entry['path']})\n"
+    arg_note = f" {' '.join(extra_args)}" if extra_args else ""
+    header = f"{'=' * 48}\n{timestamp} - タスク開始 ({entry['path']}{arg_note})\n"
 
     logger.info(
         "[%d/%d] スクリプト実行開始: %s (%s) → %s",
@@ -203,7 +226,7 @@ def run_script(
         log_file.flush()
 
         proc = subprocess.Popen(
-            [python_exe, str(script)],
+            [python_exe, str(script), *extra_args],
             cwd=ROOT,
             env={
                 **os.environ,
@@ -255,7 +278,7 @@ def main() -> None:
     parser.add_argument(
         "--phase",
         choices=PHASE_CHOICES,
-        help="実行するフェーズ（all = collect + process。並列用: process_main / process_actress / process_mesugaki）",
+        help="実行するフェーズ（all = collect + process。並列用: process_main / process_actress / process_mesugaki。週次: process_main_weekly / process_mesugaki_weekly）",
     )
     parser.add_argument("--script", help="単一スクリプトのパス（tasks.yaml 内の path）")
     parser.add_argument("--list", action="store_true", help="登録スクリプト一覧を表示")

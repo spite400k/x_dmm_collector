@@ -16,13 +16,20 @@ import re
 import time
 import logging
 from typing import Any
-from datetime import datetime
+from datetime import date, datetime, timezone
 import requests
 from openai import OpenAI  # ← ★追加
 
 from db.supabase_client_mesugaki import supabase
 from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
+from utils.update_items_selection import (
+    filter_items_for_update,
+    merge_api_state,
+    next_api_state_on_miss,
+    next_api_state_on_success,
+    parse_update_mode_args,
+)
 
 # ----------------------------------------------------
 # 設定
@@ -38,6 +45,67 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
+ITEM_SELECT = "content_id, auto_summary, auto_point, release_date, campaign"
+API_STATE_SELECT = "content_id, miss_count, last_ok_at, skip_until"
+API_STATE_TABLE = "trn_dmm_item_api_state"
+
+
+def parse_args(argv=None):
+    return parse_update_mode_args(
+        argv, description="メスガキ trn_dmm_items の DMM API 更新"
+    )
+
+
+def fetch_paginated_rows(table: str, columns: str) -> list[dict]:
+    all_rows: list[dict] = []
+    limit = 1000
+    start = 0
+    while True:
+        response = (
+            supabase.table(table)
+            .select(columns)
+            .order("content_id")
+            .range(start, start + limit - 1)
+            .execute()
+        )
+        data = response.data or []
+        if not data:
+            break
+        all_rows.extend(data)
+        start += limit
+        logging.info(
+            "%s 取得中… 累計 %s 件（オフセット %s）",
+            table,
+            len(all_rows),
+            start,
+        )
+    return all_rows
+
+
+def record_api_result(
+    content_id: str,
+    *,
+    ok: bool,
+    current_state: dict | None = None,
+    now: datetime | None = None,
+):
+    clock = now or datetime.now(timezone.utc)
+    payload = (
+        next_api_state_on_success(now=clock)
+        if ok
+        else next_api_state_on_miss(current_state, now=clock)
+    )
+    try:
+        supabase.table(API_STATE_TABLE).upsert(
+            {
+                "content_id": content_id,
+                **payload,
+                "updated_at": clock.isoformat(),
+            },
+            on_conflict="content_id",
+        ).execute()
+    except Exception as e:
+        logging.error("API状態の保存失敗: %s (%s)", content_id, e)
 
 
 # ----------------------------------------------------
@@ -497,8 +565,10 @@ def process_batch(
                 row.get("auto_summary"),
                 row.get("auto_point"),
             )
+            record_api_result(content_id, ok=True, current_state=row)
         else:
             logging.warning("⚠️ データ取得失敗: %s", content_id)
+            record_api_result(content_id, ok=False, current_state=row)
         time.sleep(0.5)
     elapsed = time.perf_counter() - batch_t0
     logging.info(
@@ -512,8 +582,16 @@ def process_batch(
 # ----------------------------------------------------
 # メイン
 # ----------------------------------------------------
-def main():
-    logging.info("=== trn_dmm_items のAPI更新を開始 ===")
+def main(argv=None, *, today: date | None = None, now: datetime | None = None):
+    args = parse_args(argv)
+    day = today or date.today()
+    clock = now or datetime.now(timezone.utc)
+    logging.info(
+        "=== trn_dmm_items のAPI更新を開始 mode=%s recent_days=%s retry_skipped=%s ===",
+        args.mode,
+        args.recent_days,
+        args.retry_skipped,
+    )
 
     missing_env = [
         name
@@ -531,41 +609,39 @@ def main():
         )
         sys.exit(1)
 
-    # -----------------------------
-    # 全件取得（1000件制限対策）
-    # -----------------------------
-    all_items = []
-    limit = 1000
-    start = 0
-
-    while True:
-        response = (
-            supabase
-            .table("trn_dmm_items")
-            .select("content_id, auto_summary, auto_point")
-            .order("content_id")
-            .range(start, start + limit - 1)
-            .execute()
+    all_items = fetch_paginated_rows("trn_dmm_items", ITEM_SELECT)
+    try:
+        states = fetch_paginated_rows(API_STATE_TABLE, API_STATE_SELECT)
+    except Exception as e:
+        logging.warning(
+            "API状態を取得できませんでした（%s 未作成の可能性）: %s",
+            API_STATE_TABLE,
+            e,
         )
+        states = []
+    merged = merge_api_state(all_items, states)
+    items = filter_items_for_update(
+        merged,
+        mode=args.mode,
+        today=day,
+        recent_days=args.recent_days,
+        now=clock,
+        retry_skipped=args.retry_skipped,
+        content_ids=args.content_ids,
+    )
 
-        data = response.data or []
+    if args.content_ids:
+        logging.info("content_id 指定: %s", args.content_ids)
 
-        if not data:
-            break
-
-        all_items.extend(data)
-        start += limit
-
-        logging.info("Supabase 取得中… 累計 %s 件（オフセット %s）", len(all_items), start)
-
-    if not all_items:
+    if not items:
         logging.info("対象データが存在しません。処理を終了します。")
         sys.exit(0)
 
-    total = len(all_items)
+    total = len(items)
     total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
     logging.info(
-        "リスト取得完了: 全 %s 件。バッチサイズ %s → 全 %s バッチで処理します。",
+        "リスト取得完了: 取得 %s 件中 対象 %s 件。バッチサイズ %s → 全 %s バッチで処理します。",
+        len(all_items),
         total,
         BATCH_SIZE,
         total_batches,
@@ -578,7 +654,7 @@ def main():
     run_t0 = time.perf_counter()
 
     for i in range(0, total, BATCH_SIZE):
-        batch_items = all_items[i : i + BATCH_SIZE]
+        batch_items = items[i : i + BATCH_SIZE]
         batch_index = (i // BATCH_SIZE) + 1
 
         process_batch(batch_items, batch_index, total_batches, i, total)

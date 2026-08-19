@@ -138,6 +138,67 @@ def test_resolve_lock_paths_script_maps_to_pipeline():
     assert paths[0].name == "run.lock"
 
 
+def test_script_cli_args():
+    assert run_mod.script_cli_args({}) == []
+    assert run_mod.script_cli_args({"args": None}) == []
+    assert run_mod.script_cli_args({"args": "--mode weekly"}) == ["--mode weekly"]
+    assert run_mod.script_cli_args({"args": ["--mode", "weekly"]}) == ["--mode", "weekly"]
+
+
+def test_run_script_passes_args(tmp_path):
+    entry = {
+        "path": "scripts/process/update_items.py",
+        "log": str(tmp_path / "w.log"),
+        "args": ["--mode", "weekly"],
+    }
+    proc = MagicMock()
+    proc.stdout = io.StringIO("ok\n")
+    proc.wait.return_value = 0
+
+    with patch.object(run_mod.subprocess, "Popen", return_value=proc) as popen:
+        with patch.object(run_mod, "should_echo_child_output", return_value=False):
+            with patch.object(run_mod.logger, "info"):
+                code = run_mod.run_script(entry, "python", False, 1, 1)
+    assert code == 0
+    cmd = popen.call_args[0][0]
+    assert cmd[-2:] == ["--mode", "weekly"]
+
+
+def test_resolve_scripts_weekly_phase():
+    tasks = run_mod.load_tasks()
+    entries = run_mod.resolve_scripts(tasks, "process_main_weekly", None)
+    assert len(entries) == 1
+    assert entries[0]["phase"] == "process_main_weekly"
+    assert entries[0]["args"] == ["--mode", "weekly"]
+    assert entries[0]["path"].endswith("update_items.py")
+
+    mesu = run_mod.resolve_scripts(tasks, "process_mesugaki_weekly", None)
+    assert mesu[0]["path"].endswith("update_mesugaki.py")
+    assert mesu[0]["args"] == ["--mode", "weekly"]
+
+
+def test_resolve_scripts_prefers_daily_over_weekly():
+    tasks = run_mod.load_tasks()
+    entries = run_mod.resolve_scripts(
+        tasks, None, "scripts/process/update_items.py"
+    )
+    assert entries[0]["phase"] == "process_main"
+    assert not entries[0].get("args")
+
+
+def test_resolve_lock_paths_weekly_shares_daily_lock():
+    paths = run_mod.resolve_lock_paths("process_main_weekly", None)
+    assert paths[0].name == "run_process_main.lock"
+    paths = run_mod.resolve_lock_paths("process_mesugaki_weekly", None)
+    assert paths[0].name == "run_process_mesugaki.lock"
+    tasks = run_mod.load_tasks()
+    entries = run_mod.resolve_scripts(tasks, "process_main", None)
+    assert len(entries) == 3
+    assert all(e["phase"] == "process_main" for e in entries)
+    assert entries[0]["path"].endswith("update_items.py")
+    assert entries[-1]["path"].endswith("create_weekly_rankings.py")
+
+
 def test_resolve_scripts_pipeline_phase():
     tasks = run_mod.load_tasks()
     entries = run_mod.resolve_scripts(tasks, "process_main", None)

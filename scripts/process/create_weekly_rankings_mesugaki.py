@@ -22,6 +22,7 @@ from openai import OpenAI
 from db.postgres_connect import connect_from_env
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
+from utils.weekly_ranking_selection import fetch_weekly_ranking_rows
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
 
@@ -171,35 +172,7 @@ def generate_weekly_ranking(conn, service, floor):
             if snapshot_date is None:
                 snapshot_date = date.today()
 
-            release_date = (date.today() - timedelta(days=31)).isoformat()
-
-            cur.execute(
-                """
-                SELECT
-                    c.content_id,
-                    c.title,
-                    s.final_score,
-                    s.review_count,
-                    s.avg_rating
-                FROM trn_dmm_items c
-                JOIN LATERAL (
-                    SELECT *
-                    FROM trn_dmm_score_history s
-                    WHERE s.content_id = c.content_id
-                        AND c.release_date >= %s
-                    ORDER BY s.snapshot_date DESC
-                    LIMIT 1
-                ) s ON true
-                WHERE c.service = %s
-                AND c.floor = %s
-                AND s.final_score IS NOT NULL
-                ORDER BY s.final_score DESC
-                LIMIT 20
-            """,
-                (release_date, service, floor),
-            )
-
-            rows = cur.fetchall()
+            rows = fetch_weekly_ranking_rows(cur, service, floor)
 
             if not rows:
                 logging.warning(f"No ranking data for {service}/{floor}")

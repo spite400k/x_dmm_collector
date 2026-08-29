@@ -1,6 +1,7 @@
 import importlib
 import json
 import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +13,39 @@ def load_content_generator_review_module():
         openai_mock = MagicMock()
         openai_mock.OpenAI = MagicMock()
         sys.modules["openai"] = openai_mock
+    try:
+        import selenium.webdriver  # noqa: F401
+    except ImportError:
+        selenium_mock = ModuleType("selenium")
+        selenium_mock.webdriver = ModuleType("selenium.webdriver")
+        selenium_mock.webdriver.Chrome = MagicMock()
+        selenium_mock.webdriver.common = ModuleType("selenium.webdriver.common")
+        selenium_mock.webdriver.common.by = ModuleType("selenium.webdriver.common.by")
+        selenium_mock.webdriver.common.by.By = MagicMock()
+        selenium_mock.webdriver.chrome = ModuleType("selenium.webdriver.chrome")
+        selenium_mock.webdriver.chrome.options = ModuleType("selenium.webdriver.chrome.options")
+        selenium_mock.webdriver.chrome.options.Options = MagicMock()
+        selenium_mock.webdriver.chrome.service = ModuleType("selenium.webdriver.chrome.service")
+        selenium_mock.webdriver.chrome.service.Service = MagicMock()
+        selenium_mock.webdriver.support = ModuleType("selenium.webdriver.support")
+        selenium_mock.webdriver.support.ui = ModuleType("selenium.webdriver.support.ui")
+        selenium_mock.webdriver.support.ui.WebDriverWait = MagicMock()
+        selenium_mock.webdriver.support.expected_conditions = MagicMock()
+        selenium_mock.common = ModuleType("selenium.common")
+        selenium_mock.common.exceptions = ModuleType("selenium.common.exceptions")
+        selenium_mock.common.exceptions.InvalidSessionIdException = Exception
+        selenium_mock.common.exceptions.WebDriverException = Exception
+        sys.modules["selenium"] = selenium_mock
+        sys.modules["selenium.webdriver"] = selenium_mock.webdriver
+        sys.modules["selenium.webdriver.common"] = selenium_mock.webdriver.common
+        sys.modules["selenium.webdriver.common.by"] = selenium_mock.webdriver.common.by
+        sys.modules["selenium.webdriver.chrome"] = selenium_mock.webdriver.chrome
+        sys.modules["selenium.webdriver.chrome.options"] = selenium_mock.webdriver.chrome.options
+        sys.modules["selenium.webdriver.chrome.service"] = selenium_mock.webdriver.chrome.service
+        sys.modules["selenium.webdriver.support"] = selenium_mock.webdriver.support
+        sys.modules["selenium.webdriver.support.ui"] = selenium_mock.webdriver.support.ui
+        sys.modules["selenium.common"] = selenium_mock.common
+        sys.modules["selenium.common.exceptions"] = selenium_mock.common.exceptions
     if module_name in sys.modules:
         return importlib.reload(sys.modules[module_name])
     return importlib.import_module(module_name)
@@ -25,6 +59,8 @@ def review_module():
 def test_generate_review_insights_uses_structured_prompt(review_module):
     ai_payload = {
         "review_digest": "要約",
+        "portal_copy_beaf": "BEAFコピー",
+        "portal_copy_aidma": "AIDMAコピー",
         "content_score": 80,
         "emotion_score": 75,
         "attraction_score": 70,
@@ -49,6 +85,12 @@ def test_generate_review_insights_uses_structured_prompt(review_module):
             review_avg=4.5,
             review_count=10,
             genre_type="doujin_digital_doujin",
+            product_context={
+                "title": "テスト作品",
+                "genres": "OL",
+                "price": "¥1000",
+                "ranking_label": "該当なし",
+            },
         )
 
         call_kwargs = create_mock.call_args.kwargs
@@ -62,7 +104,12 @@ def test_generate_review_insights_uses_structured_prompt(review_module):
         assert "タイプ1" not in user_content
         assert "ワーニング1" not in user_content
         assert '"reader_types": ["...", "..."]' in user_content
+        assert "portal_copy_beaf" in user_content
+        assert "portal_copy_aidma" in user_content
+        assert "BEAF" in messages[0]["content"]
         assert "review_digest" in result
+        assert result["portal_copy_beaf"] == "BEAFコピー"
+        assert result["portal_copy_aidma"] == "AIDMAコピー"
         assert "total_score" in result
 
 

@@ -43,6 +43,7 @@ from utils.content_generator_review import (
     usable_saved_summary,
     build_fallback_synopsis,
 )
+from utils.copy_framework_ab import build_product_context_from_row, enrich_ai_summary_for_ab
 from selenium.common.exceptions import InvalidSessionIdException
 from utils.logger import setup_logger
 from utils.supabase_retry import execute_with_retry
@@ -232,6 +233,7 @@ def process_content(
     fallback_summary=None,
     title=None,
     genres=None,
+    product_row: dict | None = None,
 ):
     try:
         logging.info("🔍 処理開始: %s (URL: %s)", content_id, product_url)
@@ -292,12 +294,23 @@ def process_content(
             2,
         )
 
+        product_context = build_product_context_from_row(
+            product_row
+            or {
+                "title": title,
+                "genres": genres,
+            },
+            service_code,
+            floor_code,
+        )
+
         insight = generate_review_insights(
             reviews=reviews,
             html_summary=html_summary,
             review_avg=avg_rating,
             review_count=len(reviews),
             genre_type=f"{service_code}_{floor_code}",
+            product_context=product_context,
         )
 
         if not insight:
@@ -321,9 +334,9 @@ def process_content(
             "avg_rating": avg_rating,
             "summary_text": html_summary,
             "ai_model": OPENAI_MODEL,
-            "prompt_version": "v3_structured",
             "updated_at": datetime.utcnow().isoformat(),
         }
+        enrich_ai_summary_for_ab(summary, insight, content_id)
         save_ai_summary(summary)
 
         logging.info("💾 週次スコア保存中...")
@@ -378,6 +391,7 @@ def _process_item_with_retry(
     fallback_summary=None,
     title=None,
     genres=None,
+    product_row: dict | None = None,
 ):
     """セッション切れ時は driver を再作成して1回リトライする。"""
     for attempt in range(2):
@@ -397,6 +411,7 @@ def _process_item_with_retry(
                     fallback_summary=fallback_summary,
                     title=title,
                     genres=genres,
+                    product_row=product_row,
                 )
             return driver
         except InvalidSessionIdException:
@@ -443,6 +458,7 @@ def process_batch(batch_items, batch_index, total, raw_only: bool = False):
                 fallback_summary=row.get("auto_summary"),
                 title=row.get("title"),
                 genres=row.get("genres"),
+                product_row=row,
             )
             logging.info(
                 "⏱ %s 処理時間: %.1f秒",
@@ -464,7 +480,10 @@ def fetch_all_items():
         while True:
             response = execute_with_retry(
                 lambda target=target, start=start: supabase.table("trn_dmm_items")
-                .select("content_id, item_url,service,floor,auto_summary,title,genres")
+                .select(
+                    "content_id, item_url, service, floor, auto_summary, title, "
+                    "genres, price, actress, series, maker"
+                )
                 .eq("service", target["service"])
                 .eq("floor", target["floor"])
                 .order("created_at")
@@ -526,7 +545,10 @@ def fetch_age_gate_items(limit: int | None = None):
         chunk = content_ids[i : i + chunk_size]
         response = execute_with_retry(
             lambda chunk=chunk: supabase.table("trn_dmm_items")
-            .select("content_id, item_url,service,floor,auto_summary,title,genres")
+            .select(
+                "content_id, item_url, service, floor, auto_summary, title, "
+                "genres, price, actress, series, maker"
+            )
             .in_("content_id", chunk)
         )
         items.extend(response.data or [])

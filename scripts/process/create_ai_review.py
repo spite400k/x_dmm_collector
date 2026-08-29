@@ -24,6 +24,10 @@ from utils.content_generator_review import (
     usable_saved_summary,
     build_fallback_synopsis,
 )
+from utils.copy_framework_ab import (
+    build_product_context_from_row,
+    enrich_ai_summary_for_ab,
+)
 from utils.logger import setup_logger
 import hashlib
 
@@ -189,6 +193,7 @@ def process_content(
     fallback_summary=None,
     title=None,
     genres=None,
+    product_row: dict | None = None,
 ):
     # ①' DB事前判定（Chrome 起動前）
     saved_summary = usable_saved_summary(get_saved_summary(content_id))
@@ -264,12 +269,23 @@ def process_content(
             2
         )
 
+        product_context = build_product_context_from_row(
+            product_row
+            or {
+                "title": title,
+                "genres": genres,
+            },
+            service_code,
+            floor_code,
+        )
+
         insight = generate_review_insights(
             reviews=reviews,
             html_summary=html_summary,
             review_avg=avg_rating,
             review_count=len(reviews),
-            genre_type=f"{service_code}_{floor_code}"
+            genre_type=f"{service_code}_{floor_code}",
+            product_context=product_context,
         )
 
         if not insight:
@@ -296,9 +312,9 @@ def process_content(
             "avg_rating": avg_rating,
             "summary_text": html_summary,
             "ai_model": OPENAI_MODEL,
-            "prompt_version": "v3_structured",
             "updated_at": datetime.utcnow().isoformat()
         }
+        enrich_ai_summary_for_ab(summary, insight, content_id)
         # ⑦ AI保存
         save_ai_summary(summary)
 
@@ -386,7 +402,10 @@ def save_weekly_score(summary: dict):
 # ----------------------------------------------------
 # バッチ処理・メイン
 # ----------------------------------------------------
-ITEM_SELECT = "content_id, item_url, service, floor, review_count, auto_summary, title, genres"
+ITEM_SELECT = (
+    "content_id, item_url, service, floor, review_count, auto_summary, "
+    "title, genres, price, actress, series, maker"
+)
 
 
 def _age_gate_or_filter() -> str:
@@ -534,6 +553,7 @@ def process_batch(batch_items, batch_index, total):
             fallback_summary=row.get("auto_summary"),
             title=row.get("title"),
             genres=row.get("genres"),
+            product_row=row,
         )
 
         time.sleep(0.5)

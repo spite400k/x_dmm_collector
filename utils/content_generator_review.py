@@ -20,6 +20,10 @@ from bs4 import BeautifulSoup
 
 from openai_api.config import OPENAI_MODEL
 from openai_api.content_generator import extract_synopsis_from_soup
+from utils.copy_framework_ab import (
+    PORTAL_COPY_PROMPT_SECTION,
+    format_product_context_block,
+)
 from utils.chromedriver import chromedriver_path
 from utils.dmm_review_scraper import get_doujin_reviews, get_video_reviews
 from utils.screenshot import save_debug_files
@@ -623,11 +627,14 @@ REVIEW_INSIGHTS_SYSTEM_PROMPT = """
 ・レビュー件数が少ない場合は過信しない
 ・文体ルールは採点フィールドには適用しない
 
-【テキストフィールド】review_digest, reader_types, warning_points
-review_digest: 350〜450文字。作品の魅力を感情豊かに要約する。
+【テキストフィールド】review_digest, portal_copy_beaf, portal_copy_aidma, reader_types, warning_points
+review_digest: 350〜450文字。作品の魅力を感情豊かに要約する（分析・スコア用。Portal A/B とは別）。
   体言止め・評論調・論文調は禁止。「あなた」と語りかけてよい（「読者」は使わない）。
+portal_copy_beaf / portal_copy_aidma: FANZA Portal 向け紹介文（各280〜380文字）。下記 BEAF/AIDMA ルールを適用。
 reader_types: この作品に合う読者像を2〜3件、具体的な短文で列挙する。
 warning_points: 購入前に知っておくべき注意点を1〜3件、具体的な短文で列挙する。
+
+""" + PORTAL_COPY_PROMPT_SECTION + """
 
 【共通禁止】
 ・レビュー原文の出力・引用
@@ -641,7 +648,9 @@ def generate_review_insights(
     html_summary: str,
     review_avg: float,
     review_count: int,
-    genre_type: str
+    genre_type: str,
+    *,
+    product_context: dict | None = None,
 ) -> Dict:
 
     config = getGenreConfig(genre_type)
@@ -660,12 +669,15 @@ def generate_review_insights(
         )
 
     summary_for_ai = (html_summary or "")[:SUMMARY_MAX_CHARS_FOR_AI]
+    product_block = format_product_context_block(product_context)
 
     prompt = f"""
 以下の作品情報を分析し、JSON を出力してください。
 
 【各フィールドの内容】
 - review_digest: 作品の魅力を要約（テキストフィールドのルールを適用）
+- portal_copy_beaf: BEAF法の Portal 紹介文（280〜380文字）
+- portal_copy_aidma: AIDMA法の Portal 紹介文（280〜380文字）
 - content_score: 内容力（採点ルールを適用）
 - emotion_score: 感情インパクト（採点ルールを適用）
 - attraction_score: 魅力（採点ルールを適用）
@@ -674,7 +686,10 @@ def generate_review_insights(
 - reader_types: この作品に合う読者像を2〜3件（テキストフィールドのルールを適用）
 - warning_points: 購入前の注意点を1〜3件（テキストフィールドのルールを適用）
 
-【作品情報】
+【作品メタ（Portal コピー用）】
+{product_block}
+
+【分析コンテキスト】
 ジャンル: {genre_type}（評価タイプ: {score_type}）
 レビュー平均: {review_avg} / 件数: {review_count}
 
@@ -687,6 +702,8 @@ def generate_review_insights(
 【出力スキーマ】
 {{
   "review_digest": "...",
+  "portal_copy_beaf": "...",
+  "portal_copy_aidma": "...",
   "content_score": 0,
   "emotion_score": 0,
   "attraction_score": 0,
@@ -704,7 +721,7 @@ def generate_review_insights(
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            max_completion_tokens=1200,
+            max_completion_tokens=2000,
         )
 
         import json

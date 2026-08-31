@@ -4,7 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
+from datetime import date
+
 from scripts.collect._filter import (
+    filter_released_items,
     filter_unregistered_items,
     run_items_isolated,
     supabase_exists_checker,
@@ -28,6 +31,18 @@ def test_filter_skips_missing_content_id_and_existing():
 
 def test_filter_empty_input():
     assert filter_unregistered_items([], exists_by_content_id=lambda _: False) == []
+
+
+def test_filter_released_items_skips_future():
+    today = date(2026, 8, 19)
+    items = [
+        {"content_id": "past", "date": "2026-08-01"},
+        {"content_id": "today", "release_date": "2026-08-19 00:00:00"},
+        {"content_id": "future", "date": "2026-09-01"},
+        {"content_id": "bad", "date": "invalid"},
+    ]
+    released = filter_released_items(items, today=today)
+    assert [item["content_id"] for item in released] == ["past", "today"]
 
 
 def test_supabase_exists_checker():

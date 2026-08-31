@@ -193,18 +193,20 @@ def generate_weekly_ranking(conn, service, floor):
                     (slug, service, floor, year, week, rank,
                     content_id, final_score,
                     review_count, avg_rating,
-                    snapshot_date)
+                    snapshot_date, is_new, rank_diff)
                     VALUES (%s,%s,%s,%s,%s,%s,
                             %s,%s,
                             %s,%s,
-                            %s)
+                            %s,%s,%s)
                 """, (
                     slug, service, floor, year, week, rank,
                     row["content_id"],
                     row["final_score"],
                     row["review_count"],
                     row["avg_rating"],
-                    snapshot_date
+                    snapshot_date,
+                    row["is_new"],
+                    row["rank_diff"],
                 ))
 
 

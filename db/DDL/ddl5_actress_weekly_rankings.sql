@@ -27,6 +27,8 @@ create table if not exists public.dmm_actress_weekly_rankings (
   favorite_count integer null,
   works_count integer null,
   snapshot_date date null,
+  is_new boolean not null default false,
+  rank_diff integer null,
   created_at timestamp with time zone not null default now(),
   constraint dmm_actress_weekly_rankings_pkey primary key (id),
   constraint dmm_actress_weekly_rankings_slug_rank_key unique (slug, rank),

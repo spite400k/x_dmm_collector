@@ -84,10 +84,25 @@ class TestShouldSkipSeleniumPrecheck:
             is False
         )
 
+    def test_positive_count_without_score_history_does_not_skip(self, create_ai_review):
+        assert (
+            create_ai_review.should_skip_selenium_precheck(
+                3, has_saved_summary=True, has_score_history=False
+            )
+            is False
+        )
+        assert (
+            create_ai_review.should_skip_selenium_precheck(
+                3, has_saved_summary=True, has_score_history=True
+            )
+            is False
+        )
+
 
 class TestProcessContentPrecheck:
     def test_skips_chrome_when_db_zero_and_summary_exists(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value="あらすじ本文")
+        create_ai_review.has_score_history = MagicMock(return_value=False)
         create_driver = MagicMock()
         create_ai_review.create_driver = create_driver
         scrape = MagicMock()
@@ -106,6 +121,7 @@ class TestProcessContentPrecheck:
 
     def test_opens_chrome_when_review_count_positive(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value="あらすじ本文")
+        create_ai_review.has_score_history = MagicMock(return_value=True)
         driver = MagicMock()
         create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
@@ -374,6 +390,56 @@ class TestCreateAiReviewCli:
         table.execute.return_value = MagicMock(data=[])
         with patch.object(create_ai_review.supabase, "table", return_value=table):
             assert create_ai_review.fetch_recent_items() == []
+
+    def test_fetch_recent_items_filters_future_and_prioritizes_reviews(self, create_ai_review):
+        from datetime import date
+
+        table = MagicMock()
+        table.select.return_value = table
+        table.eq.return_value = table
+        table.gte.return_value = table
+        table.order.return_value = table
+        table.range.return_value = table
+        table.execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "future",
+                        "release_date": "2099-01-01",
+                        "review_count": 99,
+                    },
+                    {
+                        "content_id": "old-reviewed",
+                        "release_date": "2026-08-01",
+                        "review_count": 5,
+                    },
+                    {
+                        "content_id": "old-no-review",
+                        "release_date": "2026-08-02",
+                        "review_count": 0,
+                    },
+                ]
+            ),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+        ]
+        with patch("scripts.process.create_ai_review.date") as mock_date:
+            mock_date.today.return_value = date(2026, 8, 19)
+            with patch.object(create_ai_review.supabase, "table", return_value=table):
+                rows = create_ai_review.fetch_recent_items()
+        assert [row["content_id"] for row in rows] == ["old-reviewed", "old-no-review"]
+
+    def test_prioritize_reviewed_items(self, create_ai_review):
+        rows = create_ai_review.prioritize_reviewed_items(
+            [
+                {"content_id": "a", "review_count": 0},
+                {"content_id": "b", "review_count": 10},
+                {"content_id": "c", "review_count": 2},
+            ]
+        )
+        assert [row["content_id"] for row in rows] == ["b", "c", "a"]
 
     def test_main_content_id_missing_exits(self, create_ai_review):
         create_ai_review.fetch_item_by_content_id = MagicMock(return_value=[])

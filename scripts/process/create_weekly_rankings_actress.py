@@ -252,10 +252,12 @@ def generate_weekly_ranking(conn) -> None:
                 INSERT INTO dmm_actress_weekly_rankings
                 (slug, year, week, rank, actress_id, name,
                  ranking_score, work_count, total_review_count, avg_rating,
-                 favorite_count, works_count, snapshot_date)
+                 favorite_count, works_count, snapshot_date,
+                 is_new, rank_diff)
                 VALUES (%s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
-                        %s, %s, %s)
+                        %s, %s, %s,
+                        %s, %s)
                 """,
                 (
                     slug,
@@ -271,6 +273,8 @@ def generate_weekly_ranking(conn) -> None:
                     row["favorite_count"],
                     row["works_count"],
                     row["snapshot_date"],
+                    row["is_new"],
+                    row["rank_diff"],
                 ),
             )
 

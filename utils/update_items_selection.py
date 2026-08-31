@@ -81,16 +81,26 @@ def has_active_campaign(campaign: Any) -> bool:
     return True
 
 
+def is_released(release_date: Any, *, today: date) -> bool:
+    """配信開始日が today 以前。未来日・日付不明は False。"""
+    parsed = parse_release_date(release_date)
+    if parsed is None:
+        return False
+    return parsed <= today
+
+
 def is_recent_release(
     release_date: Any,
     *,
     today: date,
     recent_days: int = DEFAULT_RECENT_DAYS,
 ) -> bool:
-    """発売日が today から recent_days 以内、または未来日。日付不明は False。"""
+    """発売日が today から recent_days 以内の配信済み作品。未来日・日付不明は False。"""
     days = max(int(recent_days), 0)
     parsed = parse_release_date(release_date)
     if parsed is None:
+        return False
+    if parsed > today:
         return False
     delta = (today - parsed).days
     return delta <= days
@@ -102,7 +112,7 @@ def in_daily_window(
     today: date,
     recent_days: int = DEFAULT_RECENT_DAYS,
 ) -> bool:
-    """毎日更新対象: 直近発売（未来含む）または campaign あり。"""
+    """毎日更新対象: 直近発売（配信済み）または campaign あり。"""
     return is_recent_release(
         row.get("release_date"),
         today=today,

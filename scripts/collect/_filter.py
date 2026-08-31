@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date
 from typing import Any
+
+from utils.update_items_selection import is_released
 
 from utils.supabase_retry import execute_with_retry
 
@@ -32,6 +35,25 @@ def filter_unregistered_items(
             continue
         items.append(item)
     return items
+
+
+def filter_released_items(
+    items: list[dict],
+    *,
+    today: date | None = None,
+) -> list[dict]:
+    """配信済み（release_date <= today）のアイテムだけを返す。"""
+    day = today or date.today()
+    released: list[dict] = []
+    for item in items:
+        release_date = item.get("date") or item.get("release_date")
+        if is_released(release_date, today=day):
+            released.append(item)
+            continue
+        content_id = item.get("content_id")
+        title = item.get("title")
+        logging.info("[SKIP] 未配信: %s (%s)", title, content_id)
+    return released
 
 
 def run_items_isolated(

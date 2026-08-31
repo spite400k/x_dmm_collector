@@ -14,6 +14,7 @@ from utils.get_sample_movie import get_sample_movie
 from utils.get_tachiyomi import capture_all_tachiyomi_pages
 from utils.logger import setup_logger
 from scripts.collect._filter import (
+    filter_released_items,
     filter_unregistered_items,
     run_items_isolated,
     supabase_exists_checker,
@@ -27,7 +28,8 @@ setup_logger("main.log")
 #---------------------
 #定数・設定
 #---------------------
-hits_per_request = 30
+hits_per_request = 100
+COLLECT_SORTS = ("rank", "date", "review")
 
 # ---------------------
 # ファイル削除
@@ -73,11 +75,12 @@ def main():
                 floor=floor,
                 offset=1,
                 hits=hits_per_request,
-                sorts=("rank", "date", "review"),
+                sorts=COLLECT_SORTS,
                 min_sample_count=10,
             )
             logging.info("データ取得完了")
 
+            top_items = filter_released_items(top_items)
             items = filter_unregistered_items(
                 top_items,
                 exists_by_content_id=supabase_exists_checker(supabase.table("trn_dmm_items")),

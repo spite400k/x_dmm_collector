@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-RANKING_RELEASE_WINDOW_DAYS = 31
+RANKING_RELEASE_WINDOW_DAYS = 90
 RANKING_TOTAL = 20
 RANKING_MAX_RELEASED_BEFORE_FUTURE = 19
 RANKING_MAX_FUTURE = 1

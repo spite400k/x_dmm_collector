@@ -13,6 +13,7 @@ from utils.update_items_selection import (
     in_daily_window,
     is_api_skip_active,
     is_recent_release,
+    is_released,
     merge_api_state,
     next_api_state_on_miss,
     next_api_state_on_success,
@@ -92,12 +93,19 @@ class TestHasActiveCampaign:
         assert has_active_campaign(({"id": 1},)) is True
 
 
+class TestIsReleased:
+    def test_released_and_future(self):
+        assert is_released("2026-08-19", today=TODAY) is True
+        assert is_released("2026-08-20", today=TODAY) is False
+        assert is_released(None, today=TODAY) is False
+
+
 class TestIsRecentRelease:
     def test_boundaries(self):
         assert is_recent_release("2026-08-19", today=TODAY, recent_days=60) is True
         assert is_recent_release("2026-06-20", today=TODAY, recent_days=60) is True
         assert is_recent_release("2026-06-19", today=TODAY, recent_days=60) is False
-        assert is_recent_release("2026-08-20", today=TODAY, recent_days=60) is True
+        assert is_recent_release("2026-08-20", today=TODAY, recent_days=60) is False
 
     def test_unknown_and_zero_days(self):
         assert is_recent_release(None, today=TODAY, recent_days=60) is False
@@ -105,7 +113,7 @@ class TestIsRecentRelease:
         assert is_recent_release("2026-08-19", today=TODAY, recent_days=0) is True
         assert is_recent_release("2026-08-18", today=TODAY, recent_days=0) is False
         assert is_recent_release("2026-08-19", today=TODAY, recent_days=-3) is True
-        assert is_recent_release("2026-08-20", today=TODAY, recent_days=0) is True
+        assert is_recent_release("2026-08-20", today=TODAY, recent_days=0) is False
 
 
 class TestApiSkip:
@@ -132,7 +140,7 @@ class TestShouldUpdateItem:
         assert should_update_item(old_sale, mode="daily", today=TODAY) is True
         assert should_update_item(old, mode="daily", today=TODAY) is False
         assert should_update_item(undated, mode="daily", today=TODAY) is False
-        assert should_update_item(future, mode="daily", today=TODAY) is True
+        assert should_update_item(future, mode="daily", today=TODAY) is False
 
     def test_weekly_is_complement_of_daily(self):
         old = {"release_date": "2025-01-01", "campaign": []}

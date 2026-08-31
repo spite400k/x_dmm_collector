@@ -1,6 +1,7 @@
 from utils.weekly_ranking_selection import (
     RANKING_MAX_FUTURE,
     RANKING_MAX_RELEASED_BEFORE_FUTURE,
+    RANKING_RELEASE_WINDOW_DAYS,
     RANKING_TOTAL,
     merge_ranking_rows,
 )
@@ -58,3 +59,4 @@ def test_merge_ranking_rows_without_future():
 
 def test_ranking_constants():
     assert RANKING_MAX_RELEASED_BEFORE_FUTURE + RANKING_MAX_FUTURE == RANKING_TOTAL
+    assert RANKING_RELEASE_WINDOW_DAYS == 90

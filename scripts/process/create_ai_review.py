@@ -29,6 +29,7 @@ from utils.copy_framework_ab import (
     enrich_ai_summary_for_ab,
 )
 from utils.logger import setup_logger
+from utils.update_items_selection import is_recent_release
 import hashlib
 
 from utils.screenshot import save_debug_files
@@ -58,6 +59,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
+AI_REVIEW_RECENT_DAYS = 31
 
 # =========================
 # ユーティリティ関数
@@ -77,13 +79,28 @@ def should_skip_selenium_precheck(
     db_review_count,
     *,
     has_saved_summary: bool,
+    has_score_history: bool = False,
 ) -> bool:
     """update_items 反映後の DB レビュー件数を見て Selenium を省略できるか判定する。
 
     review_count == 0 かつあらすじ保存済みなら、ページを開いても最終的にスキップされるため
     Chrome 起動前に打ち切る。件数が増えた日は review_count > 0 になるので再取得する。
+    review_count > 0 かつ score_history 未作成の場合は必ずスクレイプする。
     """
+    if normalize_review_count(db_review_count) > 0 and not has_score_history:
+        return False
     return normalize_review_count(db_review_count) == 0 and bool(has_saved_summary)
+
+
+def has_score_history(content_id: str) -> bool:
+    response = (
+        supabase.table("trn_dmm_score_history")
+        .select("content_id")
+        .eq("content_id", content_id)
+        .limit(1)
+        .execute()
+    )
+    return bool(response.data)
 
 
 # 既存のあらすじ取得
@@ -200,6 +217,7 @@ def process_content(
     if should_skip_selenium_precheck(
         db_review_count,
         has_saved_summary=bool(saved_summary),
+        has_score_history=has_score_history(content_id),
     ):
         logging.info(
             "⏭ DBレビュー0件かつあらすじ保存済 → Seleniumスキップ: %s (review_count=%s)",
@@ -403,7 +421,7 @@ def save_weekly_score(summary: dict):
 # バッチ処理・メイン
 # ----------------------------------------------------
 ITEM_SELECT = (
-    "content_id, item_url, service, floor, review_count, auto_summary, "
+    "content_id, item_url, service, floor, review_count, release_date, auto_summary, "
     "title, genres, price, actress, series, maker"
 )
 
@@ -501,10 +519,20 @@ def fetch_item_by_content_id(content_id: str) -> list[dict]:
     return response.data or []
 
 
+def prioritize_reviewed_items(items: list[dict]) -> list[dict]:
+    """review_count > 0 の作品を先に処理する。"""
+    def sort_key(row: dict) -> tuple[int, int]:
+        count = normalize_review_count(row.get("review_count"))
+        return (0 if count > 0 else 1, -count)
+
+    return sorted(items, key=sort_key)
+
+
 def fetch_recent_items() -> list[dict]:
     all_items = []
     page = 1000
-    release_date = (date.today() - timedelta(days=31)).isoformat()
+    today = date.today()
+    release_date = (today - timedelta(days=AI_REVIEW_RECENT_DAYS)).isoformat()
 
     for target in targets:
         start = 0
@@ -520,6 +548,15 @@ def fetch_recent_items() -> list[dict]:
                 .execute()
             )
             data = response.data or []
+            data = [
+                row
+                for row in data
+                if is_recent_release(
+                    row.get("release_date"),
+                    today=today,
+                    recent_days=AI_REVIEW_RECENT_DAYS,
+                )
+            ]
             logging.info(
                 "%s %s 取得件数: %s 件 (start=%s)",
                 target["service"],
@@ -527,12 +564,12 @@ def fetch_recent_items() -> list[dict]:
                 len(data),
                 start,
             )
-            if not data:
+            if not response.data:
                 break
             all_items.extend(data)
             start += page
         logging.info("取得済み件数: %s 件", len(all_items))
-    return all_items
+    return prioritize_reviewed_items(all_items)
 
 
 def process_batch(batch_items, batch_index, total):

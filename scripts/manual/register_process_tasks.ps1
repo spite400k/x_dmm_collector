@@ -1,4 +1,6 @@
-# Register process pipelines in Task Scheduler (1h stagger)
+# Register process pipelines in Task Scheduler (1h stagger as earliest start)
+# Collect (23:00) と加工は run.py がロックで排他する。収集が延びても加工は待ってから動く。
+# Run once: powershell -ExecutionPolicy Bypass -File scripts\manual\register_process_tasks.ps1
 # Run once: powershell -ExecutionPolicy Bypass -File scripts\manual\register_process_tasks.ps1
 $ErrorActionPreference = 'Stop'
 $base = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path

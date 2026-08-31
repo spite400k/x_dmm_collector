@@ -6,6 +6,7 @@ import atexit
 import os
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -70,6 +71,44 @@ def clear_stale_lock(path: Path) -> bool:
         return True
     except OSError:
         return False
+
+
+def lock_is_held(path: Path) -> bool:
+    """生存プロセスがロックを保持していれば True（stale は回収して False）。"""
+    if not path.exists():
+        return False
+    if clear_stale_lock(path):
+        return False
+    return path.exists()
+
+
+def wait_until_locks_free(
+    paths: list[Path],
+    *,
+    timeout: float,
+    poll_interval: float,
+    on_wait: Callable[[list[Path], float], None] | None = None,
+) -> bool:
+    """指定ロックが全て空くまで待つ。1 回以上待ったら True。タイムアウト時は RunLockError。"""
+    if not paths:
+        return False
+    start = time.monotonic()
+    waited = False
+    while True:
+        held = [p for p in paths if lock_is_held(p)]
+        if not held:
+            return waited
+        elapsed = time.monotonic() - start
+        if elapsed >= timeout:
+            holders = ", ".join(f"{p.name}={read_lock_holder(p)}" for p in held)
+            raise RunLockError(
+                f"相手ジョブの終了待ちがタイムアウトしました ({timeout:.0f}s): {holders}"
+            )
+        waited = True
+        if on_wait is not None:
+            on_wait(held, elapsed)
+        remaining = timeout - elapsed
+        time.sleep(min(poll_interval, max(0.0, remaining)))
 
 
 class RunLock:

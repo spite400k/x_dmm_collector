@@ -1,4 +1,5 @@
 import io
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -243,3 +244,110 @@ def test_lock_set_rollback_on_conflict(tmp_path):
         assert not p1.exists()
     finally:
         holder.release()
+
+
+def test_resolve_peer_wait_paths_process_waits_for_collect():
+    paths = run_mod.resolve_peer_wait_paths("process_main", None)
+    assert [p.name for p in paths] == ["run.lock"]
+    paths = run_mod.resolve_peer_wait_paths("process", None)
+    assert [p.name for p in paths] == ["run.lock"]
+    paths = run_mod.resolve_peer_wait_paths("process_main_weekly", None)
+    assert [p.name for p in paths] == ["run.lock"]
+
+
+def test_resolve_peer_wait_paths_collect_waits_for_process():
+    names = {p.name for p in run_mod.resolve_peer_wait_paths("collect", None)}
+    assert names == {
+        "run_process_main.lock",
+        "run_process_actress.lock",
+        "run_process_mesugaki.lock",
+    }
+    names = {p.name for p in run_mod.resolve_peer_wait_paths("manual", None)}
+    assert "run_process_main.lock" in names
+
+
+def test_resolve_peer_wait_paths_script_and_all():
+    paths = run_mod.resolve_peer_wait_paths(None, "scripts/process/create_ai_review.py")
+    assert [p.name for p in paths] == ["run.lock"]
+    paths = run_mod.resolve_peer_wait_paths(None, "scripts/collect/default.py")
+    assert {p.name for p in paths} == {
+        "run_process_main.lock",
+        "run_process_actress.lock",
+        "run_process_mesugaki.lock",
+    }
+    assert run_mod.resolve_peer_wait_paths("all", None) == []
+
+
+def test_peer_wait_settings_env(monkeypatch):
+    monkeypatch.setenv(run_mod.PEER_WAIT_TIMEOUT_ENV, "12.5")
+    monkeypatch.setenv(run_mod.PEER_WAIT_POLL_ENV, "0.5")
+    assert run_mod.peer_wait_settings() == (12.5, 0.5)
+
+
+def test_wait_for_peer_locks_all_is_noop():
+    assert run_mod.wait_for_peer_locks("all", None) is False
+
+
+def test_wait_for_peer_locks_logs_throttled(monkeypatch):
+    calls: list[tuple] = []
+
+    def fake_wait(paths, *, timeout, poll_interval, on_wait):
+        on_wait(paths, 0.0)
+        on_wait(paths, 10.0)
+        on_wait(paths, 600.0)
+        calls.append((timeout, poll_interval, [p.name for p in paths]))
+        return True
+
+    monkeypatch.setattr(run_mod, "wait_until_locks_free", fake_wait)
+    monkeypatch.setattr(run_mod, "peer_wait_settings", lambda: (99.0, 1.0))
+    with patch.object(run_mod.logger, "info") as info:
+        assert run_mod.wait_for_peer_locks("process_main", None) is True
+        messages = [c.args[0] for c in info.call_args_list]
+        assert len(messages) == 2
+        assert all("待機中" in m for m in messages)
+    assert calls[0][0] == 99.0
+
+
+def test_apply_process_stagger_skips_when_not_waited():
+    with patch.object(run_mod.time, "sleep") as sleep:
+        run_mod.apply_process_stagger("process_actress", False)
+        run_mod.apply_process_stagger(None, True)
+        run_mod.apply_process_stagger("process_main", True)
+        sleep.assert_not_called()
+
+
+def test_apply_process_stagger_sleeps_for_actress():
+    with patch.object(run_mod.time, "sleep") as sleep:
+        with patch.object(run_mod.logger, "info"):
+            run_mod.apply_process_stagger("process_actress", True)
+            run_mod.apply_process_stagger("process_mesugaki", True)
+        assert sleep.call_args_list[0].args[0] == 3600
+        assert sleep.call_args_list[1].args[0] == 7200
+
+
+def test_apply_process_stagger_disabled_by_env(monkeypatch):
+    monkeypatch.setenv(run_mod.PROCESS_STAGGER_ENV, "0")
+    with patch.object(run_mod.time, "sleep") as sleep:
+        run_mod.apply_process_stagger("process_actress", True)
+        sleep.assert_not_called()
+
+
+def test_main_peer_wait_timeout_exits_2(monkeypatch):
+    monkeypatch.setattr(
+        sys, "argv", ["run.py", "--phase", "process_main", "--continue-on-error"]
+    )
+    monkeypatch.setattr(
+        run_mod,
+        "wait_for_peer_locks",
+        MagicMock(side_effect=run_mod.RunLockError("timeout")),
+    )
+    monkeypatch.setattr(
+        run_mod,
+        "resolve_scripts",
+        lambda *a, **k: [{"path": "scripts/process/update_items.py", "phase": "process_main"}],
+    )
+    with patch.object(run_mod, "setup_logger"):
+        with patch.object(run_mod.logger, "error"):
+            with pytest.raises(SystemExit) as exc:
+                run_mod.main()
+    assert exc.value.code == 2

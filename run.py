@@ -8,13 +8,19 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 import yaml
 
 from utils.logger import RotatingLogFile, configure_utf8_environment, setup_logger
-from utils.run_lock import RunLock, RunLockError
+from utils.run_lock import (
+    RunLock,
+    RunLockError,
+    read_lock_holder,
+    wait_until_locks_free,
+)
 
 configure_utf8_environment()
 
@@ -59,6 +65,22 @@ SCRIPT_PIPELINE: dict[str, str] = {
     "scripts/process/create_weekly_rankings_mesugaki.py": "process_mesugaki",
 }
 
+# 収集が延びたあと、加工 3 系統が同時に起きないよう空ける秒数（OpenAI 対策）
+PROCESS_STAGGER_AFTER_COLLECT = {
+    "process_main": 0,
+    "process_actress": 3600,
+    "process_mesugaki": 7200,
+    "process_main_weekly": 0,
+    "process_mesugaki_weekly": 0,
+}
+
+DEFAULT_PEER_WAIT_TIMEOUT = 36 * 3600
+DEFAULT_PEER_WAIT_POLL = 30.0
+PEER_WAIT_LOG_INTERVAL = 600.0
+PEER_WAIT_TIMEOUT_ENV = "X_DMM_PEER_WAIT_TIMEOUT"
+PEER_WAIT_POLL_ENV = "X_DMM_PEER_WAIT_POLL"
+PROCESS_STAGGER_ENV = "X_DMM_PROCESS_STAGGER_SECONDS"
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,6 +104,66 @@ def resolve_lock_paths(phase: str | None, script_path: str | None) -> list[Path]
             return [pipeline_lock_path(pipeline)]
         return [RUN_LOCK_PATH]
     return [RUN_LOCK_PATH]
+
+
+def resolve_peer_wait_paths(phase: str | None, script_path: str | None) -> list[Path]:
+    """自分のロック以外で、空くまで待つ相手ジョブのロック。
+
+    収集と加工は Chrome を同時に使わない。加工 3 系統同士は並列のまま。
+    同じ系統の二重起動は待たず、既存どおり即失敗する。
+    """
+    if phase == "all":
+        return []
+    if phase in PHASE_LOCK or phase == "process":
+        return [RUN_LOCK_PATH]
+    if script_path:
+        normalized = script_path.replace("\\", "/")
+        if normalized in SCRIPT_PIPELINE:
+            return [RUN_LOCK_PATH]
+    return [pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES]
+
+
+def peer_wait_settings() -> tuple[float, float]:
+    timeout = float(os.environ.get(PEER_WAIT_TIMEOUT_ENV, str(DEFAULT_PEER_WAIT_TIMEOUT)))
+    poll = float(os.environ.get(PEER_WAIT_POLL_ENV, str(DEFAULT_PEER_WAIT_POLL)))
+    return timeout, poll
+
+
+def wait_for_peer_locks(phase: str | None, script_path: str | None) -> bool:
+    """相手ジョブが終わるまで待つ。待った場合は True。"""
+    paths = resolve_peer_wait_paths(phase, script_path)
+    if not paths:
+        return False
+    timeout, poll = peer_wait_settings()
+    last_log = -1.0
+
+    def on_wait(held: list[Path], elapsed: float) -> None:
+        nonlocal last_log
+        if last_log >= 0 and elapsed - last_log < PEER_WAIT_LOG_INTERVAL:
+            return
+        last_log = elapsed
+        holders = ", ".join(f"{p.name}={read_lock_holder(p)}" for p in held)
+        logger.info("相手ジョブの終了を待機中 (%.0fs): %s", elapsed, holders)
+
+    return wait_until_locks_free(
+        paths,
+        timeout=timeout,
+        poll_interval=poll,
+        on_wait=on_wait,
+    )
+
+
+def apply_process_stagger(phase: str | None, waited_for_collect: bool) -> None:
+    """収集を待ったあと、actress / mesugaki を 1h / 2h ずらす。"""
+    if not waited_for_collect or not phase:
+        return
+    if os.environ.get(PROCESS_STAGGER_ENV) == "0":
+        return
+    delay = PROCESS_STAGGER_AFTER_COLLECT.get(phase, 0)
+    if delay <= 0:
+        return
+    logger.info("収集終了後の OpenAI 間隔待機: %d 秒 (%s)", delay, phase)
+    time.sleep(delay)
 
 
 class LockSet:
@@ -300,7 +382,7 @@ def main() -> None:
     parser.add_argument(
         "--no-lock",
         action="store_true",
-        help="多重起動防止ロックを取得しない（緊急時のみ）",
+        help="多重起動防止ロックを取得しない（相手ジョブ待ちもスキップ。緊急時のみ）",
     )
     args = parser.parse_args()
 
@@ -319,6 +401,12 @@ def main() -> None:
 
     lock_set: LockSet | None = None
     if not args.no_lock:
+        try:
+            waited = wait_for_peer_locks(args.phase, args.script)
+            apply_process_stagger(args.phase, waited)
+        except RunLockError as exc:
+            logger.error("%s", exc)
+            sys.exit(2)
         lock_set = LockSet(resolve_lock_paths(args.phase, args.script))
         try:
             lock_set.acquire()

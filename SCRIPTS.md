@@ -110,7 +110,7 @@ python run.py --phase all --continue-on-error
 
 ### 加工フェーズの並列実行
 
-タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。
+タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。時刻は「最早開始」で、収集（通常 23:00）が残っていれば `run.py` が `run.lock` の解放を待ってから本体を始める。収集を待った場合は actress をさらに 1 時間、mesugaki を 2 時間ずらす。逆に 23:00 の収集は加工 3 系統のロックが空くまで待つ。同じ系統の二重起動は待たず即終了（exit 2）。
 
 | タスク名 | bat | 開始時刻 |
 |----------|-----|----------|
@@ -123,7 +123,7 @@ python run.py --phase all --continue-on-error
 再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`  
 旧の `\self\x-dmm-collector-modify`（`run_process.bat` 直列）は無効化すること。
 
-系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。
+系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。収集は `logs/run.lock`。相手ジョブ待ちの上限は 36 時間（環境変数 `X_DMM_PEER_WAIT_TIMEOUT` で変更可）。`--no-lock` は待ちもスキップする。
 
 ### 各 bat の詳細
 

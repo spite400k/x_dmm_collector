@@ -12,8 +12,10 @@ __pycache__/
 htmlcov/
 dist/
 build/
-logs/
+# logs/ だとディレクトリ自体が除外され ! が効かないため logs/* にする
+logs/*
 *.log
+!logs/main.log
 debug*.html
 debug*.png
 *.egg-info/

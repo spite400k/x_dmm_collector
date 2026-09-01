@@ -113,22 +113,22 @@ python run.py --phase all --continue-on-error
 
 ### 加工フェーズの並列実行
 
-タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。ロック・待機・収集後の追加ずらしの詳細は [run.py の相手ジョブ待ち・加工ずらし](#runpy-の相手ジョブ待ち加工ずらし) を参照。
+タスクスケジューラでは **すべて `\fanza\` フォルダ配下** に次を登録する（ルート直下・`\self\` の同名タスクは登録時に削除）。`run_process.bat`（直列）の代わりに加工 3 系統を **1 時間ずらして** 登録する（OpenAI レート制限対策）。ロック・待機・収集後の追加ずらしの詳細は [run.py の相手ジョブ待ち・加工ずらし](#runpy-の相手ジョブ待ち加工ずらし) を参照。
 
 | タスク名 | bat | 開始時刻 |
 |----------|-----|----------|
-| `\self\x-dmm-collector-collect` | `run_collect.bat` | 23:00 |
-| `\self\x-dmm-collector-backfill-tachiyomi` | `run_backfill_tachiyomi.bat` | 00:30 |
-| `\self\x-dmm-collector-process-main` | `run_process_main.bat` | 01:00 |
-| `\self\x-dmm-collector-process-actress` | `run_process_actress.bat` | 02:00 |
-| `\self\x-dmm-collector-process-mesugaki` | `run_process_mesugaki.bat` | 03:00 |
-| `\self\x-dmm-collector-process-main-weekly` | `run_process_main_weekly.bat` | 日曜 12:00 |
-| `\self\x-dmm-collector-process-mesugaki-weekly` | `run_process_mesugaki_weekly.bat` | 日曜 13:00 |
+| `\fanza\x-dmm-collector-collect` | `run_collect.bat` | 23:00 |
+| `\fanza\x-dmm-collector-backfill-tachiyomi` | `run_backfill_tachiyomi.bat` | 00:30 |
+| `\fanza\x-dmm-collector-process-main` | `run_process_main.bat` | 01:00 |
+| `\fanza\x-dmm-collector-process-actress` | `run_process_actress.bat` | 02:00 |
+| `\fanza\x-dmm-collector-process-mesugaki` | `run_process_mesugaki.bat` | 03:00 |
+| `\fanza\x-dmm-collector-process-main-weekly` | `run_process_main_weekly.bat` | 日曜 12:00 |
+| `\fanza\x-dmm-collector-process-mesugaki-weekly` | `run_process_mesugaki_weekly.bat` | 日曜 13:00 |
 
-収集は別タスクで **23:00** に `run_collect.bat`、**00:30** に `run_backfill_tachiyomi.bat` を登録する。
+収集・後埋め・加工はいずれも **`\fanza\` 配下** に登録する。
 
-再登録（収集 + 後埋め）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_collect_backfill_tasks.ps1`  
-再登録（加工）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`
+再登録（収集 + 後埋め → `\fanza\`）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_collect_backfill_tasks.ps1`  
+再登録（加工 → `\fanza\`）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`
 
 系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。
 
@@ -197,7 +197,7 @@ python run.py --phase all --continue-on-error
 
 再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`
 
-旧の `\self\x-dmm-collector-modify`（`run_process.bat` 直列）は無効化すること。
+旧の `x-dmm-collector-modify`（`run_process.bat` 直列。`\self\` 等に残っている場合あり）は登録スクリプト実行時に無効化する。
 
 ---
 

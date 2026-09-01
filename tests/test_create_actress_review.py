@@ -209,6 +209,16 @@ def test_main_regenerate_missing_ids(review_module):
             review_module.main(["--actress-id", "1", "--actress-id", "99"])
 
 
+def test_main_regenerate_all_ids_found(review_module):
+    actresses = [{"actress_id": 1, "name": "A"}]
+
+    with patch.object(review_module, "get_target_actresses", return_value=actresses):
+        with patch.object(review_module.logging, "warning") as warn:
+            with patch.object(review_module, "process_actresses"):
+                review_module.main(["--actress-id", "1"])
+        assert not any("見つからない actress_id" in str(c) for c in warn.call_args_list)
+
+
 def test_main_regenerate_by_name_not_found(review_module):
     with patch.object(review_module, "get_target_actresses", return_value=[]):
         with patch.object(review_module, "process_actresses") as process_mock:

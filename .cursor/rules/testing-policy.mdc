@@ -1,5 +1,5 @@
 ---
-description: 自動テスト作成方針（C0・ホワイトボックス・境界値）
+description: 自動テスト作成方針（C1・ホワイトボックス・境界値）
 globs: tests/**/*.py
 alwaysApply: true
 ---
@@ -8,14 +8,14 @@ alwaysApply: true
 
 ## 目標
 
-- **C0（文カバレッジ）を 100% にする** — `pytest.ini` の `--cov-fail-under=100` を満たす
+- **C1（分岐カバレッジ）を 100% にする** — `pytest.ini` の `--cov-branch` と `--cov-fail-under=100` を満たす
 - 対象モジュールは `pytest.ini` の `--cov=` 一覧（段階的に拡張）
 
 ## ワークフロー
 
-1. `python -m pytest tests/ -q` で Missing 行を確認（`term-missing` 付き）
+1. `python -m pytest tests/ -q` で Missing 行・分岐（BrPart）を確認（`term-missing` 付き）
 2. 対象関数の分岐（if/else, try/except, ループ）を表にし、未実行パスごとにケースを追加
-3. テスト実行後、Missing が消えたことを確認
+3. テスト実行後、Missing / BrPart が消えたことを確認
 
 ## ファイル配置
 
@@ -23,7 +23,7 @@ alwaysApply: true
 |--------|----------|
 | `db/`, `dmm/`, `utils/` | `tests/test_<領域>.py` の `TestXxx` クラス |
 | `main_*.py` | `tests/test_main_scripts.py` |
-| 複数モジュールの未カバー行 | `tests/test_coverage_gaps.py` |
+| 複数モジュールの未カバー行・分岐 | `tests/test_coverage_gaps.py` |
 
 ## モック方針
 

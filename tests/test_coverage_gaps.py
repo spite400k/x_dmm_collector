@@ -1,4 +1,4 @@
-"""C0 100% 向け: 変更モジュールの未実行分岐を埋める。"""
+"""C1 100% 向け: 変更モジュールの未実行分岐を埋める。"""
 
 from __future__ import annotations
 
@@ -820,3 +820,158 @@ class TestRunGaps:
     def test_resolve_scripts_requires_phase_or_script(self):
         with pytest.raises(SystemExit, match="--phase"):
             run_mod.resolve_scripts({"phases": {}}, None, None)
+
+
+class TestC1BranchGaps:
+    def test_extract_x_account_skips_blocklisted_usernames(self):
+        from bs4 import BeautifulSoup
+
+        import dmm.dmm_actress_api as api
+
+        html = """
+        <html><body>
+          <a href="https://x.com/intent/tweet">share</a>
+          <a href="https://x.com/home">home</a>
+          <a href="https://x.com/">empty</a>
+          <a href="https://x.com/valid_user">ok</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        assert api._extract_x_account(soup) == "valid_user"
+
+    def test_map_api_actress_image_url_not_dict(self):
+        import dmm.dmm_actress_api as api
+
+        record = api.map_api_actress_to_record(
+            {"id": "1", "name": "n", "imageURL": "not-a-dict"}
+        )
+        assert record["image_url"] is None
+
+    def test_merge_scrape_skips_empty_values_and_zero_works(self):
+        import dmm.dmm_actress_api as api
+
+        record = {"actress_id": 1, "alias": "keep"}
+        scrape = {"profile": "", "alias": "new", "career_text": None}
+        with patch.object(api, "scrape_osusume_profile", return_value=scrape):
+            with patch.object(api, "fetch_works_count", return_value=0):
+                merged = api._merge_scrape_and_works(record, 1, session=MagicMock())
+        assert merged["alias"] == "keep"
+        assert "works_count" not in merged
+
+    def test_fetch_pending_without_content_id_filter(self):
+        client = MagicMock()
+        chain = client.table.return_value.select.return_value
+        chain.not_.is_.return_value = chain
+        chain.neq.return_value = chain
+        chain.or_.return_value = chain
+        chain.order.return_value = chain
+        chain.range.return_value = chain
+        with patch.object(
+            bf,
+            "execute_with_retry",
+            return_value=MagicMock(data=[]),
+        ):
+            bf.fetch_pending_tachiyomi_rows(client, limit=5, offset=0)
+        chain.eq.assert_not_called()
+
+    def test_process_one_row_sync_dry_run_skips_update(self):
+        row = {
+            "content_id": "c",
+            "tachiyomi_url": "https://x",
+            "floor": "comic",
+            "title": "t",
+        }
+        with patch.object(bf, "count_objects_under_prefix", return_value=2):
+            with patch.object(bf, "update_tachiyomi_fields") as update:
+                status = bf.process_one_row(
+                    row,
+                    client=MagicMock(),
+                    upload_fn=MagicMock(),
+                    bucket="b",
+                    dry_run=True,
+                )
+        assert status == "synced"
+        update.assert_not_called()
+
+    def test_run_backfill_exception_skips_fail_count_when_dry_run(self):
+        rows = [{"content_id": "c1", "tachiyomi_capture_fail_count": 0}]
+
+        with patch.object(bf, "resolve_db_target", return_value=(MagicMock(), MagicMock(), "b")):
+            with patch.object(bf, "fetch_pending_tachiyomi_rows", return_value=rows):
+                with patch.object(bf, "process_one_row", side_effect=RuntimeError("boom")):
+                    with patch.object(bf, "record_capture_failure") as fail:
+                        with patch.object(bf, "TachiyomiCaptureSession") as sess_cls:
+                            sess_cls.return_value.__enter__.return_value = MagicMock()
+                            code = bf.run_backfill(db_name="default", limit=1, dry_run=True)
+        assert code == 1
+        fail.assert_not_called()
+
+    def test_ensure_driver_reuses_existing_not_ready(self):
+        session = tachiyomi.TachiyomiCaptureSession()
+        driver = MagicMock()
+        session._driver = driver
+        session._ready = False
+        with patch.object(session, "_verify_age") as verify:
+            assert session._ensure_driver() is driver
+            verify.assert_called_once_with(driver)
+            assert session._ensure_driver() is driver
+            verify.assert_called_once()
+
+    def test_ensure_driver_skips_verify_when_already_ready_after_create(self):
+        session = tachiyomi.TachiyomiCaptureSession()
+        session._driver = None
+        session._ready = True
+        driver = MagicMock()
+        with patch.object(tachiyomi, "create_chrome_driver", return_value=driver):
+            with patch.object(session, "_verify_age") as verify:
+                assert session._ensure_driver() is driver
+        verify.assert_not_called()
+
+    def test_ensure_driver_returns_immediately_when_ready(self):
+        session = tachiyomi.TachiyomiCaptureSession()
+        driver = MagicMock()
+        session._driver = driver
+        session._ready = True
+        with patch.object(tachiyomi, "create_chrome_driver") as create:
+            with patch.object(session, "_verify_age") as verify:
+                assert session._ensure_driver() is driver
+        create.assert_not_called()
+        verify.assert_not_called()
+
+    def test_capture_once_exception_without_recycle(self):
+        driver = MagicMock()
+        session = tachiyomi.TachiyomiCaptureSession()
+        session._driver = driver
+        session._ready = True
+
+        class FakeWait:
+            def __init__(self, drv, timeout):
+                self.timeout = timeout
+
+            def until(self, method):
+                if self.timeout == 20:
+                    return "publus"
+                if self.timeout == 5:
+                    raise RuntimeError("unexpected layout")
+                return [1, 2]
+
+            def until_not(self, method):
+                return True
+
+        with patch.object(tachiyomi, "WebDriverWait", FakeWait):
+            with patch.object(tachiyomi, "ActionChains"):
+                with patch.object(tachiyomi.os, "makedirs"):
+                    with patch.object(tachiyomi, "is_end_of_book", return_value=False):
+                        with patch.object(tachiyomi, "get_page_counter", return_value=(1, 5)):
+                            with patch.object(tachiyomi.time, "sleep"):
+                                with patch.object(tachiyomi, "save_page_source"):
+                                    with patch.object(session, "_recycle") as recycle:
+                                        assert session._capture_once("https://example.com/t") == []
+        recycle.assert_not_called()
+
+    def test_run_lock_release_when_fh_already_none(self, tmp_path: Path):
+        lock = RunLock(tmp_path / "fh.lock")
+        lock._held = True
+        lock._fh = None
+        lock.release()
+        assert lock._held is False

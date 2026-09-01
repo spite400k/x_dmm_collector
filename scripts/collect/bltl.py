@@ -11,10 +11,11 @@ from db.trn_dmm_items_repository import insert_dmm_item_supabase2 as insert_dmm_
 import os
 import logging
 from utils.get_sample_movie import get_sample_movie
-from utils.get_tachiyomi import capture_all_tachiyomi_pages
+from utils.get_tachiyomi import TachiyomiCaptureSession
 from utils.logger import setup_logger
 from scripts.collect._filter import (
     filter_unregistered_items,
+    register_collected_item,
     run_items_isolated,
     supabase_exists_checker,
 )
@@ -54,64 +55,48 @@ def main():
 
     has_error = False
 
-    # mega_login()  # 先にログイン
+    with TachiyomiCaptureSession() as tachiyomi:
+        for target in targets:
+            site = target["site"]
+            service = target["service"]
+            floor = target.get("floor")
+            logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
 
-    for target in targets:
-        site = target["site"]
-        service = target["service"]
-        floor = target.get("floor")
-        logging.info("[FETCH] site=%s service=%s floor=%s", site, service, floor)
+            try:
+                top_items = fetch_items(
+                    site=site,
+                    service=service,
+                    floor=floor,
+                    offset=1,
+                    hits=hits_per_request,
+                    min_sample_count=10,
+                    supabase_client=supabase2,
+                )
+                logging.info("データ取得完了")
 
-        try:
-            top_items = fetch_items(
-                site=site,
-                service=service,
-                floor=floor,
-                offset=1,
-                hits=hits_per_request,
-                min_sample_count=10,
-                supabase_client=supabase2,
-            )
-            logging.info("データ取得完了")
+                items = filter_unregistered_items(
+                    top_items,
+                    exists_by_content_id=supabase_exists_checker(supabase2.table("trn_dmm_items")),
+                )
+                logging.info("未登録 %d 件 / 取得 %d 件", len(items), len(top_items))
+            except Exception as e:
+                logging.error("登録処理に失敗: %s", str(e))
+                has_error = True
+                continue
 
-            items = filter_unregistered_items(
-                top_items,
-                exists_by_content_id=supabase_exists_checker(supabase2.table("trn_dmm_items")),
-            )
-            logging.info("未登録 %d 件 / 取得 %d 件", len(items), len(top_items))
-        except Exception as e:
-            logging.error("登録処理に失敗: %s", str(e))
-            has_error = True
-            continue
+            def process_one(item: dict) -> None:
+                register_collected_item(
+                    item,
+                    site=site,
+                    service=service,
+                    floor=floor,
+                    insert_fn=insert_dmm_item,
+                    tachiyomi_session=tachiyomi,
+                    cleanup_file=cleanup_file,
+                )
 
-        def process_one(item: dict) -> None:
-            # 立ち読みデータの取得
-            # 立ち読みURLが存在する場合のみ処理
-            tachiyomi_url = item.get("tachiyomi", {}).get("URL")  # ← .get を安全化
-            # logging.info("立ち読みデータ取得開始")
-            tachiyomi_image_paths = []
-            if tachiyomi_url:
-                logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
-                tachiyomi_image_paths = capture_all_tachiyomi_pages(tachiyomi_url=tachiyomi_url)
-            # logging.info("立ち読みデータ取得完了")
-
-            sample_movie_url = item.get("sampleMovieURL_highest")
-            # sample_movie_path = ""
-            # if sample_movie_url:
-            #     logging.info("サンプル動画URL: %s", sample_movie_url)
-            #     sample_movie_path = get_sample_movie(sample_movie_url)
-
-            insert_dmm_item(item, tachiyomi_image_paths, sample_movie_url,site=site, service=service, floor=floor)
-            logging.info("データ登録完了")
-
-            for image_path in tachiyomi_image_paths:
-                cleanup_file(image_path)
-
-            # cleanup_file(sample_movie_path)
-            logging.info("不要ファイル削除完了")
-
-        if run_items_isolated(items, process_one):
-            has_error = True
+            if run_items_isolated(items, process_one):
+                has_error = True
 
     if has_error:
         logging.error("処理中にエラーが発生しました")

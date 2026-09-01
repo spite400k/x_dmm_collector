@@ -151,7 +151,7 @@ def get_page_counter(driver, timeout=30):
         logging.info("取得した page counter: %s/%s", current_page, total_page)
         return current_page, total_page
     except Exception as e:
-        logging.error(f"ページカウンタ取得失敗: {e}")
+        logging.warning("ページカウンタ取得失敗: %s", e)
         with open("debug_get_page_counter.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         driver.save_screenshot("debug_get_page_counter.png")
@@ -159,37 +159,73 @@ def get_page_counter(driver, timeout=30):
 
 
 # ---------------------
-# Tachiyomiページキャプチャ関数
+# Tachiyomiページキャプチャ
 # ---------------------
 _MOBILE_USER_AGENT = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) "
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
 )
+_DMM_TOP_URL = "https://www.dmm.co.jp/top/"
 
 
-def capture_all_tachiyomi_pages(tachiyomi_url: str):
-    logging.info(f"立ち読み対象URL: {tachiyomi_url}")
+def _should_recycle_driver(exc: BaseException) -> bool:
+    """セッション切断・Chrome ハングならドライバーを捨てて作り直す。"""
+    from selenium.common.exceptions import InvalidSessionIdException
 
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    TEMP_DIR = os.path.join(BASE_DIR, "temp")
-    os.makedirs(TEMP_DIR, exist_ok=True)
+    if isinstance(exc, InvalidSessionIdException):
+        return True
+    text = f"{type(exc).__name__} {exc}".lower()
+    needles = (
+        "invalid session",
+        "chrome not reachable",
+        "session not created",
+        "httpconnectionpool",
+        "read timed out",
+        "devtoolsactiveport",
+        "timeoutexception",
+    )
+    return any(needle in text for needle in needles)
 
-    try:
-        driver = create_chrome_driver(
-            page_load_timeout=60,
-            window_size="440,932",
-            user_agent=_MOBILE_USER_AGENT,
-        )
-    except Exception as e:
-        logging.warning("Chrome 起動失敗（立ち読みをスキップ）: %s", e)
-        return []
 
-    images: list[str] = []
-    try:
+class TachiyomiCaptureSession:
+    """1 収集プロセスで Chrome を使い回す。"""
+
+    def __init__(self) -> None:
+        self._driver = None
+        self._ready = False
+
+    def __enter__(self) -> "TachiyomiCaptureSession":
+        return self
+
+    def __exit__(self, *args) -> None:
+        self.close()
+
+    def close(self) -> None:
+        quit_chrome_driver(self._driver)
+        self._driver = None
+        self._ready = False
+
+    def _recycle(self) -> None:
+        logging.warning("立ち読み Chrome を破棄して再作成します")
+        self.close()
+
+    def _ensure_driver(self):
+        if self._driver is not None and self._ready:
+            return self._driver
+        if self._driver is None:
+            self._driver = create_chrome_driver(
+                page_load_timeout=60,
+                window_size="440,932",
+                user_agent=_MOBILE_USER_AGENT,
+            )
+        if not self._ready:
+            self._verify_age(self._driver)
+            self._ready = True
+        return self._driver
+
+    def _verify_age(self, driver) -> None:
         logging.info("DMMトップページを開く")
-        driver.get("https://www.dmm.co.jp/top/")
-
-        # 年齢認証
+        driver.get(_DMM_TOP_URL)
         try:
             button = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((
@@ -203,19 +239,41 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
         except (TimeoutException, StaleElementReferenceException):
             logging.info("年齢認証不要 or 既認証済み")
 
+    def capture(self, tachiyomi_url: str) -> list[str]:
+        logging.info("立ち読み対象URL: %s", tachiyomi_url)
+        try:
+            return self._capture_once(tachiyomi_url)
+        except Exception as e:
+            logging.warning("立ち読み処理失敗（空リストで続行）: %s", e)
+            if _should_recycle_driver(e):
+                self._recycle()
+            return []
+
+    def _capture_once(self, tachiyomi_url: str) -> list[str]:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        temp_dir = os.path.join(base_dir, "temp")
+        os.makedirs(temp_dir, exist_ok=True)
+
+        try:
+            driver = self._ensure_driver()
+        except Exception as e:
+            logging.warning("Chrome 起動失敗（立ち読みをスキップ）: %s", e)
+            self._recycle()
+            return []
+
+        images: list[str] = []
         try:
             driver.get(tachiyomi_url)
         except Exception as e:
-            # 試し読みページのオープン失敗は致命的にせず、空リストで継続させる。
-            logging.error(f"driver.get 失敗（立ち読みをスキップ）: {e!r}")
+            logging.warning("driver.get 失敗（立ち読みをスキップ）: %r", e)
+            if _should_recycle_driver(e):
+                self._recycle()
             return []
 
         time.sleep(2)
-
         page_idx = 1
         current_page = 0
 
-        # ビューア表示待ちのタイムアウトは致命的にせず、空リストを返して呼び出し元の処理を継続させる。
         try:
             kind = wait_for_viewer_ready(driver, timeout=20)
             logging.info("ビューア準備完了: kind=%s", kind)
@@ -224,36 +282,39 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                     EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
                 )
         except (TimeoutException, NoSuchElementException) as e:
-            logging.error(f"ビューア表示待ちに失敗（立ち読みをスキップ）: {e!r}")
+            logging.warning("ビューア表示待ちに失敗（立ち読みをスキップ）: %r", e)
             save_page_source(driver, idx=0)
             return images
 
         _, total_page = get_page_counter(driver, timeout=10)
-        logging.info(f"総ページ数: {total_page}")
+        logging.info("総ページ数: %s", total_page)
 
         actions = ActionChains(driver)
-        time.sleep(2)  # ページ描画待ち
+        time.sleep(2)
 
         while True:
             try:
-                logging.info(f"=== ページ処理開始 idx={page_idx}, 現在={current_page}, 総数={total_page} ===")
-                # 最終ページ判定は待機せず即時チェック（旧実装は毎回最大30秒待っていた）
+                logging.info(
+                    "=== ページ処理開始 idx=%s, 現在=%s, 総数=%s ===",
+                    page_idx,
+                    current_page,
+                    total_page,
+                )
                 if is_end_of_book(driver):
                     logging.info("最終ページを検出 → スクリーンショット終了")
                     break
 
                 canvas = WebDriverWait(driver, 5).until(lambda d: get_visible_canvas(d))
-                screenshot_path = os.path.join(TEMP_DIR, f"page_{page_idx:03}.png")
+                screenshot_path = os.path.join(temp_dir, f"page_{page_idx:03}.png")
                 canvas.screenshot(screenshot_path)
 
-                # PNG → WebP に変換して削除
                 webp_path = screenshot_path.replace(".png", ".webp")
                 with Image.open(screenshot_path) as im:
                     im.save(webp_path, "webp", quality=90)
                 os.remove(screenshot_path)
 
                 images.append(webp_path)
-                logging.info(f"保存成功 (WebP): {webp_path}")
+                logging.info("保存成功 (WebP): %s", webp_path)
 
                 if current_page == 0:
                     current_page, _ = get_page_counter(driver, timeout=5)
@@ -269,21 +330,29 @@ def capture_all_tachiyomi_pages(tachiyomi_url: str):
                 time.sleep(1)
 
             except (TimeoutException, NoSuchElementException) as e:
-                logging.error(f"canvas取得失敗 idx={page_idx}: {e}")
+                logging.warning("canvas取得失敗 idx=%s: %s", page_idx, e)
                 save_page_source(driver, idx=page_idx)
                 break
             except Exception as e:
-                logging.exception(f"予期せぬエラー idx={page_idx}: {e}")
+                logging.exception("予期せぬエラー idx=%s: %s", page_idx, e)
                 save_page_source(driver, idx=page_idx)
+                if _should_recycle_driver(e):
+                    self._recycle()
                 break
 
-    except Exception as e:
-        logging.warning("立ち読み処理失敗（空リストで続行）: %s", e)
-        return []
-    finally:
-        quit_chrome_driver(driver)
+        return images
 
-    return images
+
+def capture_all_tachiyomi_pages(
+    tachiyomi_url: str,
+    *,
+    session: TachiyomiCaptureSession | None = None,
+) -> list[str]:
+    """立ち読みページをキャプチャする。session 省略時は都度 Chrome を起動・終了する。"""
+    if session is not None:
+        return session.capture(tachiyomi_url)
+    with TachiyomiCaptureSession() as owned:
+        return owned.capture(tachiyomi_url)
 
 
 if __name__ == "__main__":

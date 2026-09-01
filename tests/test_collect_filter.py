@@ -2,13 +2,15 @@
 
 from unittest.mock import MagicMock, patch
 
-import httpx
-
 from datetime import date
+
+import httpx
+import pytest
 
 from scripts.collect._filter import (
     filter_released_items,
     filter_unregistered_items,
+    register_collected_item,
     run_items_isolated,
     supabase_exists_checker,
 )
@@ -99,3 +101,47 @@ def test_run_items_isolated_all_success():
 
 def test_run_items_isolated_empty():
     assert run_items_isolated([], lambda _: None) is False
+
+
+def test_register_collected_item_raises_when_insert_fails():
+    session = MagicMock()
+    session.capture.return_value = ["a.webp"]
+    cleaned: list[str] = []
+    item = {
+        "content_id": "x",
+        "tachiyomi": {"URL": "https://example.com/t"},
+        "sampleMovieURL_highest": None,
+    }
+
+    with pytest.raises(RuntimeError, match="insert_dmm_item 失敗"):
+        register_collected_item(
+            item,
+            site="FANZA",
+            service="ebook",
+            floor="comic",
+            insert_fn=lambda *a, **k: False,
+            tachiyomi_session=session,
+            cleanup_file=cleaned.append,
+        )
+
+    assert cleaned == ["a.webp"]
+    session.capture.assert_called_once_with("https://example.com/t")
+
+
+def test_register_collected_item_success_without_tachiyomi():
+    session = MagicMock()
+    calls: list[str] = []
+    item = {"content_id": "x", "tachiyomi": {}}
+
+    register_collected_item(
+        item,
+        site="FANZA",
+        service="ebook",
+        floor="comic",
+        insert_fn=lambda *a, **k: True,
+        tachiyomi_session=session,
+        cleanup_file=lambda p: calls.append(p),
+    )
+
+    session.capture.assert_not_called()
+    assert calls == []

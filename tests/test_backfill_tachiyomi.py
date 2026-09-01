@@ -198,6 +198,130 @@ class TestInsertSetsPageCount:
         payload = client.table.return_value.insert.call_args[0][0]
         assert payload["tachiyomi_page_count"] is None
 
+    def test_insert_returns_false_on_exception(self):
+        client = MagicMock()
+        client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[])
+        )
+        item = {
+            "content_id": "cid-fail",
+            "title": "t",
+            "URL": "https://example.com/i",
+            "tachiyomi": {},
+            "iteminfo": {},
+            "prices": {},
+            "imageURL": {},
+            "sampleImageURL": {},
+        }
+        with patch(
+            "db.trn_dmm_items_repository.generate_content",
+            return_value={},
+        ):
+            with patch(
+                "db.trn_dmm_items_repository.execute_with_retry",
+                side_effect=OSError(10053, "aborted"),
+            ):
+                from db.trn_dmm_items_repository import _insert_dmm_item
+
+                ok = _insert_dmm_item(
+                    item,
+                    [],
+                    None,
+                    "FANZA",
+                    "ebook",
+                    "comic",
+                    supabase_client=client,
+                    upload_local_image_to_s3_fn=MagicMock(),
+                    coerce_empty_image_urls=True,
+                )
+        assert ok is False
+
+    def test_insert_returns_true_when_content_id_missing(self):
+        from db.trn_dmm_items_repository import _insert_dmm_item
+
+        ok = _insert_dmm_item(
+            {"title": "no-id", "URL": "u"},
+            [],
+            None,
+            "FANZA",
+            "ebook",
+            "comic",
+            supabase_client=MagicMock(),
+            upload_local_image_to_s3_fn=MagicMock(),
+            coerce_empty_image_urls=True,
+        )
+        assert ok is True
+
+    def test_insert_returns_true_when_already_registered(self):
+        client = MagicMock()
+        client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[{"id": 1}])
+        )
+        item = {"content_id": "cid-dup", "title": "t", "URL": "u"}
+        with patch(
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
+        ):
+            from db.trn_dmm_items_repository import _insert_dmm_item
+
+            ok = _insert_dmm_item(
+                item,
+                [],
+                None,
+                "FANZA",
+                "ebook",
+                "comic",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=MagicMock(),
+                coerce_empty_image_urls=True,
+            )
+        assert ok is True
+        client.table.return_value.insert.assert_not_called()
+
+    def test_s3_upload_retries_oserror(self):
+        client = MagicMock()
+        client.table.return_value.select.return_value.eq.return_value.execute.return_value = (
+            MagicMock(data=[])
+        )
+        client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+            data=[{"id": 1}]
+        )
+        upload = MagicMock(side_effect=[OSError(10053, "aborted"), "u1"])
+        item = {
+            "content_id": "cid-s3",
+            "title": "t",
+            "URL": "https://example.com/i",
+            "tachiyomi": {"URL": "https://example.com/t"},
+            "iteminfo": {},
+            "prices": {},
+            "imageURL": {},
+            "sampleImageURL": {},
+        }
+        with patch(
+            "db.trn_dmm_items_repository.generate_content",
+            return_value={},
+        ):
+            with patch(
+                "db.trn_dmm_items_repository.execute_with_retry",
+                side_effect=lambda builder: builder().execute(),
+            ):
+                with patch("utils.supabase_retry.time.sleep"):
+                    from db.trn_dmm_items_repository import _insert_dmm_item
+
+                    ok = _insert_dmm_item(
+                        item,
+                        ["a.webp"],
+                        None,
+                        "FANZA",
+                        "ebook",
+                        "comic",
+                        supabase_client=client,
+                        upload_local_image_to_s3_fn=upload,
+                        coerce_empty_image_urls=True,
+                    )
+        assert ok is True
+        assert upload.call_count == 2
+
 
 class TestBackfillProcessOneRow:
     def test_sync_when_s3_has_objects(self):

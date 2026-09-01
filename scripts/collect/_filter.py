@@ -75,6 +75,43 @@ def run_items_isolated(
     return has_error
 
 
+def register_collected_item(
+    item: dict,
+    *,
+    site: str,
+    service: str,
+    floor: str | None,
+    insert_fn: Callable[..., bool],
+    tachiyomi_session: Any,
+    cleanup_file: Callable[[str], None],
+) -> None:
+    """立ち読みキャプチャ → DB 登録。insert 失敗時は例外を投げ、一時ファイルは必ず消す。"""
+    tachiyomi_image_paths: list[str] = []
+    try:
+        tachiyomi_url = (item.get("tachiyomi") or {}).get("URL")
+        if tachiyomi_url:
+            logging.info("立ち読みデータ取得 URL=%s", tachiyomi_url)
+            tachiyomi_image_paths = tachiyomi_session.capture(tachiyomi_url)
+
+        sample_movie_url = item.get("sampleMovieURL_highest")
+        ok = insert_fn(
+            item,
+            tachiyomi_image_paths,
+            sample_movie_url,
+            site=site,
+            service=service,
+            floor=floor,
+        )
+        if not ok:
+            raise RuntimeError("insert_dmm_item 失敗")
+        logging.info("データ登録完了")
+    finally:
+        for image_path in tachiyomi_image_paths:
+            cleanup_file(image_path)
+        if tachiyomi_image_paths:
+            logging.info("不要ファイル削除完了")
+
+
 def supabase_exists_checker(table_client: Any) -> Callable[[str], bool]:
     """Supabase table client から exists 判定関数を作る。"""
 

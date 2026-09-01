@@ -1,20 +1,19 @@
 ---
 description: 自動テスト作成方針（C0・ホワイトボックス・境界値）
 globs: tests/**/*.py
-alwaysApply: false
+alwaysApply: true
 ---
 
 # テスト方針
 
 ## 目標
 
-- **C0（文カバレッジ）を 100% に近づける** — `pytest.ini` の `--cov-fail-under=100` を満たす
-- **ホワイトボックステスト** — ソースの分岐・早期 return・例外を意図的に通す
-- **境界値・限界値テスト** — 空・None・0・1件・最大・不正値を加える
+- **C0（文カバレッジ）を 100% にする** — `pytest.ini` の `--cov-fail-under=100` を満たす
+- 対象モジュールは `pytest.ini` の `--cov=` 一覧（段階的に拡張）
 
 ## ワークフロー
 
-1. `python -m pytest tests/ -q --cov=. --cov-report=term-missing` で Missing 行を確認
+1. `python -m pytest tests/ -q` で Missing 行を確認（`term-missing` 付き）
 2. 対象関数の分岐（if/else, try/except, ループ）を表にし、未実行パスごとにケースを追加
 3. テスト実行後、Missing が消えたことを確認
 

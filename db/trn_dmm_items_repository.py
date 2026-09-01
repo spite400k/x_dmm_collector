@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from supabase import Client
 
 from utils.logger import setup_logger
-from utils.supabase_retry import execute_with_retry
+from utils.supabase_retry import call_with_retry, execute_with_retry
 
 # ZIP ローテート付きログ設定
 setup_logger("trn_dmm_items_repository.log")
@@ -60,7 +60,8 @@ def _insert_dmm_item(
     supabase_client: Client,
     upload_local_image_to_s3_fn: UploadFn,
     coerce_empty_image_urls: bool,
-):
+) -> bool:
+    """1件登録する。成功・スキップは True、失敗は False。"""
     try:
         content_id = item.get("content_id")
         title = item.get("title")
@@ -68,7 +69,7 @@ def _insert_dmm_item(
 
         if not content_id:
             logging.warning(f"[SKIP] content_id が存在しない: {title} : {url}")
-            return
+            return True
 
         # 重複チェック
         exists = execute_with_retry(
@@ -78,7 +79,7 @@ def _insert_dmm_item(
         )
         if exists.data:
             logging.info(f"[SKIP] 既に登録済: {title} ({content_id}) : {url}")
-            return
+            return True
 
         logging.info(f"[START] 登録処理開始: {title} ({content_id})")
 
@@ -87,8 +88,11 @@ def _insert_dmm_item(
         if tachiyomi_image_paths:
             logging.info(f" 立ち読み画像を取得: {title} : {url}")
             for idx, img_url in enumerate(tachiyomi_image_paths):
-                storage_path = upload_local_image_to_s3_fn(
-                    img_url, content_id=content_id, index=idx + 1, floor=floor
+                storage_path = call_with_retry(
+                    lambda img=img_url, i=idx: upload_local_image_to_s3_fn(
+                        img, content_id=content_id, index=i + 1, floor=floor
+                    ),
+                    log_label="S3 アップロード",
                 )
                 if storage_path:
                     uploaded_paths.append(storage_path)
@@ -168,17 +172,19 @@ def _insert_dmm_item(
 
         execute_with_retry(lambda: supabase_client.table("trn_dmm_items").insert(data))
         logging.info(f"[INSERT] 成功: {title} ({content_id}) : {url}")
+        return True
 
     except Exception as e:
         logging.error(f" insert_dmm_item 失敗: {e}")
         logging.error(traceback.format_exc())
+        return False
 
 
 # ---------------------------------------------------------------------
 # DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入（既定DB / 既定S3）
 # ---------------------------------------------------------------------
-def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor):
-    _insert_dmm_item(
+def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor) -> bool:
+    return _insert_dmm_item(
         item,
         tachiyomi_image_paths,
         sample_movie_path,
@@ -191,9 +197,9 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
     )
 
 
-def insert_dmm_item_supabase2(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor):
+def insert_dmm_item_supabase2(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor) -> bool:
     """SUPABASE_URL2 向け（立ち読み画像は storageS3 と同じバケット設定）。"""
-    _insert_dmm_item(
+    return _insert_dmm_item(
         item,
         tachiyomi_image_paths,
         sample_movie_path,
@@ -206,9 +212,9 @@ def insert_dmm_item_supabase2(item: dict, tachiyomi_image_paths, sample_movie_pa
     )
 
 
-def insert_dmm_item_supabase3(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor):
+def insert_dmm_item_supabase3(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor) -> bool:
     """SUPABASE_URL3 向け（立ち読み画像は S3_BUCKET_3）。"""
-    _insert_dmm_item(
+    return _insert_dmm_item(
         item,
         tachiyomi_image_paths,
         sample_movie_path,

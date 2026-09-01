@@ -39,9 +39,9 @@ from db.storageS3 import (
     upload_local_image_to_s3_bucket3,
 )
 from db.supabase_client import supabase, supabase2, supabase3
-from utils.get_tachiyomi import capture_all_tachiyomi_pages
+from utils.get_tachiyomi import TachiyomiCaptureSession, capture_all_tachiyomi_pages
 from utils.logger import setup_logger
-from utils.supabase_retry import execute_with_retry
+from utils.supabase_retry import call_with_retry, execute_with_retry
 
 load_dotenv()
 setup_logger("backfill_tachiyomi.log")
@@ -149,7 +149,12 @@ def upload_tachiyomi_paths(
 ) -> int:
     uploaded = 0
     for idx, path in enumerate(paths):
-        url = upload_fn(path, content_id=content_id, index=idx + 1, floor=floor)
+        url = call_with_retry(
+            lambda p=path, i=idx: upload_fn(
+                p, content_id=content_id, index=i + 1, floor=floor
+            ),
+            log_label="S3 アップロード",
+        )
         if url:
             uploaded += 1
         else:
@@ -175,6 +180,7 @@ def process_one_row(
     bucket: str | None,
     dry_run: bool,
     sync_only: bool = False,
+    session: TachiyomiCaptureSession | None = None,
 ) -> str:
     """1件処理。戻り値: synced | captured | skipped | failed"""
     content_id = row.get("content_id")
@@ -220,7 +226,7 @@ def process_one_row(
     if dry_run:
         return "captured"
 
-    paths = capture_all_tachiyomi_pages(tachiyomi_url)
+    paths = capture_all_tachiyomi_pages(tachiyomi_url, session=session)
     try:
         if not paths:
             logging.warning("[EMPTY] キャプチャ 0 件: %s", content_id)
@@ -278,31 +284,33 @@ def run_backfill(
 
     counts = {"synced": 0, "captured": 0, "skipped": 0, "failed": 0}
     has_error = False
-    for row in rows:
-        try:
-            status = process_one_row(
-                row,
-                client=client,
-                upload_fn=upload_fn,
-                bucket=bucket,
-                dry_run=dry_run,
-                sync_only=sync_only,
-            )
-            counts[status] = counts.get(status, 0) + 1
-            if status == "failed":
+    with TachiyomiCaptureSession() as session:
+        for row in rows:
+            try:
+                status = process_one_row(
+                    row,
+                    client=client,
+                    upload_fn=upload_fn,
+                    bucket=bucket,
+                    dry_run=dry_run,
+                    sync_only=sync_only,
+                    session=session,
+                )
+                counts[status] = counts.get(status, 0) + 1
+                if status == "failed":
+                    has_error = True
+            except Exception as exc:
                 has_error = True
-        except Exception as exc:
-            has_error = True
-            counts["failed"] += 1
-            cid = row.get("content_id")
-            logging.exception("登録処理に失敗: %s (%s)", cid, exc)
-            if cid and not dry_run:
-                try:
-                    record_capture_failure(
-                        client, cid, row.get("tachiyomi_capture_fail_count")
-                    )
-                except Exception:
-                    logging.exception("fail_count 更新にも失敗: %s", cid)
+                counts["failed"] += 1
+                cid = row.get("content_id")
+                logging.exception("登録処理に失敗: %s (%s)", cid, exc)
+                if cid and not dry_run:
+                    try:
+                        record_capture_failure(
+                            client, cid, row.get("tachiyomi_capture_fail_count")
+                        )
+                    except Exception:
+                        logging.exception("fail_count 更新にも失敗: %s", cid)
 
     logging.info(
         "完了 synced=%d captured=%d skipped=%d failed=%d",

@@ -221,3 +221,18 @@ def test_main_conflicting_args(review_module):
         with pytest.raises(SystemExit) as exc:
             review_module.main(["--actress-id", "1", "--name", "A"])
         assert exc.value.code == 1
+
+
+def test_main_connect_error_exits(review_module):
+    import httpx
+
+    with patch.object(
+        review_module,
+        "get_target_actresses",
+        side_effect=httpx.ConnectError("dns"),
+    ):
+        with patch.object(review_module.sys, "exit", side_effect=lambda code: (_ for _ in ()).throw(SystemExit(code))):
+            with patch.object(review_module.logging, "error"):
+                with pytest.raises(SystemExit) as exc:
+                    review_module.main([])
+                assert exc.value.code == 1

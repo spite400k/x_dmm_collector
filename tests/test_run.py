@@ -262,6 +262,13 @@ def test_resolve_peer_wait_paths_collect_waits_for_process():
         "run_process_actress.lock",
         "run_process_mesugaki.lock",
     }
+    backfill_names = {p.name for p in run_mod.resolve_peer_wait_paths("backfill_tachiyomi", None)}
+    assert backfill_names == {
+        "run.lock",
+        "run_process_main.lock",
+        "run_process_actress.lock",
+        "run_process_mesugaki.lock",
+    }
     names = {p.name for p in run_mod.resolve_peer_wait_paths("manual", None)}
     assert "run_process_main.lock" in names
 
@@ -271,6 +278,13 @@ def test_resolve_peer_wait_paths_script_and_all():
     assert [p.name for p in paths] == ["run.lock"]
     paths = run_mod.resolve_peer_wait_paths(None, "scripts/collect/default.py")
     assert {p.name for p in paths} == {
+        "run_process_main.lock",
+        "run_process_actress.lock",
+        "run_process_mesugaki.lock",
+    }
+    paths = run_mod.resolve_peer_wait_paths(None, "scripts/process/backfill_tachiyomi.py")
+    assert {p.name for p in paths} == {
+        "run.lock",
         "run_process_main.lock",
         "run_process_actress.lock",
         "run_process_mesugaki.lock",

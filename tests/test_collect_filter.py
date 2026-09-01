@@ -104,9 +104,6 @@ def test_run_items_isolated_empty():
 
 
 def test_register_collected_item_raises_when_insert_fails():
-    session = MagicMock()
-    session.capture.return_value = ["a.webp"]
-    cleaned: list[str] = []
     item = {
         "content_id": "x",
         "tachiyomi": {"URL": "https://example.com/t"},
@@ -120,17 +117,10 @@ def test_register_collected_item_raises_when_insert_fails():
             service="ebook",
             floor="comic",
             insert_fn=lambda *a, **k: False,
-            tachiyomi_session=session,
-            cleanup_file=cleaned.append,
         )
-
-    assert cleaned == ["a.webp"]
-    session.capture.assert_called_once_with("https://example.com/t")
 
 
 def test_register_collected_item_success_without_tachiyomi():
-    session = MagicMock()
-    calls: list[str] = []
     item = {"content_id": "x", "tachiyomi": {}}
 
     register_collected_item(
@@ -139,9 +129,26 @@ def test_register_collected_item_success_without_tachiyomi():
         service="ebook",
         floor="comic",
         insert_fn=lambda *a, **k: True,
-        tachiyomi_session=session,
-        cleanup_file=lambda p: calls.append(p),
     )
 
-    session.capture.assert_not_called()
-    assert calls == []
+
+def test_register_collected_item_success_with_tachiyomi_url_deferred():
+    item = {
+        "content_id": "x",
+        "tachiyomi": {"URL": "https://example.com/t"},
+    }
+    captured: list[tuple] = []
+
+    def insert_fn(*args, **kwargs):
+        captured.append((args, kwargs))
+        return True
+
+    register_collected_item(
+        item,
+        site="FANZA",
+        service="ebook",
+        floor="comic",
+        insert_fn=insert_fn,
+    )
+
+    assert captured[0][0][1] == []

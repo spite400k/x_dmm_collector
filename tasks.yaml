@@ -17,6 +17,23 @@ phases:
         name: キャンペーン収集
         log: logs/task_run_campaign.log
 
+  backfill_tachiyomi:
+    schedule: daily
+    description: 立ち読み画像の後埋め（収集後に実行。Chrome 使用）
+    scripts:
+      - path: scripts/process/backfill_tachiyomi.py
+        args: ["--limit", "30"]
+        name: 立ち読み後埋め（default DB）
+        log: logs/task_run_backfill_tachiyomi.log
+      - path: scripts/process/backfill_tachiyomi.py
+        args: ["--db", "supabase2", "--limit", "30"]
+        name: 立ち読み後埋め（BL/TL DB）
+        log: logs/task_run_backfill_tachiyomi_bltl.log
+      - path: scripts/process/backfill_tachiyomi.py
+        args: ["--db", "supabase3", "--limit", "30"]
+        name: 立ち読み後埋め（メスガキ DB）
+        log: logs/task_run_backfill_tachiyomi_mesugaki.log
+
   # process は互換用（全系統を直列）。定期実行は process_main / actress / mesugaki を並列推奨。
   process:
     schedule: daily

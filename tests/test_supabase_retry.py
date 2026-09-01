@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+import requests
 
 from utils.supabase_retry import call_with_retry, execute_with_retry
 
@@ -68,6 +69,13 @@ def test_call_with_retry_recovers_s3_connection_closed():
     fn = MagicMock(side_effect=[ConnectionClosedError(endpoint_url="https://s3"), "ok"])
     with patch("utils.supabase_retry.time.sleep"):
         assert call_with_retry(fn, retries=2, base_delay=0.01) == "ok"
+
+
+def test_call_with_retry_recovers_requests_timeout():
+    fn = MagicMock(side_effect=[requests.Timeout("read"), "ok"])
+    with patch("utils.supabase_retry.time.sleep"):
+        assert call_with_retry(fn, retries=2, base_delay=0.01) == "ok"
+    assert fn.call_count == 2
 
 
 def test_call_with_retry_unreachable_when_retries_zero():

@@ -1,13 +1,25 @@
-# Register process pipelines in Task Scheduler (1h stagger as earliest start)
-# Collect (23:00) と加工は run.py がロックで排他する。収集が延びても加工は待ってから動く。
-# Run once: powershell -ExecutionPolicy Bypass -File scripts\manual\register_process_tasks.ps1
-# Run once: powershell -ExecutionPolicy Bypass -File scripts\manual\register_process_tasks.ps1
+# Register process pipelines in Task Scheduler
+#
+# 加工 3 系統を 1 時間ずらして登録する（最早開始時刻）。
+# run.py が収集 (run.lock) と加工の衝突を防ぐ:
+#   - 加工は収集終了まで待ってからロック取得
+#   - 収集は加工 3 系統のロックが空くまで待つ
+# 収集を待ったあと process_actress +1h / process_mesugaki +2h の追加スリープあり。
+# 詳細: リポジトリ直下 SCRIPTS.md「run.py の相手ジョブ待ち・加工ずらし」
+#
+# 収集タスク (23:00 run_collect.bat) は別途 Task Scheduler に登録すること。
+#
+# Run once:
+#   powershell -ExecutionPolicy Bypass -File scripts\manual\register_process_tasks.ps1
+#
 $ErrorActionPreference = 'Stop'
 $base = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not (Test-Path (Join-Path $base 'run_process_main.bat'))) {
   throw "project root not found from $PSScriptRoot"
 }
 
+# 日次: 01:00 / 02:00 / 03:00（run.py が収集延長時にさらにずらす）
+# 週次: 日曜 12:00 / 13:00
 $tasks = @(
   @{ Name = 'x-dmm-collector-process-main';     Bat = 'run_process_main.bat';     At = '01:00' },
   @{ Name = 'x-dmm-collector-process-actress';  Bat = 'run_process_actress.bat';  At = '02:00' },
@@ -56,6 +68,10 @@ try {
   Write-Warning 'Disable it manually in Task Scheduler (conflicts with process-main at 01:00).'
 }
 
+Write-Host ''
+Write-Host 'Reminder: collect/backfill -> scripts\manual\register_collect_backfill_tasks.ps1'
+Write-Host '  (23:00 collect, 00:30 backfill_tachiyomi)'
+Write-Host 'Peer wait / stagger: see SCRIPTS.md'
 Write-Host '---- verify ----'
 Get-ScheduledTask -TaskPath '\self\' | Where-Object {
   $_.TaskName -like 'x-dmm-collector*'

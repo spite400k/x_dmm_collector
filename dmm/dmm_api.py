@@ -4,40 +4,33 @@ import logging
 import json
 from dotenv import load_dotenv
 from db.supabase_client import supabase as default_supabase_client
+from utils.supabase_retry import call_with_retry
 
-# .envファイル読み込み
 load_dotenv()
 
-# APIキー設定
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
 API_URL = "https://api.dmm.com/affiliate/v3/ItemList"
+DEFAULT_API_TIMEOUT = 30
+DMM_API_RETRIES = 3
+DMM_API_RETRY_DELAY = 2.0
 
-# ログ用ディレクトリを作成（存在しなければ）
-os.makedirs("logs", exist_ok=True)  
+os.makedirs("logs", exist_ok=True)
 from utils.logger import setup_logger
 
-# ZIP ローテート付きログ設定
 setup_logger("dmm_api.log")
 
 
-# ---------------------------------------------------------------------
-# sampleMovieURL から最大解像度のURLを取得する関数
-# ---------------------------------------------------------------------
 def get_highest_resolution_movie(movie_info: dict):
-    """
-    sampleMovieURL 内のキーから最大解像度のURLを返す
-    """
     if not isinstance(movie_info, dict):
         return None
 
     best_url = None
-    best_area = 0  # 解像度の面積で比較 (width * height)
+    best_area = 0
 
     for key, url in movie_info.items():
         if key.startswith("size_") and isinstance(url, str):
             try:
-                # "size_560_360" -> width=560, height=360
                 _, w, h = key.split("_")
                 area = int(w) * int(h)
                 if area > best_area:
@@ -49,9 +42,33 @@ def get_highest_resolution_movie(movie_info: dict):
     return best_url
 
 
-# ---------------------------------------------------------------------
-# アイテム取得（サンプル画像枚数でフィルタリング）
-# ---------------------------------------------------------------------
+def _request_item_list(params: dict) -> dict:
+    """ItemList API を timeout 付きで呼び、接続エラー・5xx はリトライする。"""
+
+    def _do_request() -> dict:
+        logging.info("DMM APIへリクエスト送信: %s", API_URL)
+        logging.info("送信パラメータ: %s", params)
+        response = requests.get(API_URL, params=params, timeout=DEFAULT_API_TIMEOUT)
+        if response.status_code >= 500:
+            raise requests.ConnectionError(
+                f"DMM API server error: HTTP {response.status_code}"
+            )
+        response.raise_for_status()
+        result = response.json()
+        if result["result"]["status"] != 200:
+            message = result["result"].get("message", "unknown error")
+            logging.error("APIエラー: %s", message)
+            raise RuntimeError(f"API error: {message}")
+        return result
+
+    return call_with_retry(
+        _do_request,
+        retries=DMM_API_RETRIES,
+        base_delay=DMM_API_RETRY_DELAY,
+        log_label="DMM API",
+    )
+
+
 def fetch_items(
     site,
     service,
@@ -63,10 +80,6 @@ def fetch_items(
     supabase_client=None,
     keyword=None,
 ):
-    """
-    supabase_client: None のとき db.supabase_client の既定クライアント。
-    keyword: 指定時は ItemList に keyword パラメータを付与（メスガキ用検索など）。
-    """
     client = default_supabase_client if supabase_client is None else supabase_client
 
     params = {
@@ -79,66 +92,39 @@ def fetch_items(
         "sort": sort,
         "output": "json",
     }
-    # floor が None でなければ追加
     if floor is not None:
         params["floor"] = floor
     if keyword is not None:
         params["keyword"] = keyword
-    logging.info("DMM APIへリクエスト送信: %s", API_URL)
-    logging.info("送信パラメータ: %s", params)
 
-    try:
-        response = requests.get(API_URL, params=params)
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        logging.error("HTTPエラー: %s", e)
-        raise
-
-    result = response.json()
-
-    if result["result"]["status"] != 200:
-        logging.error("APIエラー: %s", result["result"].get("message", "unknown error"))
-        raise Exception("API error: " + result["result"].get("message", "unknown error"))
-
+    result = _request_item_list(params)
     items = result["result"]["items"]
-
-    # logging.info(items)
 
     filtered_items = []
     for item in items:
-
         content_id = item.get("content_id")
         if not content_id:
             continue
 
-        # ---------------------------
-        # Supabase で存在確認
-        # ---------------------------
         try:
             existing = client.table("trn_dmm_items").select("id").eq("content_id", content_id).execute()
             if existing.data and len(existing.data) > 0:
                 logging.info("[SKIP] 既に登録済み: %s", content_id)
-                continue  # 既に登録済みなのでスキップ
+                continue
         except Exception as e:
             logging.warning("[ERROR] Supabase 照会失敗: %s", e)
             continue
 
         sample_images = item.get("sampleImageURL", {}).get("sample_l", {}).get("image", [])
-        if isinstance(sample_images, list) :
-            # 最大解像度の動画URLを付与
+        if isinstance(sample_images, list):
             item["sampleMovieURL_highest"] = get_highest_resolution_movie(item.get("sampleMovieURL", {}))
-            item["campaign_data"] = item.get("campaign", None)  # ★ 追加
-
+            item["campaign_data"] = item.get("campaign", None)
             filtered_items.append(item)
 
     logging.info("サンプル画像 %d 枚以上のアイテム件数: %d", min_sample_count, len(filtered_items))
-
     return filtered_items
 
 
-# ---------------------------------------------------------------------
-# 複数 sort を順に叩いて結果を統合（同一 content_id は先勝ち）
-# ---------------------------------------------------------------------
 def fetch_items_merged_sorts(
     site,
     service,
@@ -150,10 +136,6 @@ def fetch_items_merged_sorts(
     supabase_client=None,
     keyword=None,
 ):
-    """
-    sorts の順で ItemList を取得し、content_id で重複を除いた 1 本のリストにまとめる。
-    並びは rank 結果が先頭、その後に date のみに現れたもの、最後に review のみに現れたもの。
-    """
     merged = []
     seen = set()
     for sort_key in sorts:
@@ -182,9 +164,6 @@ def fetch_items_merged_sorts(
     return merged
 
 
-# ---------------------------------------------------------------------
-# キーワード検索でアイテム取得 メインでは未使用
-# ---------------------------------------------------------------------
 def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1, sort="rank"):
     params = {
         "api_id": DMM_API_ID,
@@ -196,39 +175,11 @@ def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1,
         "hits": hits,
         "offset": offset,
         "sort": sort,
-        "output": "json"
+        "output": "json",
     }
 
-    logging.info("DMM APIへリクエスト送信: %s", API_URL)
-    logging.info("送信パラメータ: %s", params)
-
-    try:
-        response = requests.get(API_URL, params=params)
-        response.raise_for_status()
-    except requests.HTTPError as e:
-        logging.error("HTTPエラー: %s", e)
-        raise
-
-    result = response.json()
-
-    # レスポンス全体をログ出力
+    result = _request_item_list(params)
     formatted_response = json.dumps(result, ensure_ascii=False, indent=2)
     logging.info("APIレスポンス全文:\n%s", formatted_response)
-
-    if result["result"]["status"] != 200:
-        logging.error("APIエラー: %s", result["result"].get("message", "unknown error"))
-        raise Exception("API error: " + result["result"].get("message", "unknown error"))
-
     logging.info("取得件数: %d", len(result["result"]["items"]))
     return result["result"]["items"]
-
-# ---------------------------------------------------------------------
-# テスト実行（例）
-# ---------------------------------------------------------------------
-if __name__ == "__main__":
-    items = fetch_items(site="DMM.R18", service="digital", floor="doujin", hits=50, min_sample_count=10)
-    for i, item in enumerate(items, 1):
-        logging.info(
-            "%d. タイトル: %s | サンプル枚数: %d | URL例: %s ...",
-            i, item["title"], item["sample_count"], item["sample_urls"][:3]  # 最初の3枚だけ表示
-        )

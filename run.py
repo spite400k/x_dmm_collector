@@ -34,6 +34,7 @@ PROCESS_PIPELINE_PHASES = ("process_main", "process_actress", "process_mesugaki"
 
 PHASE_CHOICES = [
     "collect",
+    "backfill_tachiyomi",
     "process",
     "process_main",
     "process_actress",
@@ -116,10 +117,20 @@ def resolve_peer_wait_paths(phase: str | None, script_path: str | None) -> list[
         return []
     if phase in PHASE_LOCK or phase == "process":
         return [RUN_LOCK_PATH]
+    if phase == "backfill_tachiyomi":
+        return [
+            RUN_LOCK_PATH,
+            *[pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES],
+        ]
     if script_path:
         normalized = script_path.replace("\\", "/")
         if normalized in SCRIPT_PIPELINE:
             return [RUN_LOCK_PATH]
+        if normalized == "scripts/process/backfill_tachiyomi.py":
+            return [
+                RUN_LOCK_PATH,
+                *[pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES],
+            ]
     return [pipeline_lock_path(p) for p in PROCESS_PIPELINE_PHASES]
 
 
@@ -360,7 +371,7 @@ def main() -> None:
     parser.add_argument(
         "--phase",
         choices=PHASE_CHOICES,
-        help="実行するフェーズ（all = collect + process。並列用: process_main / process_actress / process_mesugaki。週次: process_main_weekly / process_mesugaki_weekly）",
+        help="実行するフェーズ（all = collect + process。並列用: process_main / process_actress / process_mesugaki。週次: process_main_weekly / process_mesugaki_weekly。立ち読み後埋め: backfill_tachiyomi）",
     )
     parser.add_argument("--script", help="単一スクリプトのパス（tasks.yaml 内の path）")
     parser.add_argument("--list", action="store_true", help="登録スクリプト一覧を表示")

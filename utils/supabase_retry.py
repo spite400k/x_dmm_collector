@@ -9,6 +9,16 @@ from typing import TypeVar
 
 import httpx
 
+try:
+    import requests as _requests
+except ImportError:  # pragma: no cover
+    _REQUESTS_RETRYABLE: tuple[type[BaseException], ...] = ()
+else:
+    _REQUESTS_RETRYABLE = (
+        _requests.Timeout,
+        _requests.ConnectionError,
+    )
+
 T = TypeVar("T")
 
 try:
@@ -36,7 +46,7 @@ RETRYABLE_ERRORS = (
     httpx.NetworkError,
     httpx.RemoteProtocolError,
     OSError,
-) + _BOTOCORE_RETRYABLE
+) + _BOTOCORE_RETRYABLE + _REQUESTS_RETRYABLE
 
 DEFAULT_RETRIES = 5
 DEFAULT_BASE_DELAY = 3.0

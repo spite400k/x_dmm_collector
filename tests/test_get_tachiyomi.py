@@ -4,7 +4,57 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import utils.get_tachiyomi as tachiyomi
+
+
+def test_driver_get_with_retry_succeeds_after_transient_failure():
+    driver = MagicMock()
+    driver.get.side_effect = [RuntimeError("net"), None]
+    with patch.object(tachiyomi.time, "sleep"):
+        tachiyomi._driver_get_with_retry(driver, "https://example.com/t")
+    assert driver.get.call_count == 2
+
+
+def test_driver_get_with_retry_raises_after_exhausted():
+    driver = MagicMock()
+    driver.get.side_effect = RuntimeError("net")
+    with patch.object(tachiyomi.time, "sleep"):
+        with pytest.raises(RuntimeError, match="net"):
+            tachiyomi._driver_get_with_retry(driver, "https://example.com/t")
+    assert driver.get.call_count == tachiyomi._NAVIGATION_RETRIES
+
+
+def test_wait_for_viewer_with_retry_legacy_waits_loading():
+    driver = MagicMock()
+    with patch.object(tachiyomi, "wait_for_viewer_ready", return_value="legacy") as ready_mock:
+        with patch.object(tachiyomi, "WebDriverWait") as wait_cls:
+            wait_inst = wait_cls.return_value
+            tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
+            wait_inst.until_not.assert_called_once()
+    assert ready_mock.call_count == 1
+
+
+def test_wait_for_viewer_with_retry_retries_on_timeout():
+    driver = MagicMock()
+    with patch.object(
+        tachiyomi,
+        "wait_for_viewer_ready",
+        side_effect=[tachiyomi.TimeoutException(), "publus"],
+    ) as ready_mock:
+        with patch.object(tachiyomi, "WebDriverWait"):
+            with patch.object(tachiyomi.time, "sleep"):
+                kind = tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
+    assert kind == "publus"
+    assert ready_mock.call_count == 2
+
+
+def test_wait_for_viewer_with_retry_raises_when_retries_zero(monkeypatch):
+    driver = MagicMock()
+    monkeypatch.setattr(tachiyomi, "_NAVIGATION_RETRIES", 0)
+    with pytest.raises(tachiyomi.TimeoutException, match="viewer wait failed"):
+        tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
 
 
 def test_capture_skips_long_endofbook_wait(tmp_path, monkeypatch):
@@ -133,7 +183,7 @@ def test_session_reuses_driver_across_captures():
 
 def test_driver_get_timeout_logs_warning_and_recycles():
     driver = MagicMock()
-    driver.get.side_effect = [None, tachiyomi.TimeoutException()]
+    driver.get.side_effect = [None] + [tachiyomi.TimeoutException()] * tachiyomi._NAVIGATION_RETRIES
 
     class FakeWait:
         def __init__(self, *a, **k):

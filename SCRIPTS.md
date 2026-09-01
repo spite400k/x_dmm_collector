@@ -2,6 +2,8 @@
 
 DMM Affiliate API から作品・キャンペーン情報を収集し、Supabase に保存したうえで AI テキスト・レビュー・ランキングを生成する Python バッチ群。
 
+**収集フロー**: `collect` は API + DB 登録のみ（Chrome なし）。立ち読み URL は DB に保存し、画像は `backfill_tachiyomi`（推奨 00:30）で後埋めする。
+
 **実行定義の正本**は [`tasks.yaml`](tasks.yaml)。`run.py` / bat / GitHub Actions はすべてこれを参照する。
 
 ---
@@ -96,7 +98,8 @@ python run.py --phase all --continue-on-error
 
 | bat | 実行内容 | 呼び出し元 |
 |-----|----------|------------|
-| [`run_collect.bat`](run_collect.bat) | 収集フェーズ 4 本 | — |
+| [`run_collect.bat`](run_collect.bat) | 収集フェーズ 4 本（API + DB のみ。立ち読みなし） | — |
+| [`run_backfill_tachiyomi.bat`](run_backfill_tachiyomi.bat) | 立ち読み後埋め（default / supabase2 / supabase3） | 収集後 |
 | [`run_process_main.bat`](run_process_main.bat) | 加工・通常系統 3 本 | 定期（並列推奨） |
 | [`run_process_actress.bat`](run_process_actress.bat) | 加工・女優系統 2 本 | 定期（並列推奨） |
 | [`run_process_mesugaki.bat`](run_process_mesugaki.bat) | 加工・メスガキ系統 3 本 | 定期（並列推奨） |
@@ -110,22 +113,93 @@ python run.py --phase all --continue-on-error
 
 ### 加工フェーズの並列実行
 
-タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。時刻は「最早開始」で、収集（通常 23:00）が残っていれば `run.py` が `run.lock` の解放を待ってから本体を始める。収集を待った場合は actress をさらに 1 時間、mesugaki を 2 時間ずらす。逆に 23:00 の収集は加工 3 系統のロックが空くまで待つ。同じ系統の二重起動は待たず即終了（exit 2）。
+タスクスケジューラでは `run_process.bat`（直列）の代わりに、次の 3 本を **1 時間ずらして** 登録する（OpenAI レート制限対策）。ロック・待機・収集後の追加ずらしの詳細は [run.py の相手ジョブ待ち・加工ずらし](#runpy-の相手ジョブ待ち加工ずらし) を参照。
 
 | タスク名 | bat | 開始時刻 |
 |----------|-----|----------|
+| `\self\x-dmm-collector-collect` | `run_collect.bat` | 23:00 |
+| `\self\x-dmm-collector-backfill-tachiyomi` | `run_backfill_tachiyomi.bat` | 00:30 |
 | `\self\x-dmm-collector-process-main` | `run_process_main.bat` | 01:00 |
 | `\self\x-dmm-collector-process-actress` | `run_process_actress.bat` | 02:00 |
 | `\self\x-dmm-collector-process-mesugaki` | `run_process_mesugaki.bat` | 03:00 |
 | `\self\x-dmm-collector-process-main-weekly` | `run_process_main_weekly.bat` | 日曜 12:00 |
 | `\self\x-dmm-collector-process-mesugaki-weekly` | `run_process_mesugaki_weekly.bat` | 日曜 13:00 |
 
-再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`  
+収集は別タスクで **23:00** に `run_collect.bat`、**00:30** に `run_backfill_tachiyomi.bat` を登録する。
+
+再登録（収集 + 後埋め）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_collect_backfill_tasks.ps1`  
+再登録（加工）: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`
+
+系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。
+
+---
+
+## run.py の相手ジョブ待ち・加工ずらし
+
+収集（Chrome / 立ち読み）と加工が同時に走るとブラウザが衝突するため、`run.py` は **ロック取得の前** に相手ジョブの終了を待つ。加工 3 系統同士は従来どおり並列可。同じ系統の二重起動は待たず **即 exit 2**（従来どおり）。
+
+### ロックファイル
+
+| ファイル | 保持者 |
+|----------|--------|
+| `logs/run.lock` | 収集フェーズ（`--phase collect`）、`SCRIPT_PIPELINE` 外の単体スクリプト |
+| `logs/run_process_main.lock` | `process_main` / `process_main_weekly` |
+| `logs/run_process_actress.lock` | `process_actress` |
+| `logs/run_process_mesugaki.lock` | `process_mesugaki` / `process_mesugaki_weekly` |
+
+### 誰が誰を待つか
+
+| 起動側 | 待つロック（空くまでポーリング） |
+|--------|----------------------------------|
+| 加工（`process_*` / `process`） | `run.lock`（収集） |
+| 収集（`collect`） | `run_process_main.lock` + `run_process_actress.lock` + `run_process_mesugaki.lock` |
+| 立ち読み後埋め（`backfill_tachiyomi`） | `run.lock`（収集）+ 上記 3 つの `run_process_*.lock` |
+| 加工系の単体スクリプト（`SCRIPT_PIPELINE` 登録分） | `run.lock` |
+| 収集系の単体スクリプト（`default.py` 等） | 上記 3 つの `run_process_*.lock` |
+| `--phase all` | 待たない（従来どおり直列） |
+
+待機ログ例（`logs/run.log`）:
+
+```text
+相手ジョブの終了を待機中 (600s): run.lock=12345 2026-09-01 23:00:01
+```
+
+### 収集待ち後の加工ずらし（OpenAI 間隔）
+
+スケジューラ上 01:00 / 02:00 / 03:00 に起動しても、**収集を待った場合のみ** 追加でスリープする（`run.py` 内）。
+
+| フェーズ | 追加待機 |
+|----------|----------|
+| `process_main` / `process_main_weekly` | 0 秒 |
+| `process_actress` | 1 時間（3600 秒） |
+| `process_mesugaki` / `process_mesugaki_weekly` | 2 時間（7200 秒） |
+
+例: 収集が 04:00 まで延びた場合、`process_main` は 04:00 頃開始 → `process_actress` は 05:00 頃 → `process_mesugaki` は 06:00 頃。
+
+### 環境変数
+
+| 変数 | 既定 | 意味 |
+|------|------|------|
+| `X_DMM_PEER_WAIT_TIMEOUT` | `129600`（36 時間） | 相手ジョブ待ちの上限（秒）。超過で exit 2 |
+| `X_DMM_PEER_WAIT_POLL` | `30` | ポーリング間隔（秒） |
+| `X_DMM_PROCESS_STAGGER_SECONDS` | （有効） | `0` にすると収集待ち後の 1h / 2h ずらしを無効化 |
+
+緊急時のみ `--no-lock`（相手待ちもスキップ。二重起動の恐れあり）。
+
+### 典型スケジュール（タスクスケジューラ）
+
+| 時刻 | タスク | 内容 |
+|------|--------|------|
+| 23:00 | 収集（`run_collect.bat`） | 加工 3 系統が動いていれば待ってから開始 |
+| 01:00 | `process_main` | 収集が残っていれば待つ。待った後は即本体 |
+| 02:00 | `process_actress` | 同上。待った後 +1h |
+| 03:00 | `process_mesugaki` | 同上。待った後 +2h |
+
+再登録: `powershell -ExecutionPolicy Bypass -File scripts/manual/register_process_tasks.ps1`
+
 旧の `\self\x-dmm-collector-modify`（`run_process.bat` 直列）は無効化すること。
 
-系統ごとに別ロック（`logs/run_process_*.lock`）。`--phase process` / `all` は全系統ロックを取るため分割 bat と同時には動かない。収集は `logs/run.lock`。相手ジョブ待ちの上限は 36 時間（環境変数 `X_DMM_PEER_WAIT_TIMEOUT` で変更可）。`--no-lock` は待ちもスキップする。
-
-### 各 bat の詳細
+---
 
 #### run_collect.bat
 

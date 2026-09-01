@@ -166,6 +166,62 @@ _MOBILE_USER_AGENT = (
     "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
 )
 _DMM_TOP_URL = "https://www.dmm.co.jp/top/"
+_NAVIGATION_RETRIES = 3
+_NAVIGATION_RETRY_BASE_DELAY = 3.0
+
+
+def _driver_get_with_retry(driver, url: str) -> None:
+    """driver.get を一時障害時に数回リトライする。"""
+    last_exc: BaseException | None = None
+    for attempt in range(_NAVIGATION_RETRIES):
+        try:
+            driver.get(url)
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= _NAVIGATION_RETRIES - 1:
+                raise
+            delay = _NAVIGATION_RETRY_BASE_DELAY * (attempt + 1)
+            logging.warning(
+                "driver.get 失敗 (%d/%d) url=%s: %r → %.0fs 後にリトライ",
+                attempt + 1,
+                _NAVIGATION_RETRIES,
+                url,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+    if last_exc is not None:  # pragma: no cover
+        raise last_exc
+
+
+def _wait_for_viewer_with_retry(driver, timeout: int = 20):
+    """ビューア表示待ちを数回リトライする。戻り値は viewer kind。"""
+    last_exc: BaseException | None = None
+    for attempt in range(_NAVIGATION_RETRIES):
+        try:
+            kind = wait_for_viewer_ready(driver, timeout=timeout)
+            if kind == "legacy":
+                WebDriverWait(driver, 12).until_not(
+                    EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
+                )
+            return kind
+        except (TimeoutException, NoSuchElementException) as exc:
+            last_exc = exc
+            if attempt >= _NAVIGATION_RETRIES - 1:
+                raise
+            delay = _NAVIGATION_RETRY_BASE_DELAY * (attempt + 1)
+            logging.warning(
+                "ビューア表示待ち失敗 (%d/%d): %r → %.0fs 後にリトライ",
+                attempt + 1,
+                _NAVIGATION_RETRIES,
+                exc,
+                delay,
+            )
+            time.sleep(delay)
+    if last_exc is not None:  # pragma: no cover
+        raise last_exc
+    raise TimeoutException("viewer wait failed")
 
 
 def _should_recycle_driver(exc: BaseException) -> bool:
@@ -263,7 +319,7 @@ class TachiyomiCaptureSession:
 
         images: list[str] = []
         try:
-            driver.get(tachiyomi_url)
+            _driver_get_with_retry(driver, tachiyomi_url)
         except Exception as e:
             logging.warning("driver.get 失敗（立ち読みをスキップ）: %r", e)
             if _should_recycle_driver(e):
@@ -275,12 +331,8 @@ class TachiyomiCaptureSession:
         current_page = 0
 
         try:
-            kind = wait_for_viewer_ready(driver, timeout=20)
+            kind = _wait_for_viewer_with_retry(driver, timeout=20)
             logging.info("ビューア準備完了: kind=%s", kind)
-            if kind == "legacy":
-                WebDriverWait(driver, 12).until_not(
-                    EC.visibility_of_any_elements_located((By.CSS_SELECTOR, ".loadingImage"))
-                )
         except (TimeoutException, NoSuchElementException) as e:
             logging.warning("ビューア表示待ちに失敗（立ち読みをスキップ）: %r", e)
             save_page_source(driver, idx=0)

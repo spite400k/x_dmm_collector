@@ -1,4 +1,4 @@
-"""scripts/collect/{default,mesugaki,bltl}.py の C1 カバレッジ用テスト。"""
+"""scripts/collect/{default,mesugaki}.py の C1 カバレッジ用テスト。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def load_collect_module(name: str):
     return importlib.import_module(module_name)
 
 
-@pytest.fixture(params=["default", "mesugaki", "bltl"])
+@pytest.fixture(params=["default", "mesugaki"])
 def collect_mod(request):
     return load_collect_module(request.param)
 
@@ -82,10 +82,6 @@ class TestCollectMain:
         mod = load_collect_module("mesugaki")
         assert self._run_main(mod) == [0]
 
-    def test_main_success_bltl(self):
-        mod = load_collect_module("bltl")
-        assert self._run_main(mod) == [0]
-
     def test_main_exits_1_on_fetch_error(self, collect_mod):
         assert self._run_main(collect_mod, fetch_side_effect=RuntimeError("api down")) == [1]
 
@@ -115,14 +111,8 @@ class TestCollectMain:
         assert first_call.kwargs["site"] == "DMM.R18"
         assert first_call.kwargs["floor"] == "comic"
 
-    @pytest.mark.parametrize("name,fetch_attr,site,floor", [
-        ("mesugaki", "fetch_items_merged_sorts", "DMM.R18", "comic"),
-        ("bltl", "fetch_items", "FANZA", "digital_doujin_bl"),
-    ])
-    def test_main_process_one_registers_item_other_collectors(
-        self, name, fetch_attr, site, floor
-    ):
-        mod = load_collect_module(name)
+    def test_main_process_one_registers_item_mesugaki(self):
+        mod = load_collect_module("mesugaki")
 
         def fake_run(items, process_one):
             process_one(items[0])
@@ -131,7 +121,7 @@ class TestCollectMain:
         with patch.object(mod.sys, "exit", side_effect=lambda c: (_ for _ in ()).throw(SystemExit(c))):
             with patch.object(mod, "setup_logger"):
                 with patch.object(mod.os, "makedirs"):
-                    with patch.object(mod, fetch_attr, return_value=[SAMPLE_ITEM]):
+                    with patch.object(mod, "fetch_items_merged_sorts", return_value=[SAMPLE_ITEM]):
                         with patch.object(mod, "filter_unregistered_items", return_value=[SAMPLE_ITEM]):
                             with patch.object(mod, "run_items_isolated", side_effect=fake_run):
                                 with patch.object(mod, "register_collected_item") as register:
@@ -140,8 +130,8 @@ class TestCollectMain:
 
         register.assert_called()
         first_call = register.call_args_list[0]
-        assert first_call.kwargs["site"] == site
-        assert first_call.kwargs["floor"] == floor
+        assert first_call.kwargs["site"] == "DMM.R18"
+        assert first_call.kwargs["floor"] == "comic"
 
     def test_mesugaki_fetch_uses_keyword(self):
         mod = load_collect_module("mesugaki")
@@ -155,17 +145,3 @@ class TestCollectMain:
                                     mod.main()
         assert fetch_mock.call_args.kwargs["keyword"] == "メスガキ"
         assert fetch_mock.call_args.kwargs["supabase_client"] is mod.supabase3
-
-    def test_bltl_uses_fetch_items(self):
-        mod = load_collect_module("bltl")
-        with patch.object(mod.sys, "exit", side_effect=lambda c: (_ for _ in ()).throw(SystemExit(c))):
-            with patch.object(mod, "setup_logger"):
-                with patch.object(mod.os, "makedirs"):
-                    with patch.object(mod, "fetch_items", return_value=[]) as fetch_mock:
-                        with patch.object(mod, "filter_unregistered_items", return_value=[]):
-                            with patch.object(mod, "run_items_isolated", return_value=False):
-                                with pytest.raises(SystemExit):
-                                    mod.main()
-        fetch_mock.assert_called()
-        assert fetch_mock.call_count == 4
-        assert fetch_mock.call_args.kwargs["supabase_client"] is mod.supabase2

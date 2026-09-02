@@ -9,7 +9,7 @@ alwaysApply: true
 ## 目標
 
 - **C1（分岐カバレッジ）を 100% にする** — `pytest.ini` の `--cov-branch` と `--cov-fail-under=100` を満たす
-- 対象モジュールは `pytest.ini` の `--cov=` 一覧（段階的に拡張。収集: `default` / `mesugaki` / `bltl` を含む）
+- 対象モジュールは `pytest.ini` の `--cov=` 一覧（段階的に拡張。収集: `default` / `mesugaki` を含む）
 
 ## ワークフロー
 

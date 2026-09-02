@@ -38,7 +38,7 @@ from db.storageS3 import (
     upload_local_image_to_s3,
     upload_local_image_to_s3_bucket3,
 )
-from db.supabase_client import supabase, supabase2, supabase3
+from db.supabase_client import supabase, supabase3
 from utils.get_tachiyomi import TachiyomiCaptureSession, capture_all_tachiyomi_pages
 from utils.logger import setup_logger
 from utils.supabase_retry import call_with_retry, execute_with_retry
@@ -48,17 +48,13 @@ setup_logger("backfill_tachiyomi.log")
 
 UploadFn = Callable[..., str | None]
 
-DB_CHOICES = ("default", "supabase2", "supabase3")
+DB_CHOICES = ("default", "supabase3")
 CAPTURE_FAIL_THRESHOLD = 3
 
 
 def resolve_db_target(name: str) -> tuple[Any, UploadFn, str | None]:
     if name == "default":
         return supabase, upload_local_image_to_s3, S3_BUCKET
-    if name == "supabase2":
-        if supabase2 is None:
-            raise RuntimeError("SUPABASE_URL2 / SUPABASE_KEY2 が未設定です")
-        return supabase2, upload_local_image_to_s3, S3_BUCKET
     if name == "supabase3":
         if supabase3 is None:
             raise RuntimeError("SUPABASE_URL3 / SUPABASE_KEY3 が未設定です")
@@ -328,7 +324,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--db",
         choices=DB_CHOICES,
         default="default",
-        help="対象 DB（default / supabase2 / supabase3）",
+        help="対象 DB（default / supabase3）",
     )
     parser.add_argument("--limit", type=int, default=20, help="処理上限件数")
     parser.add_argument(

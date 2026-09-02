@@ -28,7 +28,6 @@
 |-----------|------|---------|------|
 | [`default.py`](collect/default.py) | 通常サイト向け作品収集 | 通常 (`supabase`) | `python scripts/collect/default.py` |
 | [`mesugaki.py`](collect/mesugaki.py) | メスガキ向け作品収集 | メスガキ収集用 (`supabase3`) | `python scripts/collect/mesugaki.py` |
-| [`bltl.py`](collect/bltl.py) | BL/TL 向け作品収集 | BL/TL 用 (`supabase2`) | `python scripts/collect/bltl.py` |
 | [`campaign.py`](collect/campaign.py) | キャンペーン情報収集 | 通常 (`supabase`) | `python scripts/collect/campaign.py` |
 
 ---
@@ -87,7 +86,6 @@ python scripts/process/create_ai_review_mesugaki.py --raw-only   # 生レビュ�
 | 接続名 | 設定 | 主な利用スクリプト |
 |--------|------|-------------------|
 | 通常 | `SUPABASE_URL`, `SUPABASE_KEY` | `default.py`, `update_items.py`, `create_ai_review.py` 等 |
-| BL/TL | `SUPABASE_URL2`, `SUPABASE_KEY2` | `bltl.py` |
 | メスガキ収集 | `SUPABASE_URL3`, `SUPABASE_KEY3` | `mesugaki.py` |
 | メスガキ加工 | `MESUGAKI_SUPABASE_*` | `update_mesugaki.py`, `create_ai_review_mesugaki.py` 等 |
 | Postgres 直結 | `DB_*` / `MESUGAKI_DB_*` | `create_weekly_rankings*.py` |

@@ -1,12 +1,8 @@
 -- 立ち読み画像の取得枚数（フォールバック後の再埋め判定に使用）
--- 適用先（3 環境すべて）:
---   通常   … DB_*          （済）
---   メスガキ … MESUGAKI_DB_* （済）
---   BL/TL  … DB2_*         （SUPABASE_URL2 のプロジェクト）
---
--- 例:
---   .venv\Scripts\python.exe scripts/manual/run_sql.py db/DDL/ddl7_tachiyomi_page_count.sql --prefix DB2
--- または各プロジェクトの Supabase SQL Editor で実行
+-- 適用先:
+--   通常   … DB_*
+--   メスガキ … MESUGAKI_DB_*
+-- （旧 BL/TL 用 DB2_* はサービス停止済み。データは Supabase 上に残存）
 
 alter table public.trn_dmm_items
   add column if not exists tachiyomi_page_count integer null;

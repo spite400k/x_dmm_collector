@@ -16,12 +16,10 @@
 | 接続 | クライアント | 環境変数 |
 |------|-------------|----------|
 | 通常 | `db.supabase_client.supabase` | `SUPABASE_URL`, `SUPABASE_KEY` |
-| BL/TL | `db.supabase_client.supabase2` | `SUPABASE_URL2`, `SUPABASE_KEY2` |
 | メスガキ収集 | `db.supabase_client.supabase3` | `SUPABASE_URL3`, `SUPABASE_KEY3` |
 | メスガキ加工 | `db.supabase_client_mesugaki.supabase` | `MESUGAKI_SUPABASE_URL`, `MESUGAKI_SUPABASE_SERVICE_ROLE_KEY` 等 |
 | 通常 Postgres | `psycopg2` | `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` |
 | メスガキ Postgres | `psycopg2` | `MESUGAKI_DB_*` |
-| BL/TL Postgres | `psycopg2` | `DB2_*`（`SUPABASE_URL2` と同じプロジェクト。DDL 適用用） |
 
 ---
 
@@ -39,19 +37,6 @@
 **処理概要**: 複数 sort で DMM 商品を取得し、未登録作品を `trn_dmm_items` に登録。立ち読み画像・AI 生成文（`auto_comment`, `auto_summary`, `auto_point`）を付与。
 
 **主な INSERT カラム**: `content_id`, `title`, `item_url`, `service`, `floor`, 画像 URL, 価格, ジャンル, 出演者, `auto_*`, `raw_json` 等
-
----
-
-### `collect/bltl.py`
-
-| 種別 | 対象 |
-|------|------|
-| **READ** | `trn_dmm_items`（`supabase2`）— 重複チェック |
-| **WRITE** | `trn_dmm_items`（`supabase2`）— INSERT |
-| **Storage** | S3 |
-| **外部 API** | DMM `ItemList`、OpenAI、Selenium |
-
-**処理概要**: BL/TL 向けフロアの作品を `supabase2` 環境の `trn_dmm_items` に登録。`default.py` と同型。
 
 ---
 
@@ -277,7 +262,7 @@
 
 | テーブル | 主に触るスクリプト |
 |----------|-------------------|
-| `trn_dmm_items` | `collect/default`, `bltl`, `mesugaki`（INSERT） / `update_items`, `update_mesugaki`（UPDATE） / `create_ai_review*`（READ） / `check_campaign`（READ のみ） |
+| `trn_dmm_items` | `collect/default`, `mesugaki`（INSERT） / `update_items`, `update_mesugaki`（UPDATE） / `create_ai_review*`（READ） / `check_campaign`（READ のみ） |
 | `trn_campaigns` | `collect/campaign` |
 | `dmm_raw_reviews` | `create_ai_review`, `create_ai_review_mesugaki` |
 | `dmm_ai_review_summaries` | `create_ai_review`, `create_ai_review_mesugaki` |

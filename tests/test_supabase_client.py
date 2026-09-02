@@ -35,7 +35,7 @@ def test_create_supabase_requires_url_and_key():
 
 
 def test_module_loads_without_secondary_credentials():
-    """GHA のように URL2/3 が無い環境でも主クライアントだけで import できる。"""
+    """GHA のように URL3 が無い環境でも主クライアントだけで import できる。"""
     fake_client = MagicMock(name="primary")
 
     with patch("db.supabase_http.create_supabase_httpx_client", return_value=MagicMock()):
@@ -46,20 +46,17 @@ def test_module_loads_without_secondary_credentials():
                         "SUPABASE_URL": "https://primary.supabase.co",
                         "SUPABASE_KEY": "primary-key",
                         "SUPABASE_SERVICE_ROLE_KEY": "",
-                        "SUPABASE_URL2": "",
-                        "SUPABASE_KEY2": "",
                         "SUPABASE_URL3": "",
                         "SUPABASE_KEY3": "",
                     }
                 )
                 assert mod.supabase is fake_client
-                assert mod.supabase2 is None
                 assert mod.supabase3 is None
                 create_mock.assert_called_once()
 
 
-def test_module_creates_secondary_when_configured():
-    clients = [MagicMock(name="p"), MagicMock(name="s2"), MagicMock(name="s3")]
+def test_module_creates_supabase3_when_configured():
+    clients = [MagicMock(name="p"), MagicMock(name="s3")]
 
     with patch("db.supabase_http.create_supabase_httpx_client", return_value=MagicMock()):
         with patch("supabase.create_client", side_effect=clients) as create_mock:
@@ -69,13 +66,10 @@ def test_module_creates_secondary_when_configured():
                         "SUPABASE_URL": "https://primary.supabase.co",
                         "SUPABASE_KEY": "primary-key",
                         "SUPABASE_SERVICE_ROLE_KEY": "",
-                        "SUPABASE_URL2": "https://second.supabase.co",
-                        "SUPABASE_KEY2": "second-key",
                         "SUPABASE_URL3": "https://third.supabase.co",
                         "SUPABASE_KEY3": "third-key",
                     }
                 )
                 assert mod.supabase is clients[0]
-                assert mod.supabase2 is clients[1]
-                assert mod.supabase3 is clients[2]
-                assert create_mock.call_count == 3
+                assert mod.supabase3 is clients[1]
+                assert create_mock.call_count == 2

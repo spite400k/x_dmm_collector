@@ -98,8 +98,8 @@ python run.py --phase all --continue-on-error
 
 | bat | 実行内容 | 呼び出し元 |
 |-----|----------|------------|
-| [`run_collect.bat`](run_collect.bat) | 収集フェーズ 4 本（API + DB のみ。立ち読みなし） | — |
-| [`run_backfill_tachiyomi.bat`](run_backfill_tachiyomi.bat) | 立ち読み後埋め（default / supabase2 / supabase3） | 収集後 |
+| [`run_collect.bat`](run_collect.bat) | 収集フェーズ 3 本（API + DB のみ。立ち読みなし） | — |
+| [`run_backfill_tachiyomi.bat`](run_backfill_tachiyomi.bat) | 立ち読み後埋め（default / supabase3） | 収集後 |
 | [`run_process_main.bat`](run_process_main.bat) | 加工・通常系統 3 本 | 定期（並列推奨） |
 | [`run_process_actress.bat`](run_process_actress.bat) | 加工・女優系統 2 本 | 定期（並列推奨） |
 | [`run_process_mesugaki.bat`](run_process_mesugaki.bat) | 加工・メスガキ系統 3 本 | 定期（並列推奨） |
@@ -109,7 +109,6 @@ python run.py --phase all --continue-on-error
 | [`run_all.bat`](run_all.bat) | 収集 → 加工（直列） | — |
 | [`run_x_dmm_collector.bat`](run_x_dmm_collector.bat) | `run_all.bat` と同じ | 後方互換エイリアス |
 | [`run_x_dmm_collector_process.bat`](run_x_dmm_collector_process.bat) | `run_process.bat` と同じ | 後方互換エイリアス |
-| [`run_x_dmm_collector_btlt.bat`](run_x_dmm_collector_btlt.bat) | BL/TL 収集のみ | — |
 
 ### 加工フェーズの並列実行
 
@@ -204,7 +203,7 @@ python run.py --phase all --continue-on-error
 #### run_collect.bat
 
 - **コマンド**: `run.py --phase collect --continue-on-error`
-- **対象**: `tasks.yaml` の collect フェーズ（通常 / メスガキ / BL・TL / キャンペーン収集）
+- **対象**: `tasks.yaml` の collect フェーズ（通常 / メスガキ / キャンペーン収集）
 
 #### run_process_main.bat / run_process_actress.bat / run_process_mesugaki.bat
 
@@ -237,11 +236,6 @@ python run.py --phase all --continue-on-error
 - それぞれ `run_all.bat` / `run_process.bat` を `call` するだけのラッパー
 - 旧タスクスケジューラ設定との互換用
 
-#### run_x_dmm_collector_btlt.bat
-
-- **コマンド**: `run.py --script scripts/collect/bltl.py`
-- **用途**: BL/TL 収集だけを単独で回す
-
 ### bat 内の環境設定
 
 各 bat 先頭で以下を定義している（環境に合わせて編集する）。
@@ -263,7 +257,6 @@ python run.py --phase all --continue-on-error
 |-----------|--------|
 | `main_collect.py` | `scripts/collect/default.py` |
 | `main_collect_mesugaki.py` | `scripts/collect/mesugaki.py` |
-| `main_bltl.py` | `scripts/collect/bltl.py` |
 | `main_campaign.py` | `scripts/collect/campaign.py` |
 | `main_update_items.py` | `scripts/process/update_items.py` |
 | `main_create_ai_review.py` | `scripts/process/create_ai_review.py` |

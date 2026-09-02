@@ -14,7 +14,6 @@ import run as run_mod
 import utils.get_tachiyomi as tachiyomi
 from db.trn_dmm_items_repository import (
     insert_dmm_item,
-    insert_dmm_item_supabase2,
     insert_dmm_item_supabase3,
     parse_price,
 )
@@ -463,12 +462,10 @@ class TestTrnDmmItemsRepositoryGaps:
             "db.trn_dmm_items_repository._insert_dmm_item", return_value=True
         ) as inner:
             assert insert_dmm_item(item, [], None, "s", "sv", "f") is True
-            assert insert_dmm_item_supabase2(item, [], None, "s", "sv", "f") is True
             assert insert_dmm_item_supabase3(item, [], None, "s", "sv", "f") is True
-        assert inner.call_count == 3
+        assert inner.call_count == 2
         assert inner.call_args_list[0].kwargs["coerce_empty_image_urls"] is True
         assert inner.call_args_list[1].kwargs["coerce_empty_image_urls"] is False
-        assert inner.call_args_list[2].kwargs["coerce_empty_image_urls"] is False
 
 
 class TestBackfillTachiyomiGaps:
@@ -478,23 +475,10 @@ class TestBackfillTachiyomiGaps:
         assert upload is bf.upload_local_image_to_s3
         assert bucket == bf.S3_BUCKET
 
-    def test_resolve_db_target_supabase2_missing(self):
-        with patch.object(bf, "supabase2", None):
-            with pytest.raises(RuntimeError, match="SUPABASE_URL2"):
-                bf.resolve_db_target("supabase2")
-
     def test_resolve_db_target_supabase3_missing(self):
         with patch.object(bf, "supabase3", None):
             with pytest.raises(RuntimeError, match="SUPABASE_URL3"):
                 bf.resolve_db_target("supabase3")
-
-    def test_resolve_db_target_supabase2_ok(self):
-        client = MagicMock()
-        with patch.object(bf, "supabase2", client):
-            c, upload, bucket = bf.resolve_db_target("supabase2")
-        assert c is client
-        assert upload is bf.upload_local_image_to_s3
-        assert bucket == bf.S3_BUCKET
 
     def test_resolve_db_target_supabase3_ok(self):
         client = MagicMock()

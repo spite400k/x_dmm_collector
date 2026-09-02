@@ -2,7 +2,7 @@ from db.storageS3 import (
     upload_local_image_to_s3 as upload_local_image_to_s3_default,
     upload_local_image_to_s3_bucket3,
 )
-from db.supabase_client import supabase, supabase2, supabase3
+from db.supabase_client import supabase, supabase3
 import logging
 from openai_api.content_generator import generate_content
 import re
@@ -194,21 +194,6 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         supabase_client=supabase,
         upload_local_image_to_s3_fn=upload_local_image_to_s3_default,
         coerce_empty_image_urls=True,
-    )
-
-
-def insert_dmm_item_supabase2(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor) -> bool:
-    """SUPABASE_URL2 向け（立ち読み画像は storageS3 と同じバケット設定）。"""
-    return _insert_dmm_item(
-        item,
-        tachiyomi_image_paths,
-        sample_movie_path,
-        site,
-        service,
-        floor,
-        supabase_client=supabase2,
-        upload_local_image_to_s3_fn=upload_local_image_to_s3_default,
-        coerce_empty_image_urls=False,
     )
 
 

@@ -10,9 +10,6 @@ phases:
       - path: scripts/collect/mesugaki.py
         name: メスガキ収集
         log: logs/task_run_mesugaki.log
-      - path: scripts/collect/bltl.py
-        name: BL/TL収集
-        log: logs/task_run_bltl.log
       - path: scripts/collect/campaign.py
         name: キャンペーン収集
         log: logs/task_run_campaign.log
@@ -25,10 +22,6 @@ phases:
         args: ["--limit", "30"]
         name: 立ち読み後埋め（default DB）
         log: logs/task_run_backfill_tachiyomi.log
-      - path: scripts/process/backfill_tachiyomi.py
-        args: ["--db", "supabase2", "--limit", "30"]
-        name: 立ち読み後埋め（BL/TL DB）
-        log: logs/task_run_backfill_tachiyomi_bltl.log
       - path: scripts/process/backfill_tachiyomi.py
         args: ["--db", "supabase3", "--limit", "30"]
         name: 立ち読み後埋め（メスガキ DB）

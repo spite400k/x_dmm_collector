@@ -90,13 +90,14 @@
 |------|------|
 | **READ** | `trn_dmm_items` — 直近 31 日・対象 service/floor の `content_id`, `item_url`, `service`, `floor`, `review_count` |
 | **READ** | `dmm_raw_reviews` — 既存 `review_id`（差分判定） |
-| **READ** | `dmm_ai_review_summaries` — 既存 `summary_text`（あらすじ再利用・事前スキップ判定） |
+| **READ** | `dmm_ai_review_summaries` — 既存 `summary_text` / `review_count`（あらすじ再利用・候補絞り込み） |
+| **READ** | `trn_dmm_score_history` — スコア有無（候補絞り込み・事前スキップ） |
 | **WRITE** | `dmm_raw_reviews` — UPSERT（`content_id`, `review_id`） |
 | **WRITE** | `dmm_ai_review_summaries` — UPSERT（`content_id`） |
 | **WRITE** | `trn_dmm_score_history` — UPSERT（`content_id`, `snapshot_date`） |
 | **外部 API** | OpenAI、DMM 商品ページ（レビュー・あらすじ、Selenium） |
 
-**処理概要**: `review_count == 0` かつあらすじ保存済の作品は Selenium を起動せずスキップ。それ以外はレビュー取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。
+**処理概要**: 直近作品のうち **未生成 / レビュー件数増 / score_history 未作成** だけを候補にする。`review_count == 0` かつあらすじ保存済は Selenium を起動せずスキップ。それ以外はレビュー取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。
 
 **`dmm_ai_review_summaries` 更新カラム**: `review_digest`, `content_score`, `emotion_score`, `attraction_score`, `genre_axis1_score`, `genre_axis2_score`, `reader_types`, `warning_points`, `review_count`, `avg_rating`, `summary_text`, `ai_model`, `prompt_version`, `updated_at`
 

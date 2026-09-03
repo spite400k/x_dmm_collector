@@ -400,6 +400,7 @@ class TestCreateAiReviewCli:
         table.gte.return_value = table
         table.order.return_value = table
         table.range.return_value = table
+        table.in_.return_value = table
         table.execute.side_effect = [
             MagicMock(
                 data=[
@@ -424,12 +425,66 @@ class TestCreateAiReviewCli:
             MagicMock(data=[]),
             MagicMock(data=[]),
             MagicMock(data=[]),
+            # filter: summaries / score_history（未生成扱い）
+            MagicMock(data=[]),
+            MagicMock(data=[]),
         ]
         with patch("scripts.process.create_ai_review.date") as mock_date:
             mock_date.today.return_value = date(2026, 8, 19)
             with patch.object(create_ai_review.supabase, "table", return_value=table):
                 rows = create_ai_review.fetch_recent_items()
         assert [row["content_id"] for row in rows] == ["old-reviewed", "old-no-review"]
+
+    def test_fetch_recent_items_drops_unchanged_zero_review(self, create_ai_review):
+        from datetime import date
+
+        table = MagicMock()
+        table.select.return_value = table
+        table.eq.return_value = table
+        table.gte.return_value = table
+        table.order.return_value = table
+        table.range.return_value = table
+        table.in_.return_value = table
+        table.execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "done-zero",
+                        "release_date": "2026-08-01",
+                        "review_count": 0,
+                    },
+                    {
+                        "content_id": "new-reviews",
+                        "release_date": "2026-08-02",
+                        "review_count": 3,
+                    },
+                ]
+            ),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "done-zero",
+                        "summary_text": "既存あらすじ",
+                        "review_count": 0,
+                    },
+                    {
+                        "content_id": "new-reviews",
+                        "summary_text": "既存あらすじ",
+                        "review_count": 1,
+                    },
+                ]
+            ),
+            MagicMock(data=[{"content_id": "done-zero"}, {"content_id": "new-reviews"}]),
+        ]
+        with patch("scripts.process.create_ai_review.date") as mock_date:
+            mock_date.today.return_value = date(2026, 8, 19)
+            with patch.object(create_ai_review.supabase, "table", return_value=table):
+                rows = create_ai_review.fetch_recent_items()
+        assert [row["content_id"] for row in rows] == ["new-reviews"]
 
     def test_prioritize_reviewed_items(self, create_ai_review):
         rows = create_ai_review.prioritize_reviewed_items(
@@ -440,6 +495,40 @@ class TestCreateAiReviewCli:
             ]
         )
         assert [row["content_id"] for row in rows] == ["b", "c", "a"]
+
+    def test_needs_ai_review_refresh_matrix(self, create_ai_review):
+        row0 = {"content_id": "a", "review_count": 0}
+        row3 = {"content_id": "b", "review_count": 3}
+        assert create_ai_review.needs_ai_review_refresh(
+            row0, saved_summary_text=None, saved_review_count=0, has_score=False
+        )
+        assert not create_ai_review.needs_ai_review_refresh(
+            row0,
+            saved_summary_text="あらすじ",
+            saved_review_count=0,
+            has_score=True,
+        )
+        assert create_ai_review.needs_ai_review_refresh(
+            row3,
+            saved_summary_text="あらすじ",
+            saved_review_count=3,
+            has_score=False,
+        )
+        assert create_ai_review.needs_ai_review_refresh(
+            row3,
+            saved_summary_text="あらすじ",
+            saved_review_count=1,
+            has_score=True,
+        )
+        assert not create_ai_review.needs_ai_review_refresh(
+            row3,
+            saved_summary_text="あらすじ",
+            saved_review_count=3,
+            has_score=True,
+        )
+
+    def test_filter_ai_review_candidates_empty(self, create_ai_review):
+        assert create_ai_review.filter_ai_review_candidates([]) == []
 
     def test_main_content_id_missing_exits(self, create_ai_review):
         create_ai_review.fetch_item_by_content_id = MagicMock(return_value=[])

@@ -103,6 +103,92 @@ def has_score_history(content_id: str) -> bool:
     return bool(response.data)
 
 
+def needs_ai_review_refresh(
+    row: dict,
+    *,
+    saved_summary_text,
+    saved_review_count,
+    has_score: bool,
+) -> bool:
+    """DB 上で再処理が必要そうな作品か。
+
+    - 有効な AI あらすじが無い → 初回生成
+    - review_count == 0 かつあらすじ済 → 変更見込みなし
+    - レビューありで score_history 未作成 → 要処理
+    - items.review_count が summaries.review_count より大きい → レビュー増の可能性
+    """
+    saved = usable_saved_summary(saved_summary_text)
+    db_count = normalize_review_count(row.get("review_count"))
+    saved_count = normalize_review_count(saved_review_count)
+    if not saved:
+        return True
+    if db_count == 0:
+        return False
+    if not has_score:
+        return True
+    return db_count > saved_count
+
+
+def _chunked(values: list[str], size: int = 50):
+    for i in range(0, len(values), size):
+        yield values[i : i + size]
+
+
+def fetch_summary_states(content_ids: list[str]) -> dict[str, dict]:
+    """content_id → {summary_text, review_count}。"""
+    states: dict[str, dict] = {}
+    for chunk in _chunked(content_ids):
+        response = (
+            supabase.table("dmm_ai_review_summaries")
+            .select("content_id, summary_text, review_count")
+            .in_("content_id", chunk)
+            .execute()
+        )
+        for row in response.data or []:
+            states[row["content_id"]] = row
+    return states
+
+
+def fetch_score_history_ids(content_ids: list[str]) -> set[str]:
+    found: set[str] = set()
+    for chunk in _chunked(content_ids):
+        response = (
+            supabase.table("trn_dmm_score_history")
+            .select("content_id")
+            .in_("content_id", chunk)
+            .execute()
+        )
+        for row in response.data or []:
+            found.add(row["content_id"])
+    return found
+
+
+def filter_ai_review_candidates(items: list[dict]) -> list[dict]:
+    """直近作品から、変更・未生成の見込みがあるものだけ残す。"""
+    if not items:
+        return []
+    content_ids = [row["content_id"] for row in items]
+    summaries = fetch_summary_states(content_ids)
+    scored = fetch_score_history_ids(content_ids)
+    kept: list[dict] = []
+    for row in items:
+        cid = row["content_id"]
+        meta = summaries.get(cid) or {}
+        if needs_ai_review_refresh(
+            row,
+            saved_summary_text=meta.get("summary_text"),
+            saved_review_count=meta.get("review_count"),
+            has_score=cid in scored,
+        ):
+            kept.append(row)
+    logging.info(
+        "AIレビュー候補を絞り込み: %s → %s 件（未生成 / レビュー増 / スコア未作成）",
+        len(items),
+        len(kept),
+    )
+    return kept
+
+
 # 既存のあらすじ取得
 def get_saved_summary(content_id):
     result = supabase.table("dmm_ai_review_summaries")\
@@ -569,7 +655,7 @@ def fetch_recent_items() -> list[dict]:
             all_items.extend(data)
             start += page
         logging.info("取得済み件数: %s 件", len(all_items))
-    return prioritize_reviewed_items(all_items)
+    return prioritize_reviewed_items(filter_ai_review_candidates(all_items))
 
 
 def process_batch(batch_items, batch_index, total):

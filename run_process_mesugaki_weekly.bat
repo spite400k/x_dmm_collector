@@ -1,7 +1,7 @@
 @echo off
 REM ================================================
 REM process: mesugaki weekly catalog refresh
-REM update_mesugaki --mode weekly (items outside recent release window)
+REM update_mesugaki --mode weekly (full catalog: price/campaign/etc.)
 REM ================================================
 SET WORK_DIR=C:\Users\kazuk\python\x_dmm_collector
 SET PYTHON_EXE=C:\Users\kazuk\python\x_dmm_collector\venv\Scripts\python.exe

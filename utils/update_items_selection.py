@@ -7,9 +7,18 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, Sequence
 
 UPDATE_MODES = ("daily", "weekly", "all")
+UPDATE_PROFILE_REVIEWS = "reviews"
+UPDATE_PROFILE_FULL = "full"
 DEFAULT_RECENT_DAYS = 60
 DEFAULT_MISS_LIMIT = 3
 DEFAULT_SKIP_DAYS = 30
+
+
+def resolve_update_profile(mode: str) -> str:
+    """daily → レビューのみ。weekly / all → 価格・campaign 等のフル更新。"""
+    if (mode or "daily").strip().lower() == "daily":
+        return UPDATE_PROFILE_REVIEWS
+    return UPDATE_PROFILE_FULL
 
 
 def parse_release_date(value: Any) -> date | None:
@@ -125,19 +134,20 @@ def should_update_item(
     retry_skipped: bool = False,
     content_ids: Sequence[str] | None = None,
 ) -> bool:
-    """mode=daily / weekly / all。content_id 指定時は他条件を無視する。"""
+    """mode=daily / weekly / all。content_id 指定時は他条件を無視する。
+
+    daily: 直近発売のみ（レビュー更新向け）
+    weekly / all: 全件（価格・campaign 等のフル更新向け）
+    """
     if content_ids:
         return row.get("content_id") in set(content_ids)
     clock = now or datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
     if not retry_skipped and is_api_skip_active(row.get("skip_until"), now=clock):
         return False
     normalized = (mode or "daily").strip().lower()
-    if normalized == "all":
+    if normalized in ("all", "weekly"):
         return True
-    daily = in_daily_window(row, today=today, recent_days=recent_days)
-    if normalized == "weekly":
-        return not daily
-    return daily
+    return in_daily_window(row, today=today, recent_days=recent_days)
 
 
 def merge_api_state(items: Iterable[dict], states: Iterable[dict]) -> list[dict]:
@@ -227,7 +237,10 @@ def build_update_mode_parser(description: str) -> argparse.ArgumentParser:
         "--mode",
         choices=UPDATE_MODES,
         default="daily",
-        help="daily: 直近発売 / weekly: それ以外 / all: 全件",
+        help=(
+            "daily: 直近発売・レビューのみ / "
+            "weekly|all: 全件フル更新（価格・campaign 等）"
+        ),
     )
     parser.add_argument(
         "--recent-days",

@@ -34,6 +34,54 @@ def update_mesugaki():
     return load_update_mesugaki_module()
 
 
+class TestUpdateDmmItemProfile:
+    def test_reviews_profile_updates_only_review_fields(self, update_mesugaki):
+        update_mesugaki.upsert_actresses = MagicMock()
+        table = MagicMock()
+        update_mesugaki.supabase = MagicMock()
+        update_mesugaki.supabase.table.return_value = table
+        table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{"content_id": "m"}]
+        )
+        item = {
+            "title": "t",
+            "review": {"count": 3, "average": 4.5},
+            "prices": {"price": "1000円"},
+            "iteminfo": {"campaign": [{"id": 1}]},
+        }
+        update_mesugaki.update_dmm_item(
+            "m",
+            item,
+            None,
+            None,
+            profile=update_mesugaki.UPDATE_PROFILE_REVIEWS,
+        )
+        update_mesugaki.upsert_actresses.assert_not_called()
+        payload = table.update.call_args[0][0]
+        assert set(payload.keys()) == {
+            "review_count",
+            "review_average",
+            "updated_at",
+        }
+
+    def test_main_passes_reviews_profile_for_daily(self, update_mesugaki):
+        update_mesugaki.fetch_paginated_rows = MagicMock(
+            side_effect=[
+                [{"content_id": "new", "release_date": "2026-08-01"}],
+                [],
+            ]
+        )
+        update_mesugaki.process_batch = MagicMock()
+        today = date(2026, 8, 19)
+        now = datetime(2026, 8, 19, 8, 0, tzinfo=timezone.utc)
+        with patch.object(update_mesugaki.time, "sleep"):
+            update_mesugaki.main([], today=today, now=now)
+        assert (
+            update_mesugaki.process_batch.call_args.kwargs["profile"]
+            == update_mesugaki.UPDATE_PROFILE_REVIEWS
+        )
+
+
 class TestParseArgs:
     def test_defaults(self, update_mesugaki):
         args = update_mesugaki.parse_args([])

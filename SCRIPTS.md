@@ -214,7 +214,7 @@ python run.py --phase all --continue-on-error
 #### run_process_main_weekly.bat / run_process_mesugaki_weekly.bat
 
 - **コマンド**: `run.py --phase process_{main|mesugaki}_weekly --continue-on-error`
-- **対象**: `update_items` / `update_mesugaki` の `--mode weekly`（直近発売窓より古い作品）
+- **対象**: `update_items` / `update_mesugaki` の `--mode weekly`（全件フル更新: 価格・campaign 等）
 - **ロック**: 日次の同系統と共有（同時実行しない）
 - **用途**: 週次のカタログ遅延更新
 

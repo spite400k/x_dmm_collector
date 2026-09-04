@@ -89,6 +89,7 @@ class TestUpdateDmmItemSafeFlag:
             "既存あらすじ",
             "既存ポイント",
             safe_generated_at="2026-08-01T00:00:00+00:00",
+            profile=update_items.UPDATE_PROFILE_FULL,
         )
 
         client.chat.completions.create.assert_not_called()
@@ -96,6 +97,36 @@ class TestUpdateDmmItemSafeFlag:
         assert "auto_summary" not in payload
         assert "safe_generated_at" not in payload
         assert "price" in payload
+        assert "campaign" in payload
+
+    def test_reviews_profile_skips_price_campaign_safe_and_actress(self, update_items):
+        client = MagicMock()
+        update_items.client = client
+        update_items.upsert_actresses = MagicMock()
+        table = MagicMock()
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{"content_id": "r"}]
+        )
+
+        update_items.update_dmm_item(
+            "r",
+            self._base_item(),
+            "あらすじ",
+            "ポイント",
+            safe_generated_at=None,
+            profile=update_items.UPDATE_PROFILE_REVIEWS,
+        )
+
+        client.chat.completions.create.assert_not_called()
+        update_items.upsert_actresses.assert_not_called()
+        payload = table.update.call_args[0][0]
+        assert set(payload.keys()) == {
+            "review_count",
+            "review_average",
+            "updated_at",
+        }
 
     def test_sets_safe_generated_at_on_ai_success(self, update_items):
         client = MagicMock()
@@ -186,9 +217,18 @@ class TestProcessBatchProgress:
         update_items.record_api_result = MagicMock()
         row = {"content_id": "ok1", "auto_summary": "s", "auto_point": "p", "safe_generated_at": None}
         with patch.object(update_items.time, "sleep"):
-            update_items.process_batch([row], batch_index=1, total=1, range_start=0)
+            update_items.process_batch(
+                [row],
+                batch_index=1,
+                total=1,
+                range_start=0,
+                profile=update_items.UPDATE_PROFILE_REVIEWS,
+            )
         update_items.record_api_result.assert_called_once_with(
             "ok1", ok=True, current_state=row
+        )
+        assert update_items.update_dmm_item.call_args.kwargs["profile"] == (
+            update_items.UPDATE_PROFILE_REVIEWS
         )
 
 
@@ -337,7 +377,12 @@ class TestParseArgsAndMain:
 
         processed = update_items.process_batch.call_args[0][0]
         assert [r["content_id"] for r in processed] == ["new"]
+        assert (
+            update_items.process_batch.call_args.kwargs["profile"]
+            == update_items.UPDATE_PROFILE_REVIEWS
+        )
         assert any("更新対象は 1 件" in r.message for r in caplog.records)
+        assert any("profile=reviews" in r.message for r in caplog.records)
 
     def test_main_continues_if_api_state_missing(self, update_items, caplog):
         def fetch(table, columns):

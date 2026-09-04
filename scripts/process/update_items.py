@@ -15,11 +15,14 @@ from db.supabase_client import supabase
 from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
 from utils.update_items_selection import (
+    UPDATE_PROFILE_FULL,
+    UPDATE_PROFILE_REVIEWS,
     filter_items_for_update,
     merge_api_state,
     next_api_state_on_miss,
     next_api_state_on_success,
     parse_update_mode_args,
+    resolve_update_profile,
 )
 
 # ----------------------------------------------------
@@ -411,10 +414,30 @@ def update_dmm_item(
     auto_summary: str,
     auto_point: str,
     safe_generated_at=None,
+    *,
+    profile: str = UPDATE_PROFILE_FULL,
 ):
     try:
         review_count = item.get("review", {}).get("count")
         review_average = item.get("review", {}).get("average")
+        update_data = {
+            "review_count": review_count,
+            "review_average": review_average,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+
+        if profile == UPDATE_PROFILE_REVIEWS:
+            res = (
+                supabase.table("trn_dmm_items")
+                .update(update_data)
+                .eq("content_id", content_id)
+                .execute()
+            )
+            if res.data:
+                logging.info(f"✅ 更新完了(reviews): {content_id}")
+            else:
+                logging.warning(f"⚠️ 該当データなし: {content_id}")
+            return
 
         price = parse_price(item.get("prices", {}).get("price"))
         list_price = parse_price(item.get("prices", {}).get("list_price"))
@@ -446,23 +469,22 @@ def update_dmm_item(
         genre_ids = [g.get("id") for g in genres] if genres else None
         genre_names = [g.get("name") for g in genres] if genres else None
 
-        update_data = {
-            "review_count": review_count,
-            "review_average": review_average,
-            "price": price,
-            "list_price": list_price,
-            "campaign": campaign,
-            "actress_ids": actress_ids,
-            "actress": actresses,
-            "director_ids": director_ids,
-            "director": directors,
-            "genre_ids": genre_ids,
-            "genres": genre_names,
-            "delivery": delivery,
-            "sample_images": sample_images,
-            "raw_json": raw_json,
-            "updated_at": datetime.utcnow().isoformat(),
-        }
+        update_data.update(
+            {
+                "price": price,
+                "list_price": list_price,
+                "campaign": campaign,
+                "actress_ids": actress_ids,
+                "actress": actresses,
+                "director_ids": director_ids,
+                "director": directors,
+                "genre_ids": genre_ids,
+                "genres": genre_names,
+                "delivery": delivery,
+                "sample_images": sample_images,
+                "raw_json": raw_json,
+            }
+        )
 
         if safe_generated_at:
             logging.info("safe_generated_at 済みのため Safe AI をスキップ: %s", content_id)
@@ -488,7 +510,7 @@ def update_dmm_item(
         )
 
         if res.data:
-            logging.info(f"✅ 更新完了: {content_id}")
+            logging.info(f"✅ 更新完了(full): {content_id}")
         else:
             logging.warning(f"⚠️ 該当データなし: {content_id}")
 
@@ -498,9 +520,18 @@ def update_dmm_item(
 # ----------------------------------------------------
 # バッチ処理・メイン
 # ----------------------------------------------------
-def process_batch(batch_items, batch_index, total, range_start=0):
+def process_batch(
+    batch_items,
+    batch_index,
+    total,
+    range_start=0,
+    *,
+    profile: str = UPDATE_PROFILE_FULL,
+):
     """range_start: 全体リスト上のこのバッチ先頭の0-basedインデックス"""
-    logging.info(f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) ===")
+    logging.info(
+        f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) profile={profile} ==="
+    )
     for i, row in enumerate(batch_items, start=1):
         content_id = row["content_id"]
         global_num = range_start + i
@@ -517,6 +548,7 @@ def process_batch(batch_items, batch_index, total, range_start=0):
                 row.get("auto_summary"),
                 row.get("auto_point"),
                 row.get("safe_generated_at"),
+                profile=profile,
             )
             record_api_result(content_id, ok=True, current_state=row)
         else:
@@ -532,9 +564,11 @@ def main(argv=None, *, today: date | None = None, now: datetime | None = None):
     args = parse_args(argv)
     day = today or date.today()
     clock = now or datetime.now(timezone.utc)
+    profile = resolve_update_profile(args.mode)
     logging.info(
-        "=== trn_dmm_items のAPI更新を開始 mode=%s recent_days=%s retry_skipped=%s ===",
+        "=== trn_dmm_items のAPI更新を開始 mode=%s profile=%s recent_days=%s retry_skipped=%s ===",
         args.mode,
+        profile,
         args.recent_days,
         args.retry_skipped,
     )
@@ -585,7 +619,13 @@ def main(argv=None, *, today: date | None = None, now: datetime | None = None):
         batch_items = items[i : i + BATCH_SIZE]
         batch_index = (i // BATCH_SIZE) + 1
 
-        process_batch(batch_items, batch_index, total, range_start=i)
+        process_batch(
+            batch_items,
+            batch_index,
+            total,
+            range_start=i,
+            profile=profile,
+        )
         update_count += len(batch_items)
 
         if i + BATCH_SIZE < total:

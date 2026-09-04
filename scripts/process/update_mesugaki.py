@@ -24,11 +24,14 @@ from db.supabase_client_mesugaki import supabase
 from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
 from utils.update_items_selection import (
+    UPDATE_PROFILE_FULL,
+    UPDATE_PROFILE_REVIEWS,
     filter_items_for_update,
     merge_api_state,
     next_api_state_on_miss,
     next_api_state_on_success,
     parse_update_mode_args,
+    resolve_update_profile,
 )
 
 # ----------------------------------------------------
@@ -430,11 +433,31 @@ def update_dmm_item(
     item: dict,
     auto_summary: str | None,
     auto_point: str | None,
+    *,
+    profile: str = UPDATE_PROFILE_FULL,
 ):
     try:
         review = item.get("review") or {}
         review_count = review.get("count")
         review_average = review.get("average")
+        update_data = {
+            "review_count": review_count,
+            "review_average": review_average,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+
+        if profile == UPDATE_PROFILE_REVIEWS:
+            res = (
+                supabase.table("trn_dmm_items")
+                .update(update_data)
+                .eq("content_id", content_id)
+                .execute()
+            )
+            if res.data:
+                logging.info("✅ 更新完了(reviews): %s（Supabase 反映済み）", content_id)
+            else:
+                logging.warning(f"⚠️ 該当データなし: {content_id}")
+            return
 
         prices = item.get("prices") or {}
         price = parse_price(prices.get("price"))
@@ -486,25 +509,24 @@ def update_dmm_item(
 
         # ★ 更新データに sample_images を追加
 
-        update_data = {
-            "review_count": review_count,
-            "review_average": review_average,
-            "price": price,
-            "list_price": list_price,
-            "auto_summary": auto_summary,
-            "auto_point": auto_point,
-            "campaign": campaign,
-            "actress_ids": actress_ids,
-            "actress": actresses,
-            "director_ids": director_ids,
-            "director": directors,
-            # "genre_ids": genre_ids,
-            # "genre": genre_names,
-            "delivery": delivery,
-            "sample_images": sample_images,  # ← 追加（配列カラム）
-            "raw_json": raw_json,
-            "updated_at": datetime.utcnow().isoformat(),
-        }
+        update_data.update(
+            {
+                "price": price,
+                "list_price": list_price,
+                "auto_summary": auto_summary,
+                "auto_point": auto_point,
+                "campaign": campaign,
+                "actress_ids": actress_ids,
+                "actress": actresses,
+                "director_ids": director_ids,
+                "director": directors,
+                # "genre_ids": genre_ids,
+                # "genre": genre_names,
+                "delivery": delivery,
+                "sample_images": sample_images,  # ← 追加（配列カラム）
+                "raw_json": raw_json,
+            }
+        )
 
         res = (
             supabase.table("trn_dmm_items")
@@ -514,7 +536,7 @@ def update_dmm_item(
         )
 
         if res.data:
-            logging.info("✅ 更新完了: %s（Supabase 反映済み）", content_id)
+            logging.info("✅ 更新完了(full): %s（Supabase 反映済み）", content_id)
         else:
             logging.warning(f"⚠️ 該当データなし: {content_id}")
 
@@ -530,18 +552,21 @@ def process_batch(
     total_batches: int,
     range_start: int,
     total: int,
+    *,
+    profile: str = UPDATE_PROFILE_FULL,
 ):
     """range_start: 全体リスト上のこのバッチ先頭の0-basedインデックス"""
     batch_t0 = time.perf_counter()
     batch_end = min(range_start + len(batch_items), total)
     logging.info(
-        "=== バッチ %s/%s 開始（当バッチ %s 件）全体進捗: %s〜%s / %s 件 ===",
+        "=== バッチ %s/%s 開始（当バッチ %s 件）全体進捗: %s〜%s / %s 件 profile=%s ===",
         batch_index,
         total_batches,
         len(batch_items),
         range_start + 1,
         batch_end,
         total,
+        profile,
     )
     for idx_in_batch, row in enumerate(batch_items, start=1):
         content_id = row.get("content_id")
@@ -564,6 +589,7 @@ def process_batch(
                 item,
                 row.get("auto_summary"),
                 row.get("auto_point"),
+                profile=profile,
             )
             record_api_result(content_id, ok=True, current_state=row)
         else:
@@ -586,9 +612,11 @@ def main(argv=None, *, today: date | None = None, now: datetime | None = None):
     args = parse_args(argv)
     day = today or date.today()
     clock = now or datetime.now(timezone.utc)
+    profile = resolve_update_profile(args.mode)
     logging.info(
-        "=== trn_dmm_items のAPI更新を開始 mode=%s recent_days=%s retry_skipped=%s ===",
+        "=== trn_dmm_items のAPI更新を開始 mode=%s profile=%s recent_days=%s retry_skipped=%s ===",
         args.mode,
+        profile,
         args.recent_days,
         args.retry_skipped,
     )
@@ -657,7 +685,14 @@ def main(argv=None, *, today: date | None = None, now: datetime | None = None):
         batch_items = items[i : i + BATCH_SIZE]
         batch_index = (i // BATCH_SIZE) + 1
 
-        process_batch(batch_items, batch_index, total_batches, i, total)
+        process_batch(
+            batch_items,
+            batch_index,
+            total_batches,
+            i,
+            total,
+            profile=profile,
+        )
         update_count += len(batch_items)
 
         if i + BATCH_SIZE < total:

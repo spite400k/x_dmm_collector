@@ -9,7 +9,6 @@ import pytest
 from utils.update_items_selection import (
     DEFAULT_RECENT_DAYS,
     filter_items_for_update,
-    has_active_campaign,
     in_daily_window,
     is_api_skip_active,
     is_recent_release,
@@ -72,27 +71,6 @@ class TestParseAwareDatetime:
         assert parse_aware_datetime(123) is None
 
 
-class TestHasActiveCampaign:
-    def test_empty_values(self):
-        assert has_active_campaign(None) is False
-        assert has_active_campaign("") is False
-        assert has_active_campaign("  ") is False
-        assert has_active_campaign("null") is False
-        assert has_active_campaign("[]") is False
-        assert has_active_campaign("{}") is False
-        assert has_active_campaign([]) is False
-        assert has_active_campaign({}) is False
-        assert has_active_campaign(()) is False
-        assert has_active_campaign(set()) is False
-
-    def test_present_values(self):
-        assert has_active_campaign([{"id": 1}]) is True
-        assert has_active_campaign({"title": "sale"}) is True
-        assert has_active_campaign("ポイント2倍") is True
-        assert has_active_campaign(1) is True
-        assert has_active_campaign(({"id": 1},)) is True
-
-
 class TestIsReleased:
     def test_released_and_future(self):
         assert is_released("2026-08-19", today=TODAY) is True
@@ -130,30 +108,30 @@ class TestApiSkip:
 
 
 class TestShouldUpdateItem:
-    def test_daily_recent_or_campaign(self):
-        recent = {"release_date": "2026-08-01", "campaign": None}
+    def test_daily_recent_only(self):
+        recent = {"release_date": "2026-08-01"}
         old_sale = {"release_date": "2025-01-01", "campaign": [{"id": 1}]}
-        old = {"release_date": "2025-01-01", "campaign": None}
-        undated = {"release_date": None, "campaign": None}
-        future = {"release_date": "2026-09-01", "campaign": None}
+        old = {"release_date": "2025-01-01"}
+        undated = {"release_date": None}
+        future = {"release_date": "2026-09-01"}
         assert should_update_item(recent, mode="daily", today=TODAY) is True
-        assert should_update_item(old_sale, mode="daily", today=TODAY) is True
+        assert should_update_item(old_sale, mode="daily", today=TODAY) is False
         assert should_update_item(old, mode="daily", today=TODAY) is False
         assert should_update_item(undated, mode="daily", today=TODAY) is False
         assert should_update_item(future, mode="daily", today=TODAY) is False
 
     def test_weekly_is_complement_of_daily(self):
-        old = {"release_date": "2025-01-01", "campaign": []}
-        recent = {"release_date": "2026-08-01", "campaign": None}
+        old = {"release_date": "2025-01-01"}
+        recent = {"release_date": "2026-08-01"}
         old_sale = {"release_date": "2025-01-01", "campaign": {"x": 1}}
-        undated = {"release_date": "", "campaign": None}
+        undated = {"release_date": ""}
         assert should_update_item(old, mode="weekly", today=TODAY) is True
         assert should_update_item(undated, mode="weekly", today=TODAY) is True
         assert should_update_item(recent, mode="weekly", today=TODAY) is False
-        assert should_update_item(old_sale, mode="weekly", today=TODAY) is False
+        assert should_update_item(old_sale, mode="weekly", today=TODAY) is True
 
     def test_all_and_unknown_mode(self):
-        old = {"release_date": "2020-01-01", "campaign": None}
+        old = {"release_date": "2020-01-01"}
         assert should_update_item(old, mode="all", today=TODAY) is True
         assert should_update_item(old, mode="DAILY", today=TODAY) is False
         assert should_update_item(old, mode="", today=TODAY) is False
@@ -163,7 +141,6 @@ class TestShouldUpdateItem:
         skipped = {
             "content_id": "x",
             "release_date": "2026-08-01",
-            "campaign": None,
             "skip_until": "2026-09-18T00:00:00+00:00",
         }
         assert should_update_item(skipped, mode="daily", today=TODAY, now=NOW) is False
@@ -179,10 +156,9 @@ class TestShouldUpdateItem:
         skipped_old = {
             "content_id": "target",
             "release_date": "2020-01-01",
-            "campaign": None,
             "skip_until": "2026-09-18T00:00:00+00:00",
         }
-        other = {"content_id": "other", "release_date": "2026-08-01", "campaign": None}
+        other = {"content_id": "other", "release_date": "2026-08-01"}
         assert (
             should_update_item(
                 skipped_old,
@@ -221,8 +197,8 @@ class TestMergeAndFilter:
 
     def test_preserves_order_and_defaults_today(self):
         rows = [
-            {"content_id": "old", "release_date": "2020-01-01", "campaign": None},
-            {"content_id": "new", "release_date": date.today().isoformat(), "campaign": None},
+            {"content_id": "old", "release_date": "2020-01-01"},
+            {"content_id": "new", "release_date": date.today().isoformat()},
         ]
         daily = filter_items_for_update(rows, mode="daily")
         assert [r["content_id"] for r in daily] == ["new"]
@@ -235,13 +211,11 @@ class TestMergeAndFilter:
             {
                 "content_id": "a",
                 "release_date": "2026-07-01",
-                "campaign": None,
                 "skip_until": None,
             },
             {
                 "content_id": "skipped",
                 "release_date": "2026-08-01",
-                "campaign": None,
                 "skip_until": "2026-09-18T00:00:00+00:00",
             },
         ]

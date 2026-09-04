@@ -105,20 +105,20 @@ phases:
 
   process_main_weekly:
     schedule: weekly
-    description: 通常系統のカタログ遅延更新（60日より古くキャンペーンなし）
+    description: 通常系統のカタログ遅延更新（直近発売窓の外）
     scripts:
       - path: scripts/process/update_items.py
         args: ["--mode", "weekly"]
-        name: アイテム情報の週次更新（旧作・キャンペーンなし）
+        name: アイテム情報の週次更新（旧作）
         log: logs/task_run_update_items_weekly.log
 
   process_mesugaki_weekly:
     schedule: weekly
-    description: メスガキ系統のカタログ遅延更新（60日より古くキャンペーンなし）
+    description: メスガキ系統のカタログ遅延更新（直近発売窓の外）
     scripts:
       - path: scripts/process/update_mesugaki.py
         args: ["--mode", "weekly"]
-        name: メスガキ情報の週次更新（旧作・キャンペーンなし）
+        name: メスガキ情報の週次更新（旧作）
         log: logs/task_run_update_mesugaki_weekly.log
 
   manual:

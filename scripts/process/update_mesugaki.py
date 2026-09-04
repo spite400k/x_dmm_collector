@@ -45,7 +45,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
-ITEM_SELECT = "content_id, auto_summary, auto_point, release_date, campaign"
+ITEM_SELECT = "content_id, auto_summary, auto_point, release_date"
 API_STATE_SELECT = "content_id, miss_count, last_ok_at, skip_until"
 API_STATE_TABLE = "trn_dmm_item_api_state"
 

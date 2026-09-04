@@ -25,14 +25,11 @@ COLLECT_SORTS = ("rank", "date", "review")
 
 def main():
     targets = [
-        {"site": "DMM.R18", "service": "ebook", "floor": "comic"},
         {"site": "FANZA", "service": "doujin", "floor": "digital_doujin"},
         {"site": "FANZA", "service": "digital", "floor": "videoc"},
-        {"site": "DMM.R18", "service": "digital", "floor": "videoa"},
-        {"site": "DMM.R18", "service": "digital", "floor": "anime"},
-        {"site": "FANZA", "service": "ebook", "floor": "novel"},
+        {"site": "FANZA", "service": "digital", "floor": "videoa"},
+        {"site": "FANZA", "service": "ebook", "floor": "comic"},
         {"site": "FANZA", "service": "ebook", "floor": "photo"},
-        {"site": "FANZA", "service": "pcgame", "floor": "digital_pcgame"},
     ]
 
     has_error = False

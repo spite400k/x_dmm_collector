@@ -108,8 +108,8 @@ class TestCollectMain:
 
         assert register.call_count >= 1
         first_call = register.call_args_list[0]
-        assert first_call.kwargs["site"] == "DMM.R18"
-        assert first_call.kwargs["floor"] == "comic"
+        assert first_call.kwargs["site"] == "FANZA"
+        assert first_call.kwargs["floor"] == "digital_doujin"
 
     def test_main_process_one_registers_item_mesugaki(self):
         mod = load_collect_module("mesugaki")

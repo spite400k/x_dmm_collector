@@ -67,20 +67,6 @@ def parse_aware_datetime(value: Any) -> datetime | None:
     return dt
 
 
-def has_active_campaign(campaign: Any) -> bool:
-    """商品の campaign 列に中身があるか。空 list / 空 dict / 空文字はなし。"""
-    if campaign is None:
-        return False
-    if isinstance(campaign, str):
-        t = campaign.strip().lower()
-        return bool(t) and t not in ("null", "none", "[]", "{}")
-    if isinstance(campaign, (list, tuple, set)):
-        return len(campaign) > 0
-    if isinstance(campaign, dict):
-        return len(campaign) > 0
-    return True
-
-
 def is_released(release_date: Any, *, today: date) -> bool:
     """配信開始日が today 以前。未来日・日付不明は False。"""
     parsed = parse_release_date(release_date)
@@ -112,12 +98,12 @@ def in_daily_window(
     today: date,
     recent_days: int = DEFAULT_RECENT_DAYS,
 ) -> bool:
-    """毎日更新対象: 直近発売（配信済み）または campaign あり。"""
+    """毎日更新対象: 直近発売（配信済み）のみ。"""
     return is_recent_release(
         row.get("release_date"),
         today=today,
         recent_days=recent_days,
-    ) or has_active_campaign(row.get("campaign"))
+    )
 
 
 def is_api_skip_active(skip_until: Any, *, now: datetime) -> bool:
@@ -241,7 +227,7 @@ def build_update_mode_parser(description: str) -> argparse.ArgumentParser:
         "--mode",
         choices=UPDATE_MODES,
         default="daily",
-        help="daily: 直近発売+キャンペーン / weekly: それ以外 / all: 全件",
+        help="daily: 直近発売 / weekly: それ以外 / all: 全件",
     )
     parser.add_argument(
         "--recent-days",

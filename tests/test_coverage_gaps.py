@@ -748,6 +748,29 @@ class TestRunGaps:
         proc.kill.assert_called_once()
         proc.stdout.close.assert_called()
 
+    def test_wait_for_script_process_timeout_stdout_already_none(self, tmp_path: Path):
+        proc = MagicMock()
+        proc.pid = 1002
+        proc.stdout = io.StringIO("partial\n")
+
+        def _clear_stdout() -> None:
+            proc.stdout = None
+
+        proc.kill.side_effect = _clear_stdout
+        proc.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="python", timeout=1),
+            0,
+        ]
+        log_path = tmp_path / "out_none.log"
+        with run_mod.RotatingLogFile(log_path) as log_file:
+            with patch.object(run_mod.logger, "error"):
+                out, code = run_mod.wait_for_script_process(
+                    proc, log_file, echo=False, timeout_sec=1
+                )
+        assert code == 124
+        assert "partial" in out
+        proc.kill.assert_called_once()
+
     def test_run_script_uses_timeout_sec(self, tmp_path: Path):
         entry = {
             "path": "scripts/process/create_ai_review.py",

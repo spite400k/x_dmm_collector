@@ -4,7 +4,7 @@ from logging.handlers import TimedRotatingFileHandler
 import zipfile
 import os
 
-from utils.logger import LOG_ENCODING, create_utf8_stream_handler
+from utils.logger import BACKUP_COUNT, LOG_ENCODING, create_utf8_stream_handler
 
 
 class ZipRotator:
@@ -30,7 +30,7 @@ class ZipRotatingLogger:
     def setup(
         log_path: str = "logs/fetch_items.log",
         level=logging.INFO,
-        backupCount: int = 7,
+        backupCount: int = BACKUP_COUNT,
     ):
         # ディレクトリを自動作成
         os.makedirs(os.path.dirname(log_path), exist_ok=True)

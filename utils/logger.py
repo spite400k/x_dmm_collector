@@ -6,7 +6,7 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 LOG_DIR = "logs"
-BACKUP_COUNT = 7
+BACKUP_COUNT = 2
 ROTATE_WHEN = "midnight"
 ROTATE_INTERVAL = 1
 LOG_ENCODING = "utf-8"

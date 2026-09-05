@@ -1,12 +1,13 @@
 import os
 import time
 import logging
+from urllib.parse import urlparse
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from PIL import Image
 
 from utils.chromedriver import create_chrome_driver, quit_chrome_driver
@@ -169,6 +170,87 @@ _DMM_TOP_URL = "https://www.dmm.co.jp/top/"
 _NAVIGATION_RETRIES = 3
 _NAVIGATION_RETRY_BASE_DELAY = 3.0
 
+# FANZA / book.dmm の年齢確認（旧「はい」と新「18歳以上なので進む」の両方）。
+_AGE_CHECK_SELECTORS = (
+    (By.XPATH, "//a[contains(normalize-space(.),'18歳以上なので進む')]"),
+    (By.XPATH, "//a[contains(@href,'declared=yes')]"),
+    (By.XPATH, "//a[normalize-space(text())='はい']"),
+    (By.XPATH, "//a[normalize-space(text())='I Agree']"),
+    (By.LINK_TEXT, "はい"),
+    (By.LINK_TEXT, "I Agree"),
+    (By.XPATH, "//button[.//span[normalize-space(text())='はい']]"),
+    (By.XPATH, "//button[normalize-space(text())='はい']"),
+)
+
+
+def _is_age_check_url(url: str | None) -> bool:
+    if not isinstance(url, str) or not url:
+        return False
+    parsed = urlparse(url)
+    path = (parsed.path or "").lower()
+    host = (parsed.hostname or "").lower()
+    return "age_check" in path or "age_check" in host
+
+
+def _apply_age_check_cookie(driver) -> None:
+    try:
+        driver.add_cookie(
+            {
+                "name": "age_check_done",
+                "value": "1",
+                "path": "/",
+                "domain": ".dmm.co.jp",
+            }
+        )
+    except Exception:
+        logging.debug("age_check_done cookie 設定をスキップ", exc_info=True)
+
+
+def _age_gate_elements_present(driver) -> bool:
+    try:
+        for by, selector in _AGE_CHECK_SELECTORS[:2]:
+            found = driver.find_elements(by, selector)
+            # Selenium は list を返す。MagicMock 等の偽陽性を避ける。
+            if isinstance(found, list) and found:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _handle_age_check(driver) -> bool:
+    """年齢確認ページ / モーダルがあれば突破する。クリックしたら True。"""
+    current_url = driver.current_url if isinstance(getattr(driver, "current_url", None), str) else ""
+    on_age_check = _is_age_check_url(current_url) or _age_gate_elements_present(driver)
+    if not on_age_check:
+        return False
+
+    clicked = False
+    for by, selector in _AGE_CHECK_SELECTORS:
+        try:
+            yes_button = WebDriverWait(driver, 3).until(
+                EC.element_to_be_clickable((by, selector))
+            )
+            driver.execute_script("arguments[0].click();", yes_button)
+            clicked = True
+            logging.info("年齢認証クリック成功: %s", selector)
+            break
+        except Exception:
+            continue
+
+    if not clicked:
+        logging.warning("年齢認証ボタンを検出できず: url=%s title=%s", current_url, driver.title)
+        return False
+
+    try:
+        WebDriverWait(driver, 10).until(lambda d: not _is_age_check_url(d.current_url))
+        logging.info("年齢認証ページ離脱: %s", driver.current_url)
+    except Exception:
+        logging.warning("年齢認証ページ離脱を確認できず: %s", driver.current_url)
+
+    _apply_age_check_cookie(driver)
+    return True
+
 
 def _driver_get_with_retry(driver, url: str) -> None:
     """driver.get を一時障害時に数回リトライする。"""
@@ -195,11 +277,12 @@ def _driver_get_with_retry(driver, url: str) -> None:
         raise last_exc
 
 
-def _wait_for_viewer_with_retry(driver, timeout: int = 20):
+def _wait_for_viewer_with_retry(driver, timeout: int = 20, *, url: str | None = None):
     """ビューア表示待ちを数回リトライする。戻り値は viewer kind。"""
     last_exc: BaseException | None = None
     for attempt in range(_NAVIGATION_RETRIES):
         try:
+            _handle_age_check(driver)
             kind = wait_for_viewer_ready(driver, timeout=timeout)
             if kind == "legacy":
                 WebDriverWait(driver, 12).until_not(
@@ -219,6 +302,11 @@ def _wait_for_viewer_with_retry(driver, timeout: int = 20):
                 delay,
             )
             time.sleep(delay)
+            if url:
+                try:
+                    _driver_get_with_retry(driver, url)
+                except Exception as reload_exc:
+                    logging.warning("ビューア再取得失敗: %r", reload_exc)
     if last_exc is not None:  # pragma: no cover
         raise last_exc
     raise TimeoutException("viewer wait failed")
@@ -282,18 +370,12 @@ class TachiyomiCaptureSession:
     def _verify_age(self, driver) -> None:
         logging.info("DMMトップページを開く")
         driver.get(_DMM_TOP_URL)
-        try:
-            button = WebDriverWait(driver, 5).until(
-                EC.presence_of_element_located((
-                    By.XPATH,
-                    "//a[text()='はい'] | //a[text()='I Agree']"
-                ))
-            )
-            driver.execute_script("arguments[0].click();", button)
+        if _handle_age_check(driver):
             logging.info("年齢認証成功")
             time.sleep(1)
-        except (TimeoutException, StaleElementReferenceException):
+        else:
             logging.info("年齢認証不要 or 既認証済み")
+        _apply_age_check_cookie(driver)
 
     def capture(self, tachiyomi_url: str) -> list[str]:
         logging.info("立ち読み対象URL: %s", tachiyomi_url)
@@ -327,11 +409,12 @@ class TachiyomiCaptureSession:
             return []
 
         time.sleep(2)
+        _handle_age_check(driver)
         page_idx = 1
         current_page = 0
 
         try:
-            kind = _wait_for_viewer_with_retry(driver, timeout=20)
+            kind = _wait_for_viewer_with_retry(driver, timeout=20, url=tachiyomi_url)
             logging.info("ビューア準備完了: kind=%s", kind)
         except (TimeoutException, NoSuchElementException) as e:
             logging.warning("ビューア表示待ちに失敗（立ち読みをスキップ）: %r", e)

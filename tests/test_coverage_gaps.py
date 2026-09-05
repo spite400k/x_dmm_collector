@@ -193,19 +193,23 @@ class TestGetTachiyomiGaps:
     def test_verify_age_clicks_button(self):
         session = tachiyomi.TachiyomiCaptureSession()
         driver = MagicMock()
-        button = MagicMock()
 
-        class FakeWait:
-            def __init__(self, *a, **k):
-                pass
+        with patch.object(tachiyomi, "_handle_age_check", return_value=True) as age_mock:
+            with patch.object(tachiyomi, "_apply_age_check_cookie") as cookie_mock:
+                with patch.object(tachiyomi.time, "sleep"):
+                    session._verify_age(driver)
+        driver.get.assert_called_once_with(tachiyomi._DMM_TOP_URL)
+        age_mock.assert_called_once_with(driver)
+        cookie_mock.assert_called_once_with(driver)
 
-            def until(self, method):
-                return button
+    def test_verify_age_already_verified(self):
+        session = tachiyomi.TachiyomiCaptureSession()
+        driver = MagicMock()
 
-        with patch.object(tachiyomi, "WebDriverWait", FakeWait):
-            with patch.object(tachiyomi.time, "sleep"):
+        with patch.object(tachiyomi, "_handle_age_check", return_value=False):
+            with patch.object(tachiyomi, "_apply_age_check_cookie") as cookie_mock:
                 session._verify_age(driver)
-        driver.execute_script.assert_called_once()
+        cookie_mock.assert_called_once_with(driver)
 
     def test_capture_once_legacy_viewer_and_page_save(self, tmp_path: Path):
         driver = MagicMock()

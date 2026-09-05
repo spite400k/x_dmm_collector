@@ -28,26 +28,45 @@ def test_driver_get_with_retry_raises_after_exhausted():
 
 def test_wait_for_viewer_with_retry_legacy_waits_loading():
     driver = MagicMock()
-    with patch.object(tachiyomi, "wait_for_viewer_ready", return_value="legacy") as ready_mock:
-        with patch.object(tachiyomi, "WebDriverWait") as wait_cls:
-            wait_inst = wait_cls.return_value
-            tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
-            wait_inst.until_not.assert_called_once()
+    with patch.object(tachiyomi, "_handle_age_check", return_value=False):
+        with patch.object(tachiyomi, "wait_for_viewer_ready", return_value="legacy") as ready_mock:
+            with patch.object(tachiyomi, "WebDriverWait") as wait_cls:
+                wait_inst = wait_cls.return_value
+                tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
+                wait_inst.until_not.assert_called_once()
     assert ready_mock.call_count == 1
 
 
 def test_wait_for_viewer_with_retry_retries_on_timeout():
     driver = MagicMock()
-    with patch.object(
-        tachiyomi,
-        "wait_for_viewer_ready",
-        side_effect=[tachiyomi.TimeoutException(), "publus"],
-    ) as ready_mock:
-        with patch.object(tachiyomi, "WebDriverWait"):
-            with patch.object(tachiyomi.time, "sleep"):
-                kind = tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
+    with patch.object(tachiyomi, "_handle_age_check", return_value=False):
+        with patch.object(
+            tachiyomi,
+            "wait_for_viewer_ready",
+            side_effect=[tachiyomi.TimeoutException(), "publus"],
+        ) as ready_mock:
+            with patch.object(tachiyomi, "WebDriverWait"):
+                with patch.object(tachiyomi.time, "sleep"):
+                    kind = tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
     assert kind == "publus"
     assert ready_mock.call_count == 2
+
+
+def test_wait_for_viewer_with_retry_reloads_url_on_retry():
+    driver = MagicMock()
+    with patch.object(tachiyomi, "_handle_age_check", return_value=False):
+        with patch.object(
+            tachiyomi,
+            "wait_for_viewer_ready",
+            side_effect=[tachiyomi.TimeoutException(), "publus"],
+        ):
+            with patch.object(tachiyomi, "_driver_get_with_retry") as get_mock:
+                with patch.object(tachiyomi.time, "sleep"):
+                    kind = tachiyomi._wait_for_viewer_with_retry(
+                        driver, timeout=5, url="https://example.com/t"
+                    )
+    assert kind == "publus"
+    get_mock.assert_called_once_with(driver, "https://example.com/t")
 
 
 def test_wait_for_viewer_with_retry_raises_when_retries_zero(monkeypatch):
@@ -55,6 +74,149 @@ def test_wait_for_viewer_with_retry_raises_when_retries_zero(monkeypatch):
     monkeypatch.setattr(tachiyomi, "_NAVIGATION_RETRIES", 0)
     with pytest.raises(tachiyomi.TimeoutException, match="viewer wait failed"):
         tachiyomi._wait_for_viewer_with_retry(driver, timeout=5)
+
+
+def test_is_age_check_url():
+    assert tachiyomi._is_age_check_url("https://www.dmm.co.jp/age_check/") is True
+    assert tachiyomi._is_age_check_url("https://age_check.dmm.co.jp/") is True
+    assert tachiyomi._is_age_check_url("https://book.dmm.co.jp/product/1/x/tachiyomi/") is False
+    assert tachiyomi._is_age_check_url(None) is False
+
+
+def test_handle_age_check_skips_when_not_gate():
+    driver = MagicMock()
+    driver.current_url = "https://book.dmm.co.jp/product/1/x/tachiyomi/"
+    driver.find_elements.return_value = []
+    assert tachiyomi._handle_age_check(driver) is False
+
+
+def test_handle_age_check_clicks_declared_yes():
+    driver = MagicMock()
+    driver.current_url = "https://www.dmm.co.jp/age_check/"
+    driver.title = "年齢認証 - FANZA"
+    button = MagicMock()
+    calls = {"n": 0}
+
+    class FakeWait:
+        def __init__(self, *a, **k):
+            pass
+
+        def until(self, method):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return button
+            driver.current_url = "https://book.dmm.co.jp/product/1/x/tachiyomi/"
+            return True
+
+    with patch.object(tachiyomi, "WebDriverWait", FakeWait):
+        with patch.object(tachiyomi, "_apply_age_check_cookie") as cookie_mock:
+            assert tachiyomi._handle_age_check(driver) is True
+    driver.execute_script.assert_called_once()
+    cookie_mock.assert_called_once_with(driver)
+
+
+def test_handle_age_check_returns_false_when_button_missing():
+    driver = MagicMock()
+    driver.current_url = "https://www.dmm.co.jp/age_check/"
+    driver.title = "年齢認証 - FANZA"
+
+    class FakeWait:
+        def __init__(self, *a, **k):
+            pass
+
+        def until(self, method):
+            raise tachiyomi.TimeoutException("no button")
+
+    with patch.object(tachiyomi, "WebDriverWait", FakeWait):
+        assert tachiyomi._handle_age_check(driver) is False
+
+
+def test_handle_age_check_modal_via_elements():
+    driver = MagicMock()
+    driver.current_url = "https://book.dmm.co.jp/product/1/x/tachiyomi/"
+    driver.find_elements.return_value = [MagicMock()]
+    button = MagicMock()
+    calls = {"n": 0}
+
+    class FakeWait:
+        def __init__(self, *a, **k):
+            pass
+
+        def until(self, method):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return button
+            return True
+
+    with patch.object(tachiyomi, "WebDriverWait", FakeWait):
+        with patch.object(tachiyomi, "_apply_age_check_cookie"):
+            assert tachiyomi._handle_age_check(driver) is True
+
+
+def test_age_gate_elements_present_swallows_errors():
+    driver = MagicMock()
+    driver.find_elements.side_effect = RuntimeError("dom")
+    assert tachiyomi._age_gate_elements_present(driver) is False
+
+
+def test_handle_age_check_leave_timeout_still_returns_true():
+    driver = MagicMock()
+    driver.current_url = "https://www.dmm.co.jp/age_check/"
+    button = MagicMock()
+
+    class FakeWait:
+        def __init__(self, *a, **k):
+            pass
+
+        def until(self, method):
+            if getattr(method, "__name__", "") == "<lambda>":
+                raise tachiyomi.TimeoutException("still on age check")
+            return button
+
+    with patch.object(tachiyomi, "WebDriverWait", FakeWait):
+        with patch.object(tachiyomi, "_apply_age_check_cookie") as cookie_mock:
+            assert tachiyomi._handle_age_check(driver) is True
+    cookie_mock.assert_called_once_with(driver)
+
+
+def test_wait_for_viewer_reload_failure_is_logged():
+    driver = MagicMock()
+    with patch.object(tachiyomi, "_handle_age_check", return_value=False):
+        with patch.object(
+            tachiyomi,
+            "wait_for_viewer_ready",
+            side_effect=[tachiyomi.TimeoutException(), "publus"],
+        ):
+            with patch.object(
+                tachiyomi,
+                "_driver_get_with_retry",
+                side_effect=RuntimeError("reload boom"),
+            ):
+                with patch.object(tachiyomi.time, "sleep"):
+                    kind = tachiyomi._wait_for_viewer_with_retry(
+                        driver, timeout=5, url="https://example.com/t"
+                    )
+    assert kind == "publus"
+
+
+def test_apply_age_check_cookie_swallows_errors():
+    driver = MagicMock()
+    driver.add_cookie.side_effect = RuntimeError("cookie")
+    tachiyomi._apply_age_check_cookie(driver)
+
+
+def test_ensure_driver_reuses_unready_existing_driver():
+    """driver はあるが _ready=False のとき create せず年齢確認だけ行う。"""
+    session = tachiyomi.TachiyomiCaptureSession()
+    driver = MagicMock()
+    session._driver = driver
+    session._ready = False
+    with patch.object(tachiyomi, "create_chrome_driver") as create_mock:
+        with patch.object(session, "_verify_age") as verify:
+            assert session._ensure_driver() is driver
+    create_mock.assert_not_called()
+    verify.assert_called_once_with(driver)
+    assert session._ready is True
 
 
 def test_capture_skips_long_endofbook_wait(tmp_path, monkeypatch):

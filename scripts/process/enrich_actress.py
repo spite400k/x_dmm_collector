@@ -15,8 +15,7 @@ from db.mst_actress_repository import (
 from db.supabase_client import supabase
 from utils.logger import setup_logger
 
-os.makedirs("logs", exist_ok=True)
-setup_logger("main_actress.log")
+setup_logger()
 
 DEFAULT_BATCH_SIZE = 1000
 

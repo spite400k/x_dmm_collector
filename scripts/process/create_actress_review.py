@@ -18,7 +18,7 @@ from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 from utils.supabase_retry import execute_with_retry
 
-setup_logger("create_actress_ai.log")
+setup_logger()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)

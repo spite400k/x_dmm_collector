@@ -18,6 +18,8 @@ from openai_api.content_generator import scrape_product_details
 from utils.content_generator_review import (
     AGE_GATE_SYNOPSIS_MARKERS,
     create_driver,
+    ensure_driver_alive,
+    quit_driver_safe,
     scrape_review_comments,
     scrape_product_summary,
     generate_review_insights,
@@ -31,6 +33,7 @@ from utils.copy_framework_ab import (
 from utils.logger import setup_logger
 from utils.update_items_selection import is_recent_release
 import hashlib
+from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
 
 from utils.screenshot import save_debug_files
 
@@ -50,7 +53,7 @@ targets = [
 # 有効なバッチ
 # レビューと評価点からAIレビューを作成する
 #----------------------------------------------------
-setup_logger("create_ai_review.log")
+setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
@@ -292,13 +295,14 @@ def process_content(
     product_url: str,
     service_code: str,
     floor_code: str,
+    driver,
     db_review_count=None,
     fallback_summary=None,
     title=None,
     genres=None,
     product_row: dict | None = None,
 ):
-    # ①' DB事前判定（Chrome 起動前）
+    # ①' DB事前判定（Chrome 操作前）
     saved_summary = usable_saved_summary(get_saved_summary(content_id))
     if should_skip_selenium_precheck(
         db_review_count,
@@ -311,8 +315,6 @@ def process_content(
             db_review_count,
         )
         return
-
-    driver = create_driver()
 
     try:
         logging.info("🔍 処理開始: %s (URL: %s)", content_id, product_url)
@@ -428,10 +430,74 @@ def process_content(
 
         logging.info("🎉 完了: %s", content_id)
 
+    except InvalidSessionIdException:
+        raise
+    except WebDriverException:
+        raise
     except Exception as e:
         logging.info("❌ エラー: %s", e)
-    finally:
-        driver.quit()
+
+
+def _process_item_with_retry(
+    driver,
+    content_id: str,
+    product_url: str,
+    service_code: str,
+    floor_code: str,
+    db_review_count=None,
+    fallback_summary=None,
+    title=None,
+    genres=None,
+    product_row: dict | None = None,
+):
+    """セッション切れ・コマンドタイムアウト時は driver を再作成して1回リトライする。"""
+    saved_summary = usable_saved_summary(get_saved_summary(content_id))
+    if should_skip_selenium_precheck(
+        db_review_count,
+        has_saved_summary=bool(saved_summary),
+        has_score_history=has_score_history(content_id),
+    ):
+        logging.info(
+            "⏭ DBレビュー0件かつあらすじ保存済 → Seleniumスキップ: %s (review_count=%s)",
+            content_id,
+            db_review_count,
+        )
+        return driver
+
+    for attempt in range(2):
+        driver = ensure_driver_alive(driver)
+        try:
+            process_content(
+                content_id,
+                product_url,
+                service_code,
+                floor_code,
+                driver,
+                db_review_count=db_review_count,
+                fallback_summary=fallback_summary,
+                title=title,
+                genres=genres,
+                product_row=product_row,
+            )
+            return driver
+        except (InvalidSessionIdException, WebDriverException) as e:
+            if attempt == 0:
+                logging.warning(
+                    "WebDriver 失敗 (%s) → driver 再作成してリトライ: %s",
+                    content_id,
+                    e,
+                )
+                quit_driver_safe(driver)
+                driver = create_driver()
+                continue
+            logging.warning(
+                "再試行後も WebDriver 失敗 → スキップ: %s (%s)",
+                content_id,
+                e,
+            )
+            quit_driver_safe(driver)
+            return create_driver()
+    return driver
 
 
 # =========================
@@ -660,26 +726,30 @@ def fetch_recent_items() -> list[dict]:
 
 def process_batch(batch_items, batch_index, total):
     logging.info(f"=== 🧩 バッチ {batch_index} 開始 ({len(batch_items)}件) ===")
-    for i, row in enumerate(batch_items, start=1):
-        content_id = row["content_id"]
-        service_code = row["service"]
-        floor_code = row["floor"]
-        product_url = row["item_url"]
-        db_review_count = row.get("review_count")
-        logging.info(f"{batch_index}週目 [{i + (batch_index-1) * BATCH_SIZE}/{total}] {content_id} 処理中...")
-        process_content(
-            content_id,
-            product_url,
-            service_code,
-            floor_code,
-            db_review_count=db_review_count,
-            fallback_summary=row.get("auto_summary"),
-            title=row.get("title"),
-            genres=row.get("genres"),
-            product_row=row,
-        )
-
-        time.sleep(0.5)
+    driver = create_driver()
+    try:
+        for i, row in enumerate(batch_items, start=1):
+            content_id = row["content_id"]
+            service_code = row["service"]
+            floor_code = row["floor"]
+            product_url = row["item_url"]
+            db_review_count = row.get("review_count")
+            logging.info(f"{batch_index}週目 [{i + (batch_index-1) * BATCH_SIZE}/{total}] {content_id} 処理中...")
+            driver = _process_item_with_retry(
+                driver,
+                content_id,
+                product_url,
+                service_code,
+                floor_code,
+                db_review_count=db_review_count,
+                fallback_summary=row.get("auto_summary"),
+                title=row.get("title"),
+                genres=row.get("genres"),
+                product_row=row,
+            )
+            time.sleep(0.5)
+    finally:
+        quit_driver_safe(driver)
     logging.info(f"=== ✅ バッチ {batch_index} 完了 ===")
 
 

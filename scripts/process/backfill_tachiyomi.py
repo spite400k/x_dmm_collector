@@ -44,7 +44,7 @@ from utils.logger import setup_logger
 from utils.supabase_retry import call_with_retry, execute_with_retry
 
 load_dotenv()
-setup_logger("backfill_tachiyomi.log")
+setup_logger()
 
 UploadFn = Callable[..., str | None]
 

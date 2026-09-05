@@ -10,12 +10,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from utils.logger import setup_logger
-
 load_dotenv()
-
-os.makedirs("logs", exist_ok=True)
-setup_logger("dmm_campaign_api.log")
 
 CDS_LITE_API = "https://api.cds.dmm.co.jp/v1/delivers/lite"
 AFFILIATE_LINK_BASE = "https://al.fanza.co.jp/"
@@ -71,7 +66,6 @@ BOOK_FEATURE_PATH_PATTERN = re.compile(
 VIDEO_TOP_URL = "https://video.dmm.co.jp/"
 LIST_CAMPAIGN_QUERY_KEYS = ("campaign", "point_campaign")
 
-
 def _create_session() -> requests.Session:
     session = requests.Session()
     for key, value in AGE_CHECK_COOKIE.items():
@@ -86,20 +80,17 @@ def _create_session() -> requests.Session:
     )
     return session
 
-
 def infer_service_floor(url: str, default_service: str = "all", default_floor: str = "all") -> tuple[str, str]:
     for pattern, service, floor in SERVICE_FLOOR_PATTERNS:
         if pattern.search(url):
             return service, floor
     return default_service, default_floor
 
-
 def _extract_deliver_ids(html: str) -> set[str]:
     deliver_ids = set()
     deliver_ids.update(re.findall(r'data-cds-deliver-api-deliver-ids="([^"]+)"', html))
     deliver_ids.update(re.findall(r'class="cds-deliver-tags"[^>]*\ss="([^"]+)"', html))
     return deliver_ids
-
 
 def resolve_feature_url(url: str) -> str:
     """トラッキング・アフィリエイト URL を実際の遷移先 URL に解決する。"""
@@ -113,7 +104,6 @@ def resolve_feature_url(url: str) -> str:
         return unquote(lurl)
 
     return url
-
 
 def to_affiliate_feature_url(url: str) -> str:
     """DMM 系 URL を al.fanza.co.jp アフィリエイト URL に変換する。"""
@@ -134,7 +124,6 @@ def to_affiliate_feature_url(url: str) -> str:
     )
     return f"{AFFILIATE_LINK_BASE}?{params}"
 
-
 def _decode_tracking_link_url(tracking_url: str) -> Optional[str]:
     match = re.search(r"ic_key=([^&\"']+)", tracking_url)
     if not match:
@@ -147,7 +136,6 @@ def _decode_tracking_link_url(tracking_url: str) -> Optional[str]:
         return data.get("link_url")
     except Exception:
         return None
-
 
 def _resolve_feature_url(session: requests.Session, url: str) -> str:
     resolved = resolve_feature_url(url)
@@ -166,7 +154,6 @@ def _resolve_feature_url(session: requests.Session, url: str) -> str:
         return resolve_feature_url(response.url)
     except Exception:
         return url
-
 
 def _fetch_html_with_selenium(url: str) -> Optional[str]:
     """SPA ページ向け。video.dmm.co.jp TOP のセール一覧などは JS 描画が必要。"""
@@ -202,7 +189,6 @@ def _fetch_html_with_selenium(url: str) -> Optional[str]:
     finally:
         driver.quit()
 
-
 def _normalize_video_list_url(url: str) -> str:
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -210,7 +196,6 @@ def _normalize_video_list_url(url: str) -> str:
     if not kept:
         return url
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(kept)}"
-
 
 def _parse_video_top_sale_links(html: str, priority_offset: int) -> list[dict]:
     """video.dmm.co.jp TOP の「お得な商品」セールリンクを抽出する。"""
@@ -256,13 +241,11 @@ def _parse_video_top_sale_links(html: str, priority_offset: int) -> list[dict]:
     logging.info("video TOP セールリンクを %d 件検出", len(campaigns))
     return campaigns
 
-
 def _fetch_video_top_sale_campaigns(priority_offset: int) -> list[dict]:
     html = _fetch_html_with_selenium(VIDEO_TOP_URL)
     if not html:
         return []
     return _parse_video_top_sale_links(html, priority_offset)
-
 
 def _normalize_book_feature_url(raw: str) -> Optional[str]:
     if not raw or "#" in raw:
@@ -285,7 +268,6 @@ def _normalize_book_feature_url(raw: str) -> Optional[str]:
 
     return f"https://book.dmm.co.jp{path}"
 
-
 def _discover_book_feature_urls(session: requests.Session, seed_urls: list[str]) -> list[str]:
     discovered: set[str] = set()
 
@@ -304,7 +286,6 @@ def _discover_book_feature_urls(session: requests.Session, seed_urls: list[str])
 
     logging.info("FANZAブックス特集URLを %d 件検出", len(discovered))
     return sorted(discovered)
-
 
 def _fetch_book_feature_campaigns(
     session: requests.Session,
@@ -334,13 +315,11 @@ def _fetch_book_feature_campaigns(
 
     return campaigns
 
-
 def _meta_content(soup: BeautifulSoup, prop: str) -> Optional[str]:
     tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
     if tag and tag.get("content"):
         return tag["content"].strip()
     return None
-
 
 def _parse_feature_page(
     html: str,
@@ -385,7 +364,6 @@ def _parse_feature_page(
         "priority": priority_offset,
         "is_active": True,
     }
-
 
 def _parse_html_banners(
     session: requests.Session,
@@ -434,7 +412,6 @@ def _parse_html_banners(
 
     return campaigns
 
-
 def _fetch_cds_campaigns(
     session: requests.Session,
     deliver_id: str,
@@ -482,7 +459,6 @@ def _fetch_cds_campaigns(
 
     return campaigns
 
-
 def fetch_campaigns(sources: Optional[list[dict]] = None) -> list[dict]:
     """DMM/FANZA 各ページからキャンペーン情報を収集する（Session は finally で close）。"""
     session = _create_session()
@@ -490,7 +466,6 @@ def fetch_campaigns(sources: Optional[list[dict]] = None) -> list[dict]:
         return _fetch_campaigns_with_session(session, sources)
     finally:
         session.close()
-
 
 def _fetch_campaigns_with_session(
     session: requests.Session,

@@ -18,7 +18,7 @@ from scripts.process.update_items import upsert_actresses
 from utils.logger import setup_logger
 
 load_dotenv()
-setup_logger("backfill_mst_actress.log")
+setup_logger()
 
 
 def fetch_missing_actresses(conn, *, limit: int | None) -> list[dict]:

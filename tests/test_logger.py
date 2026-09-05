@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from utils.logger import (
     LOG_ENCODING,
+    LOG_FILE_ENV,
     RotatingLogFile,
     configure_utf8_environment,
     create_rotating_file_handler,
@@ -35,6 +36,33 @@ def test_setup_logger_falls_back_when_file_locked(tmp_path, monkeypatch):
     root = logging.getLogger()
     assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
     assert not any(isinstance(h, TimedRotatingFileHandler) for h in root.handlers)
+
+
+def test_setup_logger_console_only_by_default(monkeypatch):
+    monkeypatch.delenv(LOG_FILE_ENV, raising=False)
+    setup_logger()
+
+    root = logging.getLogger()
+    assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
+    assert not any(isinstance(h, TimedRotatingFileHandler) for h in root.handlers)
+
+
+def test_setup_logger_uses_env_log_file(tmp_path, monkeypatch):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_file = log_dir / "env.log"
+
+    monkeypatch.setattr("utils.logger.LOG_DIR", str(log_dir))
+    monkeypatch.setattr("utils.logger._resolve_log_path", lambda _: str(log_file))
+    monkeypatch.setenv(LOG_FILE_ENV, "env.log")
+
+    setup_logger()
+    logging.getLogger("env_test").info("from-env")
+
+    for handler in logging.getLogger().handlers:
+        handler.flush()
+
+    assert "from-env" in log_file.read_text(encoding="utf-8")
 
 
 def test_rotating_log_file_falls_back_when_file_locked(tmp_path, monkeypatch):

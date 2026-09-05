@@ -36,6 +36,11 @@ AGE_GATE_SYNOPSIS_MARKERS = (
     "18歳未満の方のアクセスは固くお断り",
 )
 
+# Selenium タイムアウト（ハング時にジョブ全体を止めない）
+PAGE_LOAD_TIMEOUT_SEC = 20
+SCRIPT_TIMEOUT_SEC = 30
+COMMAND_TIMEOUT_SEC = 30
+
 
 # =========================
 # 🚀 Driver生成（バッチ単位で1回だけ使う）
@@ -52,7 +57,13 @@ def create_driver() -> webdriver.Chrome:
 
     service = Service(chromedriver_path())
     driver = webdriver.Chrome(service=service, options=options)
-    driver.set_page_load_timeout(20)
+    driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT_SEC)
+    driver.set_script_timeout(SCRIPT_TIMEOUT_SEC)
+    # chromedriver HTTP 読み取り（renderer 無応答時の既定 120s を短縮）
+    try:
+        driver.command_executor.set_timeout(COMMAND_TIMEOUT_SEC)
+    except Exception:
+        logging.debug("command_executor.set_timeout をスキップ", exc_info=True)
 
     return driver
 
@@ -166,7 +177,8 @@ def apply_age_check_cookie(driver) -> None:
         logging.debug("age_check_done cookie 設定をスキップ", exc_info=True)
 
 
-def handle_safe_mode(driver):
+def handle_safe_mode(driver) -> bool:
+    """年齢確認を突破する。ゲート無し/成功は True、ゲート上でクリック失敗は False。"""
     current_url = driver.current_url or ""
     logging.info("現在URL: %s", current_url)
     logging.info("title: %s", driver.title)
@@ -194,7 +206,7 @@ def handle_safe_mode(driver):
         except Exception:
             pass
         if not on_age_check:
-            return
+            return True
 
     clicked = False
     for by, selector in selectors:
@@ -211,7 +223,7 @@ def handle_safe_mode(driver):
 
     if not clicked:
         logging.warning("⚠ 年齢確認の「はい」ボタンを検出できませんでした")
-        return
+        return False
 
     try:
         WebDriverWait(driver, 10).until(lambda d: not is_age_check_url(d.current_url))
@@ -220,6 +232,7 @@ def handle_safe_mode(driver):
         logging.warning("⚠ 年齢確認ページ離脱を確認できませんでした: %s", driver.current_url)
 
     apply_age_check_cookie(driver)
+    return True
 
 
         
@@ -248,7 +261,12 @@ def scrape_review_comments(product_url: str, driver, service: str, floor: str, m
     try:
         if service == "doujin" and floor == "digital_doujin":
             driver.get(review_url)
-            handle_safe_mode(driver)
+            if not handle_safe_mode(driver) or is_age_check_url(driver.current_url):
+                logging.warning(
+                    "⚠ 年齢確認を突破できないためレビュー取得をスキップ: %s",
+                    product_url,
+                )
+                return []
             try:
                 WebDriverWait(driver, 8).until(
                     EC.presence_of_element_located(
@@ -261,11 +279,21 @@ def scrape_review_comments(product_url: str, driver, service: str, floor: str, m
 
         # video / comic: Cookie 用に video.dmm 経由
         driver.get("https://video.dmm.co.jp/")
-        handle_safe_mode(driver)
+        if not handle_safe_mode(driver) or is_age_check_url(driver.current_url):
+            logging.warning(
+                "⚠ 年齢確認を突破できないためレビュー取得をスキップ: %s",
+                product_url,
+            )
+            return []
         apply_age_check_cookie(driver)
 
         driver.get(review_url)
-        handle_safe_mode(driver)
+        if not handle_safe_mode(driver) or is_age_check_url(driver.current_url):
+            logging.warning(
+                "⚠ 年齢確認を突破できないためレビュー取得をスキップ: %s",
+                product_url,
+            )
+            return []
 
         try:
             rev = WebDriverWait(driver, 12).until(
@@ -300,7 +328,12 @@ def scrape_doujin_synopsis(driver, product_url: str) -> str:
     current = (driver.current_url or "").split("#")[0]
     if base_url and base_url not in current:
         driver.get(base_url)
-        handle_safe_mode(driver)
+        if not handle_safe_mode(driver) or is_age_check_url(driver.current_url):
+            logging.warning(
+                "⚠ 年齢確認ページのため同人あらすじ取得を中止: %s",
+                driver.current_url,
+            )
+            return ""
         try:
             WebDriverWait(driver, 12).until(
                 EC.presence_of_element_located((By.TAG_NAME, "body"))
@@ -403,14 +436,12 @@ def _try_comic_synopsis_block(driver) -> str:
 def scrape_product_summary(product_url: str, driver) -> str:
     try:
         driver.get(product_url)
-        handle_safe_mode(driver)
-        wait = WebDriverWait(driver, 15)
-
-        if is_age_check_url(driver.current_url):
+        if not handle_safe_mode(driver) or is_age_check_url(driver.current_url):
             logging.warning(
                 "⚠ 年齢確認ページのためあらすじ取得を中止: %s", driver.current_url
             )
             return ""
+        wait = WebDriverWait(driver, 15)
 
         wait.until(
             lambda d: d.find_elements(By.CSS_SELECTOR, 'meta[name="description"]')

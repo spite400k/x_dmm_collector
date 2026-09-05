@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
-setup_logger("test_generate.log")
+setup_logger()
 
 # 環境変数読み込み
 load_dotenv()

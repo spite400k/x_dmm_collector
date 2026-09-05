@@ -20,7 +20,7 @@ from pykakasi import kakasi
 # ----------------------------------------------------
 from utils.logger import setup_logger
 
-setup_logger("main.log")
+setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")

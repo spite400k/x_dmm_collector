@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -700,6 +701,72 @@ class TestRunGaps:
                     with patch.object(run_mod.logger, "error"):
                         code = run_mod.run_script(entry, "python", False, 1, 1)
         assert code == 7
+
+    def test_script_timeout_sec_parsing(self):
+        assert run_mod.script_timeout_sec({}) is None
+        assert run_mod.script_timeout_sec({"timeout_sec": 10}) == 10.0
+        assert run_mod.script_timeout_sec({"timeout_sec": "0"}) is None
+        assert run_mod.script_timeout_sec({"timeout_sec": "x"}) is None
+
+    def test_wait_for_script_process_kills_on_timeout(self, tmp_path: Path):
+        proc = MagicMock()
+        proc.pid = 999
+        proc.stdout = io.StringIO("still running\n")
+        proc.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="python", timeout=1),
+            0,
+        ]
+        log_path = tmp_path / "out.log"
+        with run_mod.RotatingLogFile(log_path) as log_file:
+            with patch.object(run_mod.logger, "error"):
+                out, code = run_mod.wait_for_script_process(
+                    proc, log_file, echo=False, timeout_sec=1
+                )
+        assert code == 124
+        proc.kill.assert_called_once()
+        assert "still running" in out
+
+    def test_wait_for_script_process_timeout_echo_and_close_errors(self, tmp_path: Path, capsys):
+        proc = MagicMock()
+        proc.pid = 1001
+        proc.stdout = io.StringIO("echoed line\n")
+        proc.stdout.close = MagicMock(side_effect=OSError("already closed"))
+        proc.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="python", timeout=1),
+            subprocess.TimeoutExpired(cmd="python", timeout=30),
+        ]
+        log_path = tmp_path / "out_echo.log"
+        with run_mod.RotatingLogFile(log_path) as log_file:
+            with patch.object(run_mod.logger, "error"):
+                out, code = run_mod.wait_for_script_process(
+                    proc, log_file, echo=True, timeout_sec=1
+                )
+        assert code == 124
+        assert "echoed line" in out
+        captured = capsys.readouterr()
+        assert "echoed line" in captured.out
+        proc.kill.assert_called_once()
+        proc.stdout.close.assert_called()
+
+    def test_run_script_uses_timeout_sec(self, tmp_path: Path):
+        entry = {
+            "path": "scripts/process/create_ai_review.py",
+            "log": str(tmp_path / "t.log"),
+            "timeout_sec": 12,
+        }
+        proc = MagicMock()
+        with patch.object(run_mod.subprocess, "Popen", return_value=proc):
+            with patch.object(run_mod, "should_echo_child_output", return_value=False):
+                with patch.object(
+                    run_mod,
+                    "wait_for_script_process",
+                    return_value=("killed\n", 124),
+                ) as wait_mock:
+                    with patch.object(run_mod.logger, "info"):
+                        with patch.object(run_mod.logger, "error"):
+                            code = run_mod.run_script(entry, "python", True, 1, 1)
+        assert code == 124
+        assert wait_mock.call_args.kwargs["timeout_sec"] == 12.0
 
     def test_list_scripts(self, capsys):
         tasks = run_mod.load_tasks()

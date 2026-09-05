@@ -12,9 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from dmm.actress_merge import merge_supplement_record
-from utils.logger import setup_logger
-
-setup_logger("wikipedia_actress_api.log")
 
 WIKIPEDIA_API_URL = "https://ja.wikipedia.org/w/api.php"
 WIKIPEDIA_SUMMARY_URL = "https://ja.wikipedia.org/api/rest_v1/page/summary/{title}"

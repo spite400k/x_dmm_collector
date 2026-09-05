@@ -48,7 +48,7 @@ x_dmm_collector/
 | `db/` | Supabase クライアント、各テーブル用リポジトリ、Storage 操作 |
 | `openai_api/` | 作品・女優向け AI コンテンツ生成 |
 | `utils/` | ロガー、画像処理、DMM レビュースクレイピング等 |
-| `logs/` | `run.py` 実行時の `task_run_*.log`（各 bat からも同経路） |
+| `logs/` | 正本は `run.py` の `task_run_*.log` / `run.log`（スクリプト側の個別 `.log` は出さない） |
 
 スクリプト個別の説明・実行例・CLI オプションは [`scripts/README.md`](scripts/README.md) を参照。
 

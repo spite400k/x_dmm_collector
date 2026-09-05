@@ -58,7 +58,7 @@ targets = [
 # 有効なバッチ
 # レビューと評価点からAIレビューを作成する（メスガキサイト）
 # ----------------------------------------------------
-setup_logger("create_ai_review_mesugaki.log")
+setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")

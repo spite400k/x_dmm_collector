@@ -103,27 +103,26 @@ class TestProcessContentPrecheck:
     def test_skips_chrome_when_db_zero_and_summary_exists(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value="あらすじ本文")
         create_ai_review.has_score_history = MagicMock(return_value=False)
-        create_driver = MagicMock()
-        create_ai_review.create_driver = create_driver
         scrape = MagicMock()
         create_ai_review.scrape_review_comments = scrape
+        driver = MagicMock()
 
         create_ai_review.process_content(
             "cid1",
             "https://example.com/item",
             "digital",
             "videoa",
+            driver,
             db_review_count=0,
         )
 
-        create_driver.assert_not_called()
         scrape.assert_not_called()
+        driver.get.assert_not_called()
 
     def test_opens_chrome_when_review_count_positive(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value="あらすじ本文")
         create_ai_review.has_score_history = MagicMock(return_value=True)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.generate_review_insights = MagicMock(return_value=None)
@@ -134,17 +133,16 @@ class TestProcessContentPrecheck:
             "https://example.com/item",
             "digital",
             "videoa",
+            driver,
             db_review_count=2,
         )
 
-        create_ai_review.create_driver.assert_called_once()
         create_ai_review.scrape_review_comments.assert_called_once()
-        driver.quit.assert_called_once()
+        driver.quit.assert_not_called()
 
     def test_opens_chrome_when_zero_but_no_summary(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="初回あらすじ")
@@ -155,11 +153,12 @@ class TestProcessContentPrecheck:
             "https://example.com/item",
             "digital",
             "videoa",
+            driver,
             db_review_count=0,
         )
 
-        create_ai_review.create_driver.assert_called_once()
-        driver.quit.assert_called_once()
+        create_ai_review.scrape_review_comments.assert_called_once()
+        driver.quit.assert_not_called()
 
 
 AGE_GATE_SUMMARY = (
@@ -172,7 +171,6 @@ class TestProcessContentAgeGate:
     def test_opens_chrome_when_age_gate_summary_and_review_zero(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=AGE_GATE_SUMMARY)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(
@@ -185,17 +183,16 @@ class TestProcessContentAgeGate:
             "https://video.dmm.co.jp/amateur/content/?id=pai436",
             "digital",
             "videoc",
+            driver,
             db_review_count=0,
         )
 
-        create_ai_review.create_driver.assert_called_once()
         create_ai_review.scrape_product_summary.assert_called_once()
-        driver.quit.assert_called_once()
+        driver.quit.assert_not_called()
 
     def test_uses_auto_summary_when_scrape_empty(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=AGE_GATE_SUMMARY)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
@@ -207,6 +204,7 @@ class TestProcessContentAgeGate:
             "https://example.com",
             "digital",
             "videoc",
+            driver,
             db_review_count=1,
             fallback_summary=fallback,
         )
@@ -217,7 +215,6 @@ class TestProcessContentAgeGate:
     def test_uses_title_and_genres_when_auto_summary_empty(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
@@ -228,6 +225,7 @@ class TestProcessContentAgeGate:
             "https://example.com",
             "digital",
             "videoc",
+            driver,
             db_review_count=1,
             title="みな",
             genres=["素人配信", "ハメ撮り"],
@@ -240,7 +238,6 @@ class TestProcessContentAgeGate:
     def test_skips_ai_when_no_synopsis(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
@@ -251,6 +248,7 @@ class TestProcessContentAgeGate:
             "https://example.com",
             "digital",
             "videoc",
+            driver,
             db_review_count=1,
         )
 
@@ -261,7 +259,6 @@ class TestProcessContentAgeGate:
     ):
         create_ai_review.get_saved_summary = MagicMock(return_value=AGE_GATE_SUMMARY)
         driver = MagicMock()
-        create_ai_review.create_driver = MagicMock(return_value=driver)
         create_ai_review.scrape_review_comments = MagicMock(
             return_value=[{"rating": 5, "text": "良い"}]
         )
@@ -277,6 +274,7 @@ class TestProcessContentAgeGate:
             "https://example.com",
             "digital",
             "videoc",
+            driver,
             db_review_count=1,
         )
 
@@ -495,6 +493,57 @@ class TestCreateAiReviewCli:
             ]
         )
         assert [row["content_id"] for row in rows] == ["b", "c", "a"]
+
+    def test_process_batch_reuses_single_driver(self, create_ai_review):
+        driver = MagicMock()
+        create_ai_review.create_driver = MagicMock(return_value=driver)
+        create_ai_review.quit_driver_safe = MagicMock()
+        create_ai_review._process_item_with_retry = MagicMock(side_effect=[driver, driver])
+        rows = [
+            {
+                "content_id": "a",
+                "service": "digital",
+                "floor": "videoa",
+                "item_url": "https://a",
+                "review_count": 1,
+            },
+            {
+                "content_id": "b",
+                "service": "digital",
+                "floor": "videoa",
+                "item_url": "https://b",
+                "review_count": 1,
+            },
+        ]
+        with patch.object(create_ai_review.time, "sleep"):
+            create_ai_review.process_batch(rows, batch_index=1, total=2)
+        create_ai_review.create_driver.assert_called_once()
+        assert create_ai_review._process_item_with_retry.call_count == 2
+        create_ai_review.quit_driver_safe.assert_called_once_with(driver)
+
+    def test_process_item_with_retry_recreates_on_webdriver_error(self, create_ai_review):
+        from selenium.common.exceptions import WebDriverException
+
+        first = MagicMock()
+        second = MagicMock()
+        create_ai_review.ensure_driver_alive = MagicMock(side_effect=[first, second])
+        create_ai_review.create_driver = MagicMock(return_value=second)
+        create_ai_review.quit_driver_safe = MagicMock()
+        create_ai_review.get_saved_summary = MagicMock(return_value=None)
+        create_ai_review.process_content = MagicMock(
+            side_effect=[WebDriverException("timeout"), None]
+        )
+        out = create_ai_review._process_item_with_retry(
+            first,
+            "cid",
+            "https://x",
+            "digital",
+            "videoa",
+            db_review_count=1,
+        )
+        assert out is second
+        assert create_ai_review.process_content.call_count == 2
+        create_ai_review.quit_driver_safe.assert_called()
 
     def test_needs_ai_review_refresh_matrix(self, create_ai_review):
         row0 = {"content_id": "a", "review_count": 0}

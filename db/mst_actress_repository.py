@@ -6,9 +6,6 @@ from typing import Optional
 from supabase import Client
 
 from db.supabase_client import supabase
-from utils.logger import setup_logger
-
-setup_logger("mst_actress_repository.log")
 
 UPDATABLE_FIELDS = (
     "name",
@@ -35,7 +32,6 @@ UPDATABLE_FIELDS = (
     "alias",
 )
 
-
 def fetch_actresses_to_enrich(
     *,
     limit: int = 20,
@@ -49,7 +45,6 @@ def fetch_actresses_to_enrich(
         .execute()
     )
     return response.data or []
-
 
 def update_actress(
     actress_id: int,
@@ -84,7 +79,6 @@ def update_actress(
         logging.error(traceback.format_exc())
         return False
 
-
 def enrich_and_update_actress(
     actress_id: int,
     enriched_data: dict,
@@ -93,7 +87,6 @@ def enrich_and_update_actress(
 ) -> bool:
     client = supabase if supabase_client is None else supabase_client
     return update_actress(actress_id, enriched_data, supabase_client=client)
-
 
 def touch_actress_updated_at(
     actress_id: int,

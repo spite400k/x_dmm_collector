@@ -5,7 +5,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from db.supabase_client import supabase
 from dmm.dmm_api import fetch_items_merged_sorts
 from db.trn_dmm_items_repository import insert_dmm_item
-import os
 import logging
 from utils.logger import setup_logger
 from scripts.collect._filter import (
@@ -16,8 +15,7 @@ from scripts.collect._filter import (
     supabase_exists_checker,
 )
 
-os.makedirs("logs", exist_ok=True)
-setup_logger("main.log")
+setup_logger()
 
 hits_per_request = 100
 COLLECT_SORTS = ("rank", "date", "review")

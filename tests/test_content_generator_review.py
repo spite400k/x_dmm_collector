@@ -118,7 +118,7 @@ def test_handle_safe_mode_skips_when_not_age_check(review_module):
     driver.current_url = "https://video.dmm.co.jp/amateur/content/?id=x"
     driver.title = "作品"
     driver.find_elements.return_value = []
-    review_module.handle_safe_mode(driver)
+    assert review_module.handle_safe_mode(driver) is True
     driver.execute_script.assert_not_called()
 
 
@@ -130,7 +130,7 @@ def test_handle_safe_mode_clicks_modal_yes(review_module):
     wait = MagicMock()
     wait.until.side_effect = [btn, True]
     with patch.object(review_module, "WebDriverWait", return_value=wait):
-        review_module.handle_safe_mode(driver)
+        assert review_module.handle_safe_mode(driver) is True
     driver.execute_script.assert_called_once()
     driver.add_cookie.assert_called()
     cookie = driver.add_cookie.call_args.args[0]
@@ -156,7 +156,7 @@ def test_handle_safe_mode_ignores_helpful_yes_on_product_page(review_module):
         return []
 
     driver.find_elements.side_effect = find_elements
-    review_module.handle_safe_mode(driver)
+    assert review_module.handle_safe_mode(driver) is True
     driver.execute_script.assert_not_called()
     driver = MagicMock()
     driver.current_url = "https://www.dmm.co.jp/age_check/=/?rurl=x"
@@ -164,8 +164,60 @@ def test_handle_safe_mode_ignores_helpful_yes_on_product_page(review_module):
     wait = MagicMock()
     wait.until.side_effect = Exception("not clickable")
     with patch.object(review_module, "WebDriverWait", return_value=wait):
-        review_module.handle_safe_mode(driver)
+        assert review_module.handle_safe_mode(driver) is False
     driver.execute_script.assert_not_called()
+
+
+def test_scrape_review_comments_skips_when_age_gate_stuck(review_module):
+    driver = MagicMock()
+    driver.current_url = "https://www.dmm.co.jp/age_check/=/?rurl=x"
+    with patch.object(review_module, "handle_safe_mode", return_value=False):
+        with patch.object(review_module, "get_doujin_reviews") as get_reviews:
+            result = review_module.scrape_review_comments(
+                "https://www.dmm.co.jp/dc/doujin/-/detail/=/cid=d_1/",
+                driver,
+                "doujin",
+                "digital_doujin",
+            )
+    assert result == []
+    get_reviews.assert_not_called()
+
+
+def test_scrape_review_comments_video_skips_when_age_gate_stuck(review_module):
+    driver = MagicMock()
+    driver.current_url = "https://www.dmm.co.jp/age_check/=/?rurl=x"
+    with patch.object(review_module, "handle_safe_mode", return_value=False):
+        with patch.object(review_module, "get_video_reviews") as get_reviews:
+            result = review_module.scrape_review_comments(
+                "https://video.dmm.co.jp/amateur/content/?id=x",
+                driver,
+                "digital",
+                "videoa",
+            )
+    assert result == []
+    get_reviews.assert_not_called()
+
+
+def test_create_driver_sets_timeouts(review_module):
+    fake_driver = MagicMock()
+    fake_driver.command_executor = MagicMock()
+    with patch.object(review_module, "Options", return_value=MagicMock()):
+        with patch.object(review_module, "Service", return_value=MagicMock()):
+            with patch.object(review_module, "chromedriver_path", return_value="chromedriver"):
+                with patch.object(
+                    review_module.webdriver, "Chrome", return_value=fake_driver
+                ):
+                    driver = review_module.create_driver()
+    assert driver is fake_driver
+    fake_driver.set_page_load_timeout.assert_called_once_with(
+        review_module.PAGE_LOAD_TIMEOUT_SEC
+    )
+    fake_driver.set_script_timeout.assert_called_once_with(
+        review_module.SCRIPT_TIMEOUT_SEC
+    )
+    fake_driver.command_executor.set_timeout.assert_called_once_with(
+        review_module.COMMAND_TIMEOUT_SEC
+    )
 
 
 def test_age_check_url_uses_path_not_rurl_query(review_module):
@@ -305,7 +357,7 @@ def test_scrape_product_summary_aborts_on_age_check(review_module):
         "https://www.dmm.co.jp/age_check/=/"
         "?rurl=https%3A%2F%2Fvideo.dmm.co.jp%2Famateur%2Fcontent%2F%3Fid%3Dpai436"
     )
-    with patch.object(review_module, "handle_safe_mode") as handle:
+    with patch.object(review_module, "handle_safe_mode", return_value=True) as handle:
         result = review_module.scrape_product_summary(
             "https://video.dmm.co.jp/amateur/content/?id=pai436",
             driver,

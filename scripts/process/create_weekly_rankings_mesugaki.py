@@ -34,7 +34,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # ----------------------------------------------------
 # 設定
 # ----------------------------------------------------
-setup_logger("main_create_weekly_rankings_mesugaki.log")
+setup_logger()
 
 
 def _mesugaki_db_host() -> str:

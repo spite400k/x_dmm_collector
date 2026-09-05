@@ -3,15 +3,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import logging
-import os
-import sys
 
 from dmm.dmm_campaign_api import fetch_campaigns
 from db.trn_campaigns_repository import upsert_campaign
 from utils.logger import setup_logger
 
-os.makedirs("logs", exist_ok=True)
-setup_logger("main_campaign.log")
+setup_logger()
 
 
 def main():

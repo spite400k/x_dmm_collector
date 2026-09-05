@@ -37,7 +37,7 @@ if ENABLE_BOTO_DEBUG:
     # botocore の HTTP レベルのやり取りを出す（ヘッダ確認に便利）
     from utils.logger import setup_logger
 
-    setup_logger("supabase2storj.log")
+    setup_logger()
     logging.getLogger().setLevel(logging.DEBUG)
     boto3.set_stream_logger('botocore', level='DEBUG')
 

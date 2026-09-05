@@ -7,10 +7,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from utils.logger import setup_logger
-
-setup_logger("storage.log")
-
 # S3 設定（環境変数から取得）
 S3_BUCKET = os.environ.get("S3_BUCKET")
 S3_BUCKET_3 = os.environ.get("S3_BUCKET_3")
@@ -24,7 +20,6 @@ s3_client = boto3.client(
     aws_access_key_id=S3_ACCESS_KEY,
     aws_secret_access_key=S3_SECRET_KEY,
 )
-
 
 def _upload_local_image_to_s3(
     filepath: str, content_id: str, index: int, floor: str, bucket: str
@@ -66,7 +61,6 @@ def _upload_local_image_to_s3(
     except ClientError as e:
         logging.error("署名付きURL生成失敗: %s", e)
         return ""
-
 
 def _upload_image_to_s3(
     url: str, content_id: str, index: int, floor: str, bucket: str
@@ -111,11 +105,9 @@ def _upload_image_to_s3(
         logging.error("署名付きURL生成失敗: %s", e)
         return ""
 
-
 def tachiyomi_s3_prefix(floor: str, content_id: str) -> str:
     """立ち読み画像の S3 プレフィックス（末尾スラッシュ付き）。"""
     return f"{floor}/{content_id}/"
-
 
 def count_objects_under_prefix(
     floor: str,
@@ -141,13 +133,11 @@ def count_objects_under_prefix(
         return 0
     return len(resp.get("Contents") or [])
 
-
 # ---------------------------------------------------------------------
 # ローカル画像ファイルを S3 にアップロード（既定バケット S3_BUCKET）
 # ---------------------------------------------------------------------
 def upload_local_image_to_s3(filepath: str, content_id: str, index: int, floor: str) -> str:
     return _upload_local_image_to_s3(filepath, content_id, index, floor, S3_BUCKET)
-
 
 # ---------------------------------------------------------------------
 # ローカル画像ファイルを S3 にアップロード（S3_BUCKET_3）
@@ -157,13 +147,11 @@ def upload_local_image_to_s3_bucket3(
 ) -> str:
     return _upload_local_image_to_s3(filepath, content_id, index, floor, S3_BUCKET_3)
 
-
 # ---------------------------------------------------------------------
 # URLから画像を S3 にアップロード（既定バケット S3_BUCKET）
 # ---------------------------------------------------------------------
 def upload_image_to_s3(url: str, content_id: str, index: int, floor: str) -> str:
     return _upload_image_to_s3(url, content_id, index, floor, S3_BUCKET)
-
 
 # ---------------------------------------------------------------------
 # URLから画像を S3 にアップロード（S3_BUCKET_3）
@@ -171,20 +159,17 @@ def upload_image_to_s3(url: str, content_id: str, index: int, floor: str) -> str
 def upload_image_to_s3_bucket3(url: str, content_id: str, index: int, floor: str) -> str:
     return _upload_image_to_s3(url, content_id, index, floor, S3_BUCKET_3)
 
-
 # ---------------------------------------------------------------------
 # 女優プロフィール画像を S3 にアップロード（公開URLを返す）
 # ---------------------------------------------------------------------
 S3_ACTRESS_PREFIX = os.environ.get("S3_ACTRESS_PREFIX", "actress")
 S3_PUBLIC_BASE_URL = os.environ.get("S3_PUBLIC_BASE_URL", "")
 
-
 def build_s3_public_url(key: str, bucket: str) -> str:
     base = S3_PUBLIC_BASE_URL.rstrip("/")
     if base:
         return f"{base}/{key}"
     return f"https://{bucket}.s3.{S3_REGION}.amazonaws.com/{key}"
-
 
 def upload_actress_image_to_s3(
     actress_id: int | str,
@@ -249,7 +234,6 @@ def upload_actress_image_to_s3(
 
     return build_s3_public_url(key, target_bucket)
 
-
 # ---------------------------------------------------------------------
 # テスト用メソッド
 # ---------------------------------------------------------------------
@@ -269,7 +253,6 @@ def test_s3_upload():
     sample_url = "https://picsum.photos/300/400"
     result_url = upload_image_to_s3(sample_url, test_content_id, 2, floor)
     logging.info("[TEST] URLアップロード結果: %s", result_url)
-
 
 # ---------------------------------------------------------------------
 # 実行

@@ -13,11 +13,8 @@ from selenium.webdriver.support import expected_conditions as EC
 # ---------------------
 # ログ設定
 # ---------------------
-from utils.logger import setup_logger
 
-setup_logger("tweet.log")
 logger = logging.getLogger(__name__)
-
 
 # ---------------------
 # iframe URL から MP4 URL を取得　◎
@@ -56,7 +53,6 @@ def get_mp4_url_from_iframe(iframe_url: str) -> str:
         return mp4_url
     finally:
         driver.quit()
-
 
 # ---------------------
 # DMM動画ページからMP4取得
@@ -124,7 +120,6 @@ def download_video(mp4_url: str, sample_movie_url: str) -> str:
     logger.info(f"✅ 動画ダウンロード成功: {mp4_url} → {filepath} ({total_bytes} bytes)")
     return filepath
 
-
 def get_sample_movie(sample_movie_url):
     logger.info(f"⚠️ 動画URLあり → {sample_movie_url}")
     video_path = ""
@@ -146,7 +141,6 @@ def get_sample_movie(sample_movie_url):
         logger.warning(f"⚠️ 動画処理失敗 → {e}")
 
     return video_path
-
 
 # # ---------------------
 # # ファイル削除

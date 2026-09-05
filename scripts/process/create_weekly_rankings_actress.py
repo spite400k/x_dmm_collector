@@ -20,7 +20,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-setup_logger("main_create_weekly_rankings_actress.log")
+setup_logger()
 
 RELEASE_WINDOW_DAYS = 31
 TOP_N = 20

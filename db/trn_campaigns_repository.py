@@ -7,12 +7,8 @@ from supabase import Client
 
 from db.supabase_client import supabase
 from dmm.dmm_campaign_api import resolve_feature_url, to_affiliate_feature_url
-from utils.logger import setup_logger
-
-setup_logger("trn_campaigns_repository.log")
 
 JST = timezone(timedelta(hours=9))
-
 
 def _campaign_period() -> tuple[str, str]:
     """開始: 当日0時(JST)、終了: 翌日0時(JST)"""
@@ -21,12 +17,10 @@ def _campaign_period() -> tuple[str, str]:
     end_at = (today_jst + timedelta(days=1)).isoformat()
     return start_at, end_at
 
-
 def _normalize_text(value: Optional[str]) -> Optional[str]:
     if value in (None, ""):
         return None
     return value.strip()
-
 
 def _upsert_campaign(campaign: dict, *, supabase_client: Client) -> bool:
     try:
@@ -80,7 +74,6 @@ def _upsert_campaign(campaign: dict, *, supabase_client: Client) -> bool:
         logging.error("upsert_campaign 失敗: %s", exc)
         logging.error(traceback.format_exc())
         return False
-
 
 def upsert_campaign(campaign: dict) -> bool:
     return _upsert_campaign(campaign, supabase_client=supabase)

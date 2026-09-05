@@ -10,6 +10,9 @@ BACKUP_COUNT = 7
 ROTATE_WHEN = "midnight"
 ROTATE_INTERVAL = 1
 LOG_ENCODING = "utf-8"
+LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+# 手動実行でファイルも欲しいとき: set X_DMM_LOG_FILE=logs/manual.log
+LOG_FILE_ENV = "X_DMM_LOG_FILE"
 
 
 def ensure_utf8_stdio() -> None:
@@ -79,18 +82,26 @@ def _try_create_rotating_file_handler(
         return None
 
 
-def setup_logger(log_file: str) -> None:
+def setup_logger(log_file: str | None = None) -> None:
+    """ルートロガーを設定する。
+
+    - エントリポイント（scripts / run.py）のみ呼ぶこと。ライブラリでは呼ばない。
+    - log_file 省略時はコンソールのみ（正本は run.py の task_run_*.log）。
+    - 手動でファイルも欲しい場合は引数か環境変数 X_DMM_LOG_FILE を指定。
+    """
     configure_utf8_environment()
-    os.makedirs(LOG_DIR, exist_ok=True)
+    resolved = log_file if log_file is not None else os.environ.get(LOG_FILE_ENV)
 
     handlers: list[logging.Handler] = [create_utf8_stream_handler()]
-    file_handler = _try_create_rotating_file_handler(log_file)
-    if file_handler is not None:
-        handlers.insert(0, file_handler)
+    if resolved:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        file_handler = _try_create_rotating_file_handler(resolved)
+        if file_handler is not None:
+            handlers.insert(0, file_handler)
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+        format=LOG_FORMAT,
         handlers=handlers,
         force=True,
     )

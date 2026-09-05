@@ -32,7 +32,7 @@ from scripts.process import update_items as update_items_mod
 from utils.logger import setup_logger
 
 load_dotenv()
-setup_logger("regenerate_empty_summaries.log")
+setup_logger()
 
 
 def is_blank(value: str | None) -> bool:

@@ -11,14 +11,11 @@ from typing import Callable, Optional
 
 from supabase import Client
 
-from utils.logger import setup_logger
 from utils.supabase_retry import call_with_retry, execute_with_retry
 
 # ZIP ローテート付きログ設定
-setup_logger("trn_dmm_items_repository.log")
 
 UploadFn = Callable[..., Optional[str]]
-
 
 # ---------------------------------------------------------------------
 # 価格を整数に変換する関数
@@ -31,13 +28,11 @@ def parse_price(price_str):
         return int(match.group())
     return None
 
-
 # ----------------------------------------------------
 # []→null
 # ----------------------------------------------------
 def normalize_field(v):
     return None if v in (None, [], "") else v
-
 
 def resolve_tachiyomi_page_count(
     tachiyomi_url: str | None,
@@ -47,7 +42,6 @@ def resolve_tachiyomi_page_count(
     if not tachiyomi_url:
         return None
     return int(uploaded_count)
-
 
 def _insert_dmm_item(
     item: dict,
@@ -179,7 +173,6 @@ def _insert_dmm_item(
         logging.error(traceback.format_exc())
         return False
 
-
 # ---------------------------------------------------------------------
 # DMMアイテムをSupabaseのtrn_dmm_itemsテーブルに挿入（既定DB / 既定S3）
 # ---------------------------------------------------------------------
@@ -195,7 +188,6 @@ def insert_dmm_item(item: dict, tachiyomi_image_paths, sample_movie_path, site, 
         upload_local_image_to_s3_fn=upload_local_image_to_s3_default,
         coerce_empty_image_urls=True,
     )
-
 
 def insert_dmm_item_supabase3(item: dict, tachiyomi_image_paths, sample_movie_path, site, service, floor) -> bool:
     """SUPABASE_URL3 向け（立ち読み画像は S3_BUCKET_3）。"""

@@ -43,6 +43,7 @@ phases:
       - path: scripts/process/create_ai_review.py
         name: 作品のAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review.log
+        timeout_sec: 14400
 
       - path: scripts/process/create_weekly_rankings.py
         name: 週次ランキング
@@ -59,6 +60,7 @@ phases:
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキのAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review_mesugaki.log
+        timeout_sec: 14400
 
       - path: scripts/process/create_weekly_rankings_mesugaki.py
         name: メスガキ週次ランキング
@@ -74,6 +76,7 @@ phases:
       - path: scripts/process/create_ai_review.py
         name: 作品のAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review.log
+        timeout_sec: 14400
       - path: scripts/process/create_weekly_rankings.py
         name: 週次ランキング
         log: logs/task_run_create_weekly_rankings.log
@@ -99,6 +102,7 @@ phases:
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキのAIレビュー(review_digest, content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score)生成
         log: logs/task_run_create_ai_review_mesugaki.log
+        timeout_sec: 14400
       - path: scripts/process/create_weekly_rankings_mesugaki.py
         name: メスガキ週次ランキング
         log: logs/task_run_create_weekly_rankings_mesugaki.log
@@ -134,6 +138,7 @@ phases:
       - path: scripts/process/create_ai_review_mesugaki.py
         name: メスガキ AI レビュー生成
         log: logs/task_run_create_ai_review_mesugaki.log
+        timeout_sec: 14400
       - path: scripts/manual/backfill_mst_actress.py
         name: mst_actress 未登録 ID 補完
         log: logs/task_run_backfill_mst_actress.log

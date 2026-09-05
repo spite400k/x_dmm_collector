@@ -30,7 +30,7 @@ from utils.update_items_selection import (
 # ----------------------------------------------------
 from utils.logger import setup_logger
 
-setup_logger("main_update_items.log")
+setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")

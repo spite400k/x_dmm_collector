@@ -18,7 +18,7 @@
 
 - **実行場所**: プロジェクトルートから `python scripts/...`
 - **一括実行**: `python run.py --list` / `python run.py --phase collect|process|manual`
-- **ログ**: タスク実行時は `logs/task_run_*.log`（`tasks.yaml` 参照）
+- **ログ**: タスク実行時の正本は `logs/task_run_*.log`（`tasks.yaml` の `log:`）と `logs/run.log`。スクリプト／ライブラリはコンソールのみ（二重ファイル出力なし）。手動でファイルも欲しいときは `X_DMM_LOG_FILE=logs/manual.log`
 
 ---
 

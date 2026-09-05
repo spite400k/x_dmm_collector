@@ -9,14 +9,10 @@ from selenium.webdriver.common.by import By
 
 from openai_api.config import OPENAI_MODEL
 from utils.chromedriver import create_chrome_driver, quit_chrome_driver
-from utils.logger import setup_logger
-
-setup_logger("scraper.log")
 
 # 環境変数読み込み
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 
 def get_page_source_with_age_verification(url: str) -> str:
     driver = create_chrome_driver(page_load_timeout=60)
@@ -53,7 +49,6 @@ def get_dmm_comment_text(url: str) -> str:
     else:
         return ""
 
-
 def _parse_json_ld_description(soup: BeautifulSoup) -> str:
     best = ""
     for script in soup.find_all("script", type="application/ld+json"):
@@ -79,7 +74,6 @@ def _parse_json_ld_description(soup: BeautifulSoup) -> str:
                             best = desc
     return best if len(best) >= 40 else ""
 
-
 def _extract_book_dmm_synopsis(soup: BeautifulSoup) -> str:
     """book.dmm.co.jp: 折りたたみUIでも DOM / JSON-LD に全文が入る。"""
     toggle = soup.select_one('[data-testid="detail-toggle-button"]')
@@ -91,7 +85,6 @@ def _extract_book_dmm_synopsis(soup: BeautifulSoup) -> str:
                 return text
 
     return _parse_json_ld_description(soup)
-
 
 def extract_synopsis_from_soup(soup: BeautifulSoup, url: str = "") -> str:
     if "book.dmm.co.jp" in url:
@@ -118,7 +111,6 @@ def extract_synopsis_from_soup(soup: BeautifulSoup, url: str = "") -> str:
 
     return ""
 
-
 def scrape_product_details(url: str) -> str:
     try:
         html = get_page_source_with_age_verification(url)
@@ -138,7 +130,6 @@ def scrape_product_details(url: str) -> str:
     except Exception as e:
         logging.warning(f"[Scrape Error] URL: {url} → {e}")
         return ""
-
 
 # --- generate_content関数 ---
 def generate_content(item: dict) -> dict:

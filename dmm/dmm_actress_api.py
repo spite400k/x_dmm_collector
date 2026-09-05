@@ -16,10 +16,6 @@ from db.storageS3 import S3_PUBLIC_BASE_URL, upload_actress_image_to_s3
 from dmm.minnano_actress_api import enrich_with_minnano
 from dmm.wikipedia_actress_api import enrich_with_wikipedia
 from dmm.wikidata_actress_api import enrich_with_wikidata
-from utils.logger import setup_logger
-
-os.makedirs("logs", exist_ok=True)
-setup_logger("dmm_actress_api.log")
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
@@ -31,7 +27,6 @@ AGE_CHECK_COOKIE = {"age_check_done": "1"}
 DEFAULT_REQUEST_INTERVAL = 1.0
 IMAGE_OPTIMIZER_HOST = "image-optimizer.osusume.dmm.co.jp"
 DEFAULT_ACTRESS_IMAGE_WIDTH = int(os.getenv("ACTRESS_IMAGE_WIDTH", "800"))
-
 
 def _create_session() -> requests.Session:
     session = requests.Session()
@@ -47,13 +42,11 @@ def _create_session() -> requests.Session:
     )
     return session
 
-
 def _normalize_text(value: Any) -> Optional[str]:
     if value in (None, ""):
         return None
     text = str(value).strip()
     return text or None
-
 
 def _to_int(value: Any) -> Optional[int]:
     if value in (None, ""):
@@ -62,7 +55,6 @@ def _to_int(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
-
 
 def _parse_iso_date(value: Optional[str]) -> Optional[str]:
     if not value:
@@ -74,7 +66,6 @@ def _parse_iso_date(value: Optional[str]) -> Optional[str]:
     except ValueError:
         return None
 
-
 def _extract_image_filename(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
@@ -83,7 +74,6 @@ def _extract_image_filename(url: Optional[str]) -> Optional[str]:
     if filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
         return filename
     return None
-
 
 def build_high_res_image_download_url(
     *,
@@ -100,14 +90,12 @@ def build_high_res_image_download_url(
         return None
     return f"https://{IMAGE_OPTIMIZER_HOST}/actress/{filename}/width={width}"
 
-
 def _is_hosted_actress_image(url: Optional[str]) -> bool:
     if not url:
         return False
     if S3_PUBLIC_BASE_URL and url.startswith(S3_PUBLIC_BASE_URL.rstrip("/")):
         return True
     return "/actress/" in url and "amazonaws.com" in url
-
 
 def _upload_actress_image(record: dict) -> dict:
     actress_id = record.get("actress_id")
@@ -132,13 +120,11 @@ def _upload_actress_image(record: dict) -> dict:
         record["image_url"] = public_url
     return record
 
-
 def _extract_alias(name: Optional[str]) -> Optional[str]:
     if not name:
         return None
     match = re.search(r"[（(]([^）)]+)[）)]", name)
     return match.group(1).strip() if match else None
-
 
 def _extract_x_account(soup: BeautifulSoup) -> Optional[str]:
     for anchor in soup.find_all("a", href=True):
@@ -149,7 +135,6 @@ def _extract_x_account(soup: BeautifulSoup) -> Optional[str]:
         if username and username not in ("intent", "share", "home"):
             return username
     return None
-
 
 def _extract_section_text(soup: BeautifulSoup, section_id: str) -> Optional[str]:
     heading = soup.find(id=section_id)
@@ -165,7 +150,6 @@ def _extract_section_text(soup: BeautifulSoup, section_id: str) -> Optional[str]
             parts.append(text)
     return "\n".join(parts).strip() or None
 
-
 def _extract_debut_date(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
@@ -174,7 +158,6 @@ def _extract_debut_date(text: Optional[str]) -> Optional[str]:
         return None
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
-
 
 def _extract_favorite_count(text: str) -> Optional[int]:
     patterns = [
@@ -188,7 +171,6 @@ def _extract_favorite_count(text: str) -> Optional[int]:
             return _to_int(match.group(1).replace(",", ""))
     return None
 
-
 def _extract_embedded_field(html: str, field_name: str) -> Optional[str]:
     pattern = rf'{re.escape(field_name)}\\":\\"((?:\\\\.|[^"\\])*)\\"'
     match = re.search(pattern, html)
@@ -200,7 +182,6 @@ def _extract_embedded_field(html: str, field_name: str) -> Optional[str]:
         return None
     return match.group(1).replace("\\\\n", "\n").replace('\\"', '"')
 
-
 def _dmm_get(url: str, params: dict) -> dict:
     response = requests.get(url, params=params, timeout=20)
     response.raise_for_status()
@@ -211,20 +192,17 @@ def _dmm_get(url: str, params: dict) -> dict:
         raise Exception(f"API error: {message}")
     return result
 
-
 def _normalize_actress_name(name: Optional[str]) -> Optional[str]:
     if not name:
         return None
     normalized = re.sub(r"\s+", "", str(name).strip())
     return normalized or None
 
-
 def is_unenrichable_name(name: Optional[str]) -> bool:
     normalized = _normalize_actress_name(name)
     if not normalized:
         return True
     return normalized in {"----", "-", "不明", "unknown", "なし"}
-
 
 def fetch_actress_by_id(actress_id: int | str) -> Optional[dict]:
     result = _dmm_get(
@@ -241,7 +219,6 @@ def fetch_actress_by_id(actress_id: int | str) -> Optional[dict]:
         logging.warning("[API] 女優が見つかりません actress_id=%s", actress_id)
         return None
     return actresses[0]
-
 
 def fetch_actress_by_keyword(name: str) -> Optional[dict]:
     if is_unenrichable_name(name):
@@ -281,7 +258,6 @@ def fetch_actress_by_keyword(name: str) -> Optional[dict]:
     logging.warning("[API] キーワード検索の候補に一致なし keyword=%s", keyword)
     return None
 
-
 def fetch_works_count(actress_id: int | str) -> Optional[int]:
     result = _dmm_get(
         ITEM_LIST_URL,
@@ -299,7 +275,6 @@ def fetch_works_count(actress_id: int | str) -> Optional[int]:
         },
     )
     return _to_int(result.get("total_count"))
-
 
 def scrape_osusume_profile(actress_id: int | str, *, session: Optional[requests.Session] = None) -> dict:
     own_session = session is None
@@ -354,7 +329,6 @@ def scrape_osusume_profile(actress_id: int | str, *, session: Optional[requests.
         if own_session:
             session.close()
 
-
 def map_api_actress_to_record(api_actress: dict) -> dict:
     image_url = None
     image_info = api_actress.get("imageURL") or {}
@@ -379,7 +353,6 @@ def map_api_actress_to_record(api_actress: dict) -> dict:
         "alias": _extract_alias(name),
     }
 
-
 def _merge_scrape_and_works(
     record: dict,
     actress_id: int | str,
@@ -397,7 +370,6 @@ def _merge_scrape_and_works(
     if works_count:
         record["works_count"] = works_count
     return record
-
 
 def enrich_actress(
     actress_id: int | str,

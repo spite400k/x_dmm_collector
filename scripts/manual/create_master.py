@@ -173,7 +173,7 @@ def sync_genre_master(floor_id):
 def main():
     from utils.logger import setup_logger
 
-    setup_logger("create_master.log")
+    setup_logger()
 
     try:
         sync_site_and_service_master()

@@ -8,7 +8,7 @@ import logging
 
 from utils.logger import setup_logger
 
-setup_logger("fetch_items_indi.log")
+setup_logger()
 
 def main():
     # site = "FANZA"

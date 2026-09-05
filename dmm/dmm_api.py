@@ -15,12 +15,6 @@ DEFAULT_API_TIMEOUT = 30
 DMM_API_RETRIES = 3
 DMM_API_RETRY_DELAY = 2.0
 
-os.makedirs("logs", exist_ok=True)
-from utils.logger import setup_logger
-
-setup_logger("dmm_api.log")
-
-
 def get_highest_resolution_movie(movie_info: dict):
     if not isinstance(movie_info, dict):
         return None
@@ -40,7 +34,6 @@ def get_highest_resolution_movie(movie_info: dict):
                 continue
 
     return best_url
-
 
 def _request_item_list(params: dict) -> dict:
     """ItemList API を timeout 付きで呼び、接続エラー・5xx はリトライする。"""
@@ -67,7 +60,6 @@ def _request_item_list(params: dict) -> dict:
         base_delay=DMM_API_RETRY_DELAY,
         log_label="DMM API",
     )
-
 
 def fetch_items(
     site,
@@ -124,7 +116,6 @@ def fetch_items(
     logging.info("サンプル画像 %d 枚以上のアイテム件数: %d", min_sample_count, len(filtered_items))
     return filtered_items
 
-
 def fetch_items_merged_sorts(
     site,
     service,
@@ -162,7 +153,6 @@ def fetch_items_merged_sorts(
         len(merged),
     )
     return merged
-
 
 def fetch_items_search_keyword(site, service, floor, keyword, hits=10, offset=1, sort="rank"):
     params = {

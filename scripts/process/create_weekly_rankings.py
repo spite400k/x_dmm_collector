@@ -26,7 +26,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 # ----------------------------------------------------
 # 設定
 # ----------------------------------------------------
-setup_logger("main_create_weekly_rankings.log")
+setup_logger()
 
 def get_connection():
     # DB_URL（Session pooler）推奨。直結 db.*.supabase.co は IPv6 のみ。

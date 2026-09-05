@@ -3,10 +3,6 @@ import logging
 from db.supabase_client import supabase
 import os
 
-from utils.logger import setup_logger
-
-setup_logger("storage.log")
-
 # ---------------------------------------------------------------------
 # ローカル画像ファイルをSupabase Storageにアップロード
 # ---------------------------------------------------------------------
@@ -76,7 +72,6 @@ def upload_image_to_storage(url: str, content_id: str, index: int, bucket: str =
         logging.error("画像アップロード失敗: %s", e)
         return ""
 
-
 # ---------------------------------------------------------------------
 # テスト用メソッド
 # ---------------------------------------------------------------------
@@ -98,7 +93,6 @@ def test_storage_upload():
     sample_url = "https://picsum.photos/300/400"  # ダミー画像API
     result_path = upload_image_to_storage(sample_url, test_content_id, 2)
     logging.info("[TEST] URLアップロード結果: %s", result_path)
-
 
 # ---------------------------------------------------------------------
 # 実行

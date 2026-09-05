@@ -9,9 +9,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from dmm.actress_merge import merge_supplement_record
-from utils.logger import setup_logger
-
-setup_logger("wikidata_actress_api.log")
 
 WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 USER_AGENT = os.getenv(
@@ -52,13 +49,11 @@ SELECT ?item ?itemLabel ?itemDescription ?birthDate ?height ?birthPlaceLabel
 LIMIT 5
 """
 
-
 def _normalize_text(value: Any) -> Optional[str]:
     if value in (None, ""):
         return None
     text = str(value).strip()
     return text or None
-
 
 def _to_int(value: Any) -> Optional[int]:
     if value in (None, ""):
@@ -68,7 +63,6 @@ def _to_int(value: Any) -> Optional[int]:
     except (TypeError, ValueError):
         return None
 
-
 def _parse_wikidata_date(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
@@ -77,13 +71,11 @@ def _parse_wikidata_date(value: Optional[str]) -> Optional[str]:
         return date_part
     return None
 
-
 def _normalize_blood_type(value: Optional[str]) -> Optional[str]:
     text = _normalize_text(value)
     if not text:
         return None
     return text[:-1] if text.endswith("型") else text
-
 
 def _binding_value(bindings: list[dict], key: str) -> Optional[str]:
     for row in bindings:
@@ -91,7 +83,6 @@ def _binding_value(bindings: list[dict], key: str) -> Optional[str]:
         if value not in (None, ""):
             return str(value)
     return None
-
 
 def fetch_actress_from_wikidata(actress_id: int | str) -> Optional[dict]:
     query = _SPARQL_TEMPLATE.format(actress_id=str(actress_id))
@@ -138,10 +129,8 @@ def fetch_actress_from_wikidata(actress_id: int | str) -> Optional[dict]:
     )
     return record
 
-
 def merge_wikidata_record(base_record: dict, wikidata_record: Optional[dict]) -> dict:
     return merge_supplement_record(base_record, wikidata_record)
-
 
 def enrich_with_wikidata(
     record: dict,

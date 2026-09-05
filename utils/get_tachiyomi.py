@@ -11,12 +11,10 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from PIL import Image
 
 from utils.chromedriver import create_chrome_driver, quit_chrome_driver
-from utils.logger import setup_logger
 
 # ---------------------
 # ログ設定
 # ---------------------
-setup_logger("get_tachiyomi.log")
 
 # DMM book は 2026-06 頃から Publus（Web Components + Shadow DOM）へ移行。
 # 旧 #viewer / #pageSliderCounter / #endOfBook は残っていない。
@@ -70,7 +68,6 @@ const st = getComputedStyle(el);
 return st.visibility !== 'hidden' && st.display !== 'none' && Number(st.opacity || '1') > 0;
 """
 
-
 def save_page_source(driver, idx, log_dir="logs"):
     # ログディレクトリがなければ作成
     os.makedirs(log_dir, exist_ok=True)
@@ -84,11 +81,9 @@ def save_page_source(driver, idx, log_dir="logs"):
 
     print(f"✅ ページソースを保存しました: {log_file}")
 
-
 def detect_viewer_kind(driver):
     """'publus' / 'legacy' / None"""
     return driver.execute_script(_VIEWER_KIND_JS)
-
 
 def wait_for_viewer_ready(driver, timeout=20):
     """Publus または旧ビューアの描画完了を待つ。戻り値は kind。"""
@@ -96,13 +91,11 @@ def wait_for_viewer_ready(driver, timeout=20):
         lambda d: detect_viewer_kind(d)
     )
 
-
 def is_end_of_book(driver) -> bool:
     if detect_viewer_kind(driver) == "publus":
         return bool(driver.execute_script(_PUBLUS_END_OF_BOOK_JS))
     end_els = driver.find_elements(By.ID, "endOfBook")
     return bool(end_els and end_els[0].is_displayed())
-
 
 # ---------------------
 # 表示中のcanvas取得関数
@@ -127,7 +120,6 @@ def get_visible_canvas(driver):
         except Exception as e:
             logging.warning(f"canvas[{i}] 可視チェック失敗: {e}")
     raise Exception("表示中のcanvasが見つかりません")
-
 
 # ---------------------
 # ページカウンタ取得関数
@@ -158,7 +150,6 @@ def get_page_counter(driver, timeout=30):
         driver.save_screenshot("debug_get_page_counter.png")
         return 1, 50
 
-
 # ---------------------
 # Tachiyomiページキャプチャ
 # ---------------------
@@ -182,7 +173,6 @@ _AGE_CHECK_SELECTORS = (
     (By.XPATH, "//button[normalize-space(text())='はい']"),
 )
 
-
 def _is_age_check_url(url: str | None) -> bool:
     if not isinstance(url, str) or not url:
         return False
@@ -190,7 +180,6 @@ def _is_age_check_url(url: str | None) -> bool:
     path = (parsed.path or "").lower()
     host = (parsed.hostname or "").lower()
     return "age_check" in path or "age_check" in host
-
 
 def _apply_age_check_cookie(driver) -> None:
     try:
@@ -205,7 +194,6 @@ def _apply_age_check_cookie(driver) -> None:
     except Exception:
         logging.debug("age_check_done cookie 設定をスキップ", exc_info=True)
 
-
 def _age_gate_elements_present(driver) -> bool:
     try:
         for by, selector in _AGE_CHECK_SELECTORS[:2]:
@@ -216,7 +204,6 @@ def _age_gate_elements_present(driver) -> bool:
     except Exception:
         return False
     return False
-
 
 def _handle_age_check(driver) -> bool:
     """年齢確認ページ / モーダルがあれば突破する。クリックしたら True。"""
@@ -251,7 +238,6 @@ def _handle_age_check(driver) -> bool:
     _apply_age_check_cookie(driver)
     return True
 
-
 def _driver_get_with_retry(driver, url: str) -> None:
     """driver.get を一時障害時に数回リトライする。"""
     last_exc: BaseException | None = None
@@ -275,7 +261,6 @@ def _driver_get_with_retry(driver, url: str) -> None:
             time.sleep(delay)
     if last_exc is not None:  # pragma: no cover
         raise last_exc
-
 
 def _wait_for_viewer_with_retry(driver, timeout: int = 20, *, url: str | None = None):
     """ビューア表示待ちを数回リトライする。戻り値は viewer kind。"""
@@ -311,7 +296,6 @@ def _wait_for_viewer_with_retry(driver, timeout: int = 20, *, url: str | None = 
         raise last_exc
     raise TimeoutException("viewer wait failed")
 
-
 def _should_recycle_driver(exc: BaseException) -> bool:
     """セッション切断・Chrome ハングならドライバーを捨てて作り直す。"""
     from selenium.common.exceptions import InvalidSessionIdException
@@ -329,7 +313,6 @@ def _should_recycle_driver(exc: BaseException) -> bool:
         "timeoutexception",
     )
     return any(needle in text for needle in needles)
-
 
 class TachiyomiCaptureSession:
     """1 収集プロセスで Chrome を使い回す。"""
@@ -477,7 +460,6 @@ class TachiyomiCaptureSession:
 
         return images
 
-
 def capture_all_tachiyomi_pages(
     tachiyomi_url: str,
     *,
@@ -488,7 +470,6 @@ def capture_all_tachiyomi_pages(
         return session.capture(tachiyomi_url)
     with TachiyomiCaptureSession() as owned:
         return owned.capture(tachiyomi_url)
-
 
 if __name__ == "__main__":
     test_url = "https://book.dmm.co.jp/tachiyomi/?cid=FRNfXRNVFW1RAQxaBwFUVgMLU1gAClAPVU5EDl0VClQMBllNB1o*UFcKWhRHVwVfCBxZW1kEVQ__&lin=1&sd=0"

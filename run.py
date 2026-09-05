@@ -8,6 +8,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -222,6 +223,70 @@ def stream_script_output(
     return "".join(chunks)
 
 
+def script_timeout_sec(entry: dict) -> float | None:
+    """tasks.yaml の timeout_sec。未設定・不正値は None（無制限）。"""
+    raw = entry.get("timeout_sec")
+    if raw is None or raw == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning("timeout_sec が不正です (%r) → 無視", raw)
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
+def wait_for_script_process(
+    proc: subprocess.Popen[str],
+    log_file: RotatingLogFile,
+    *,
+    echo: bool,
+    timeout_sec: float | None,
+) -> tuple[str, int]:
+    """子プロセス終了を待つ。timeout_sec 超過時は kill して returncode 124。"""
+    if timeout_sec is None:
+        child_output = stream_script_output(proc, log_file, echo=echo)
+        return child_output, proc.wait()
+
+    chunks: list[str] = []
+    assert proc.stdout is not None
+
+    def _reader() -> None:
+        for line in proc.stdout:
+            chunks.append(line)
+            log_file.write(line)
+            log_file.flush()
+            if echo:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
+    reader = threading.Thread(target=_reader, name="run-script-stdout", daemon=True)
+    reader.start()
+    try:
+        returncode = proc.wait(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        logger.error(
+            "スクリプトが timeout_sec=%.0f を超過したため強制終了します (pid=%s)",
+            timeout_sec,
+            proc.pid,
+        )
+        proc.kill()
+        try:
+            if proc.stdout is not None:
+                proc.stdout.close()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            pass
+        returncode = 124
+    reader.join(timeout=5)
+    return "".join(chunks), returncode
+
+
 def log_child_output_on_failure(script_path: str, output: str) -> None:
     """失敗時に子プロセス出力を親ロガーへ出す（ファイル専用実行時の調査用）。"""
     body = output.rstrip()
@@ -335,8 +400,21 @@ def run_script(
             errors="replace",
             bufsize=1,
         )
-        child_output = stream_script_output(proc, log_file, echo=echo)
-        returncode = proc.wait()
+        timeout_sec = script_timeout_sec(entry)
+        if timeout_sec is not None:
+            logger.info(
+                "[%d/%d] timeout_sec=%.0f を適用: %s",
+                index,
+                total,
+                timeout_sec,
+                entry["path"],
+            )
+        child_output, returncode = wait_for_script_process(
+            proc,
+            log_file,
+            echo=echo,
+            timeout_sec=timeout_sec,
+        )
 
         footer = f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - タスク終了 ({entry['path']})\n{'=' * 48}\n"
         log_file.write(footer)

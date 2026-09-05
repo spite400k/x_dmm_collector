@@ -12,9 +12,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from dmm.actress_merge import merge_supplement_record
-from utils.logger import setup_logger
-
-setup_logger("minnano_actress_api.log")
 
 MINNANO_BASE_URL = "https://www.minnano-av.com"
 MINNANO_SEARCH_URL = f"{MINNANO_BASE_URL}/search_result.php"
@@ -32,19 +29,16 @@ BIRTHDAY_PATTERN = re.compile(r"(\d{4})年(\d{1,2})月(\d{1,2})日")
 DEBUT_DATE_PATTERN = re.compile(r"(\d{4})年(\d{1,2})月\s*(\d{1,2})日")
 ACTRESS_PAGE_PATTERN = re.compile(r"actress\d+\.html", re.IGNORECASE)
 
-
 def _normalize_text(value: Any) -> Optional[str]:
     if value in (None, ""):
         return None
     text = re.sub(r"\s+", " ", str(value)).strip()
     return text or None
 
-
 def _normalize_actress_name(name: Optional[str]) -> Optional[str]:
     if not name:
         return None
     return re.sub(r"\s+", "", str(name).strip()) or None
-
 
 def _to_int(value: Any) -> Optional[int]:
     if value in (None, ""):
@@ -53,7 +47,6 @@ def _to_int(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
-
 
 def _parse_birthday(text: Optional[str]) -> Optional[str]:
     if not text:
@@ -64,7 +57,6 @@ def _parse_birthday(text: Optional[str]) -> Optional[str]:
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
 
-
 def _parse_debut_date(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
@@ -73,7 +65,6 @@ def _parse_debut_date(text: Optional[str]) -> Optional[str]:
         return None
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
-
 
 def _parse_size(text: Optional[str]) -> dict[str, Any]:
     if not text:
@@ -89,7 +80,6 @@ def _parse_size(text: Optional[str]) -> dict[str, Any]:
         "hip": _to_int(match.group("hip")),
     }
 
-
 def _extract_alias(text: Optional[str]) -> Optional[str]:
     if not text:
         return None
@@ -99,7 +89,6 @@ def _extract_alias(text: Optional[str]) -> Optional[str]:
         inner = re.split(r"/", inner)[0].strip()
         return inner or None
     return _normalize_text(text)
-
 
 def _extract_x_account(text: Optional[str]) -> Optional[str]:
     if not text:
@@ -113,20 +102,17 @@ def _extract_x_account(text: Optional[str]) -> Optional[str]:
         return text.lstrip("@")
     return None
 
-
 def _extract_name_en(title_text: Optional[str]) -> Optional[str]:
     if not title_text:
         return None
     match = re.search(r"/\s*([A-Za-z][A-Za-z\s.'-]+)$", title_text)
     return _normalize_text(match.group(1)) if match else None
 
-
 def _normalize_blood_type(value: Optional[str]) -> Optional[str]:
     text = _normalize_text(value)
     if not text:
         return None
     return text[:-1] if text.endswith("型") else text
-
 
 def _parse_profile_rows(soup: BeautifulSoup) -> dict[str, str]:
     rows: dict[str, str] = {}
@@ -140,7 +126,6 @@ def _parse_profile_rows(soup: BeautifulSoup) -> dict[str, str]:
         if label and value:
             rows[label] = value
     return rows
-
 
 def _find_profile_url(name: str, *, session: requests.Session) -> Optional[str]:
     keyword = _normalize_actress_name(name)
@@ -178,7 +163,6 @@ def _find_profile_url(name: str, *, session: requests.Session) -> Optional[str]:
 
     logging.warning("[MINNANO] 記事候補が特定できません name=%s count=%d", keyword, len(candidates))
     return None
-
 
 def scrape_minnano_profile(profile_url: str, *, session: requests.Session) -> Optional[dict]:
     response = session.get(profile_url, timeout=20)
@@ -231,7 +215,6 @@ def scrape_minnano_profile(profile_url: str, *, session: requests.Session) -> Op
     )
     return record
 
-
 def fetch_actress_from_minnano(
     name: Optional[str],
     *,
@@ -257,7 +240,6 @@ def fetch_actress_from_minnano(
     finally:
         if own_session:
             session.close()
-
 
 def enrich_with_minnano(
     record: dict,

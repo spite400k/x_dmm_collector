@@ -78,7 +78,7 @@
 | **WRITE（定義のみ・未使用）** | `mst_actress`, `mst_genre`, `mst_genre_sort`, `mst_director` — upsert 関数はコメントアウト |
 | **外部 API** | DMM `ItemList`（cid 指定）、OpenAI（Safe 化要約） |
 
-**処理概要**: 登録済み全作品を DMM API で再取得し、レビュー・価格・出演者等を更新。`auto_summary` / `auto_point` を OpenAI で Safe 化して上書き。
+**処理概要**: 登録済み作品を mode に応じて DMM API で再取得し、レビュー・価格・出演者等を更新。`daily`/`weekly` は発売日が recent_days（既定 60）以内、`all` は全件。`weekly`/`all` は価格・campaign 等のフル更新、`daily` はレビュー中心。`auto_summary` / `auto_point` を OpenAI で Safe 化して上書き。
 
 **主な UPDATE カラム**: `review_count`, `review_average`, `price`, `list_price`, `auto_summary`, `auto_point`, `campaign`, `actress_ids`, `actress`, `director_*`, `genre_*`, `delivery`, `sample_images`, `raw_json`, `updated_at`
 

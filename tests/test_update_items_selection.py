@@ -123,15 +123,16 @@ class TestShouldUpdateItem:
         assert should_update_item(undated, mode="daily", today=TODAY) is False
         assert should_update_item(future, mode="daily", today=TODAY) is False
 
-    def test_weekly_and_all_cover_entire_catalog(self):
+    def test_weekly_uses_recent_window_all_covers_catalog(self):
         old = {"release_date": "2025-01-01"}
         recent = {"release_date": "2026-08-01"}
         undated = {"release_date": ""}
-        assert should_update_item(old, mode="weekly", today=TODAY) is True
-        assert should_update_item(undated, mode="weekly", today=TODAY) is True
+        assert should_update_item(old, mode="weekly", today=TODAY) is False
+        assert should_update_item(undated, mode="weekly", today=TODAY) is False
         assert should_update_item(recent, mode="weekly", today=TODAY) is True
         assert should_update_item(old, mode="all", today=TODAY) is True
         assert should_update_item(recent, mode="all", today=TODAY) is True
+        assert should_update_item(undated, mode="all", today=TODAY) is True
 
     def test_all_and_unknown_mode(self):
         old = {"release_date": "2020-01-01"}
@@ -215,8 +216,10 @@ class TestMergeAndFilter:
         daily = filter_items_for_update(rows, mode="daily")
         assert [r["content_id"] for r in daily] == ["new"]
         weekly = filter_items_for_update(rows, mode="weekly")
-        assert [r["content_id"] for r in weekly] == ["old", "new"]
+        assert [r["content_id"] for r in weekly] == ["new"]
         assert filter_items_for_update([], mode="daily") == []
+        all_items = filter_items_for_update(rows, mode="all")
+        assert [r["content_id"] for r in all_items] == ["old", "new"]
 
     def test_custom_recent_days_and_skip_filter(self):
         rows = [

@@ -109,20 +109,20 @@ phases:
 
   process_main_weekly:
     schedule: weekly
-    description: 通常系統のカタログフル更新（価格・campaign・女優等）
+    description: 通常系統の直近発売フル更新（価格・campaign・女優等）
     scripts:
       - path: scripts/process/update_items.py
         args: ["--mode", "weekly"]
-        name: アイテム情報の週次フル更新（全件）
+        name: アイテム情報の週次フル更新（発売日 recent_days）
         log: logs/task_run_update_items_weekly.log
 
   process_mesugaki_weekly:
     schedule: weekly
-    description: メスガキ系統のカタログフル更新（価格・campaign・女優等）
+    description: メスガキ系統の直近発売フル更新（価格・campaign・女優等）
     scripts:
       - path: scripts/process/update_mesugaki.py
         args: ["--mode", "weekly"]
-        name: メスガキ情報の週次フル更新（全件）
+        name: メスガキ情報の週次フル更新（発売日 recent_days）
         log: logs/task_run_update_mesugaki_weekly.log
 
   manual:

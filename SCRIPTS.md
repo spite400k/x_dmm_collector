@@ -78,8 +78,8 @@ python run.py --phase process              # 全系統直列（互換）
 python run.py --phase process_main         # 通常系統のみ
 python run.py --phase process_actress      # 女優系統のみ
 python run.py --phase process_mesugaki     # メスガキ系統のみ
-python run.py --phase process_main_weekly  # 通常系統の旧作更新（週次）
-python run.py --phase process_mesugaki_weekly  # メスガキ系統の旧作更新（週次）
+python run.py --phase process_main_weekly  # 通常系統の直近発売フル更新（週次）
+python run.py --phase process_mesugaki_weekly  # メスガキ系統の直近発売フル更新（週次）
 python run.py --phase manual
 python run.py --phase all                  # collect + process
 
@@ -103,8 +103,8 @@ python run.py --phase all --continue-on-error
 | [`run_process_main.bat`](run_process_main.bat) | 加工・通常系統 3 本 | 定期（並列推奨） |
 | [`run_process_actress.bat`](run_process_actress.bat) | 加工・女優系統 2 本 | 定期（並列推奨） |
 | [`run_process_mesugaki.bat`](run_process_mesugaki.bat) | 加工・メスガキ系統 3 本 | 定期（並列推奨） |
-| [`run_process_main_weekly.bat`](run_process_main_weekly.bat) | 通常系統の旧作 API 更新 | 週次 |
-| [`run_process_mesugaki_weekly.bat`](run_process_mesugaki_weekly.bat) | メスガキ系統の旧作 API 更新 | 週次 |
+| [`run_process_main_weekly.bat`](run_process_main_weekly.bat) | 通常系統の直近発売 API フル更新 | 週次 |
+| [`run_process_mesugaki_weekly.bat`](run_process_mesugaki_weekly.bat) | メスガキ系統の直近発売 API フル更新 | 週次 |
 | [`run_process.bat`](run_process.bat) | 加工フェーズ全本を直列 | 互換用 |
 | [`run_all.bat`](run_all.bat) | 収集 → 加工（直列） | — |
 | [`run_x_dmm_collector.bat`](run_x_dmm_collector.bat) | `run_all.bat` と同じ | 後方互換エイリアス |
@@ -214,7 +214,7 @@ python run.py --phase all --continue-on-error
 #### run_process_main_weekly.bat / run_process_mesugaki_weekly.bat
 
 - **コマンド**: `run.py --phase process_{main|mesugaki}_weekly --continue-on-error`
-- **対象**: `update_items` / `update_mesugaki` の `--mode weekly`（全件フル更新: 価格・campaign 等）
+- **対象**: `update_items` / `update_mesugaki` の `--mode weekly`（発売日 recent_days 以内のフル更新: 価格・campaign 等。全件は `--mode all`）
 - **ロック**: 日次の同系統と共有（同時実行しない）
 - **用途**: 週次のカタログ遅延更新
 

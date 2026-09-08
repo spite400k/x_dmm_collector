@@ -1,7 +1,7 @@
 @echo off
 REM ================================================
 REM process: main weekly catalog refresh
-REM update_items --mode weekly (full catalog: price/campaign/etc.)
+REM update_items --mode weekly (recent release_date: price/campaign/etc.)
 REM ================================================
 SET WORK_DIR=C:\Users\kazuk\python\x_dmm_collector
 SET PYTHON_EXE=C:\Users\kazuk\python\x_dmm_collector\venv\Scripts\python.exe

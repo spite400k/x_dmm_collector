@@ -137,7 +137,8 @@ def should_update_item(
     """mode=daily / weekly / all。content_id 指定時は他条件を無視する。
 
     daily: 直近発売のみ（レビュー更新向け）
-    weekly / all: 全件（価格・campaign 等のフル更新向け）
+    weekly: 直近発売のみ（価格・campaign 等のフル更新向け）
+    all: 全件（価格・campaign 等のフル更新向け）
     """
     if content_ids:
         return row.get("content_id") in set(content_ids)
@@ -145,7 +146,7 @@ def should_update_item(
     if not retry_skipped and is_api_skip_active(row.get("skip_until"), now=clock):
         return False
     normalized = (mode or "daily").strip().lower()
-    if normalized in ("all", "weekly"):
+    if normalized == "all":
         return True
     return in_daily_window(row, today=today, recent_days=recent_days)
 
@@ -239,14 +240,15 @@ def build_update_mode_parser(description: str) -> argparse.ArgumentParser:
         default="daily",
         help=(
             "daily: 直近発売・レビューのみ / "
-            "weekly|all: 全件フル更新（価格・campaign 等）"
+            "weekly: 直近発売・フル更新（価格・campaign 等） / "
+            "all: 全件フル更新"
         ),
     )
     parser.add_argument(
         "--recent-days",
         type=int,
         default=DEFAULT_RECENT_DAYS,
-        help="毎日対象とする発売日の日数（デフォルト 60）",
+        help="daily/weekly の対象とする発売日の日数（デフォルト 60）",
     )
     parser.add_argument(
         "--content-id",

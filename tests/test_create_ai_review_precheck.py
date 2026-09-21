@@ -562,19 +562,162 @@ class TestCreateAiReviewCli:
             saved_summary_text="あらすじ",
             saved_review_count=3,
             has_score=False,
+            saved_review_digest="要約あり",
         )
         assert create_ai_review.needs_ai_review_refresh(
             row3,
             saved_summary_text="あらすじ",
             saved_review_count=1,
             has_score=True,
+            saved_review_digest="要約あり",
         )
         assert not create_ai_review.needs_ai_review_refresh(
             row3,
             saved_summary_text="あらすじ",
             saved_review_count=3,
             has_score=True,
+            saved_review_digest="要約あり",
         )
+        assert create_ai_review.needs_ai_review_refresh(
+            row3,
+            saved_summary_text="あらすじ",
+            saved_review_count=3,
+            has_score=True,
+            saved_review_digest="",
+        )
+        assert create_ai_review.needs_ai_review_refresh(
+            row3,
+            saved_summary_text="あらすじ",
+            saved_review_count=3,
+            has_score=True,
+            saved_review_digest=None,
+        )
+
+    def test_review_digest_nonempty(self, create_ai_review):
+        assert create_ai_review.review_digest_nonempty("要約")
+        assert not create_ai_review.review_digest_nonempty("")
+        assert not create_ai_review.review_digest_nonempty("  ")
+        assert not create_ai_review.review_digest_nonempty(None)
+
+    def test_parse_args_empty_digest(self, create_ai_review):
+        args = create_ai_review.parse_args(
+            [
+                "--regenerate-empty-digest",
+                "--service",
+                "ebook",
+                "--floor",
+                "photo",
+                "--limit",
+                "5",
+            ]
+        )
+        assert args.regenerate_empty_digest is True
+        assert args.service == "ebook"
+        assert args.floor == "photo"
+        assert args.limit == 5
+
+    def test_main_dry_run_empty_digest(self, create_ai_review, capsys):
+        create_ai_review.fetch_empty_digest_items = MagicMock(
+            return_value=[{"content_id": "b_123"}]
+        )
+        create_ai_review.main(
+            ["--regenerate-empty-digest", "--service", "ebook", "--floor", "photo", "--dry-run"]
+        )
+        assert "b_123" in capsys.readouterr().out
+        create_ai_review.fetch_empty_digest_items.assert_called_once_with(
+            limit=None, service="ebook", floor="photo"
+        )
+
+    def test_fetch_empty_digest_items(self, create_ai_review):
+        table = MagicMock()
+        table.select.return_value = table
+        table.gt.return_value = table
+        table.eq.return_value = table
+        table.order.return_value = table
+        table.range.return_value = table
+        table.in_.return_value = table
+        table.execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "with_digest",
+                        "item_url": "https://a",
+                        "service": "ebook",
+                        "floor": "photo",
+                        "review_count": 10,
+                    },
+                    {
+                        "content_id": "empty_digest",
+                        "item_url": "https://b",
+                        "service": "ebook",
+                        "floor": "photo",
+                        "review_count": 5,
+                    },
+                ]
+            ),
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "with_digest",
+                        "summary_text": "あらすじ",
+                        "review_count": 10,
+                        "review_digest": "要約本文",
+                    },
+                    {
+                        "content_id": "empty_digest",
+                        "summary_text": "あらすじ",
+                        "review_count": 5,
+                        "review_digest": "",
+                    },
+                ]
+            ),
+        ]
+        with patch.object(create_ai_review.supabase, "table", return_value=table):
+            rows = create_ai_review.fetch_empty_digest_items(
+                service="ebook", floor="photo"
+            )
+        assert [r["content_id"] for r in rows] == ["empty_digest"]
+
+    def test_process_content_regenerates_when_digest_empty(
+        self, create_ai_review
+    ):
+        driver = MagicMock()
+        create_ai_review.get_saved_summary = MagicMock(return_value="既存あらすじ")
+        create_ai_review.get_saved_review_digest = MagicMock(return_value=None)
+        create_ai_review.has_score_history = MagicMock(return_value=True)
+        create_ai_review.scrape_review_comments = MagicMock(
+            return_value=[{"text": "良い", "rating": 5}]
+        )
+        create_ai_review.has_no_review_changed = MagicMock(return_value=True)
+        create_ai_review.save_raw_reviews = MagicMock()
+        create_ai_review.generate_review_insights = MagicMock(
+            return_value={
+                "review_digest": "新しい要約",
+                "content_score": 1,
+                "emotion_score": 1,
+                "attraction_score": 1,
+                "genre_axis1_score": 1,
+                "genre_axis2_score": 1,
+                "reader_types": [],
+                "warning_points": [],
+            }
+        )
+        create_ai_review.save_ai_summary = MagicMock()
+        create_ai_review.save_weekly_score = MagicMock()
+        create_ai_review.build_product_context_from_row = MagicMock(return_value={})
+        create_ai_review.enrich_ai_summary_for_ab = MagicMock()
+
+        create_ai_review.process_content(
+            "cid1",
+            "https://example.com",
+            "ebook",
+            "photo",
+            driver,
+            db_review_count=3,
+        )
+
+        create_ai_review.generate_review_insights.assert_called_once()
+        create_ai_review.save_ai_summary.assert_called_once()
 
     def test_filter_ai_review_candidates_empty(self, create_ai_review):
         assert create_ai_review.filter_ai_review_candidates([]) == []

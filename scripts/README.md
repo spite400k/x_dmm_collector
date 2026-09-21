@@ -39,7 +39,7 @@
 | スクリプト | 説明 | DB 接続 | 実行 |
 |-----------|------|---------|------|
 | [`update_items.py`](process/update_items.py) | 作品情報・AI テキスト更新 | 通常 | `python scripts/process/update_items.py` |
-| [`create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成 | 通常 | `python scripts/process/create_ai_review.py` |
+| [`create_ai_review.py`](process/create_ai_review.py) | 作品 AI レビュー生成 | 通常 | 下記 |
 | [`create_weekly_rankings.py`](process/create_weekly_rankings.py) | 週次ランキング生成 | 通常（Postgres 直結） | `python scripts/process/create_weekly_rankings.py` |
 | [`create_weekly_rankings_mesugaki.py`](process/create_weekly_rankings_mesugaki.py) | メスガキ週次ランキング | メスガキ（Postgres 直結） | `python scripts/process/create_weekly_rankings_mesugaki.py` |
 
@@ -52,6 +52,18 @@
 | [`enrich_actress.py`](process/enrich_actress.py) | 女優情報 enrich（DMM API 等） | 通常 | `python scripts/process/enrich_actress.py` |
 | [`create_actress_review.py`](process/create_actress_review.py) | 女優 AI レビュー生成 | 通常 | 下記 |
 | [`create_ai_review_mesugaki.py`](process/create_ai_review_mesugaki.py) | メスガキ AI レビュー | メスガキ | 下記 |
+
+#### create_ai_review.py
+
+```bash
+python scripts/process/create_ai_review.py
+python scripts/process/create_ai_review.py --content-id CID
+python scripts/process/create_ai_review.py --regenerate-empty-summary
+python scripts/process/create_ai_review.py --regenerate-age-gate
+# review_digest が空／未作成の作品を埋める（例: ebook/photo）
+python scripts/process/create_ai_review.py --regenerate-empty-digest --service ebook --floor photo
+python scripts/process/create_ai_review.py --regenerate-empty-digest --service ebook --floor photo --dry-run --limit 30
+```
 
 #### create_actress_review.py
 

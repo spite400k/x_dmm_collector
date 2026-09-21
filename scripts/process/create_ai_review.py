@@ -106,16 +106,23 @@ def has_score_history(content_id: str) -> bool:
     return bool(response.data)
 
 
+def review_digest_nonempty(value) -> bool:
+    """review_digest が空白以外の文字列か。"""
+    return bool(str(value or "").strip())
+
+
 def needs_ai_review_refresh(
     row: dict,
     *,
     saved_summary_text,
     saved_review_count,
     has_score: bool,
+    saved_review_digest=None,
 ) -> bool:
     """DB 上で再処理が必要そうな作品か。
 
     - 有効な AI あらすじが無い → 初回生成
+    - review_digest が空 → 要埋め
     - review_count == 0 かつあらすじ済 → 変更見込みなし
     - レビューありで score_history 未作成 → 要処理
     - items.review_count が summaries.review_count より大きい → レビュー増の可能性
@@ -124,6 +131,8 @@ def needs_ai_review_refresh(
     db_count = normalize_review_count(row.get("review_count"))
     saved_count = normalize_review_count(saved_review_count)
     if not saved:
+        return True
+    if db_count > 0 and not review_digest_nonempty(saved_review_digest):
         return True
     if db_count == 0:
         return False
@@ -138,12 +147,12 @@ def _chunked(values: list[str], size: int = 50):
 
 
 def fetch_summary_states(content_ids: list[str]) -> dict[str, dict]:
-    """content_id → {summary_text, review_count}。"""
+    """content_id → {summary_text, review_count, review_digest}。"""
     states: dict[str, dict] = {}
     for chunk in _chunked(content_ids):
         response = (
             supabase.table("dmm_ai_review_summaries")
-            .select("content_id, summary_text, review_count")
+            .select("content_id, summary_text, review_count, review_digest")
             .in_("content_id", chunk)
             .execute()
         )
@@ -182,10 +191,11 @@ def filter_ai_review_candidates(items: list[dict]) -> list[dict]:
             saved_summary_text=meta.get("summary_text"),
             saved_review_count=meta.get("review_count"),
             has_score=cid in scored,
+            saved_review_digest=meta.get("review_digest"),
         ):
             kept.append(row)
     logging.info(
-        "AIレビュー候補を絞り込み: %s → %s 件（未生成 / レビュー増 / スコア未作成）",
+        "AIレビュー候補を絞り込み: %s → %s 件（未生成 / digest空 / レビュー増 / スコア未作成）",
         len(items),
         len(kept),
     )
@@ -204,6 +214,21 @@ def get_saved_summary(content_id):
         return result.data[0].get("summary_text")
 
     return None
+
+
+def get_saved_review_digest(content_id: str) -> str | None:
+    """保存済み review_digest を返す（無ければ None）。"""
+    result = (
+        supabase.table("dmm_ai_review_summaries")
+        .select("review_digest")
+        .eq("content_id", content_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        return None
+    digest = result.data[0].get("review_digest")
+    return str(digest).strip() if review_digest_nonempty(digest) else None
 
 # レビュー変更チェック
 def has_no_review_changed(content_id: str, new_reviews: list):
@@ -304,6 +329,7 @@ def process_content(
 ):
     # ①' DB事前判定（Chrome 操作前）
     saved_summary = usable_saved_summary(get_saved_summary(content_id))
+    saved_digest = get_saved_review_digest(content_id)
     if should_skip_selenium_precheck(
         db_review_count,
         has_saved_summary=bool(saved_summary),
@@ -327,7 +353,13 @@ def process_content(
             # return  # レビューなしでもあらすじとAI分析は行うため、ここではreturnしない
 
         # ② 変更チェック（誤あらすじは未保存扱いなので再生成する）
-        if len(reviews) > 0 and saved_summary and has_no_review_changed(content_id, reviews):
+        # review_digest が空のときはレビュー増減がなくても AI 再生成する
+        if (
+            len(reviews) > 0
+            and saved_summary
+            and saved_digest
+            and has_no_review_changed(content_id, reviews)
+        ):
             logging.info("レビュー変更なし → スキップ")
             return
 
@@ -660,6 +692,52 @@ def fetch_empty_summary_items(limit: int | None = None) -> list[dict]:
     return fetch_items_by_content_ids(content_ids)
 
 
+def fetch_empty_digest_items(
+    limit: int | None = None,
+    *,
+    service: str | None = None,
+    floor: str | None = None,
+) -> list[dict]:
+    """review_digest が空／未作成で、レビューがある作品を取得する。
+
+    summaries 行が無い作品も対象にする。service / floor 指定時はそのフロアに限定。
+    """
+    page = 1000
+    start = 0
+    candidates: list[dict] = []
+    while True:
+        query = (
+            supabase.table("trn_dmm_items")
+            .select(ITEM_SELECT)
+            .gt("review_count", 0)
+            .order("review_count", desc=True)
+        )
+        if service:
+            query = query.eq("service", service)
+        if floor:
+            query = query.eq("floor", floor)
+        response = query.range(start, start + page - 1).execute()
+        data = response.data or []
+        if not data:
+            break
+        content_ids = [row["content_id"] for row in data]
+        states = fetch_summary_states(content_ids)
+        for row in data:
+            cid = row["content_id"]
+            meta = states.get(cid) or {}
+            if not review_digest_nonempty(meta.get("review_digest")):
+                candidates.append(row)
+                if limit is not None and len(candidates) >= limit:
+                    logging.info("空 digest 件数: %s（limit 到達）", len(candidates))
+                    return candidates
+        start += page
+        if len(data) < page:
+            break
+
+    logging.info("空 digest 件数: %s", len(candidates))
+    return candidates
+
+
 def fetch_item_by_content_id(content_id: str) -> list[dict]:
     response = (
         supabase.table("trn_dmm_items")
@@ -769,6 +847,13 @@ def parse_args(argv=None):
         action="store_true",
         help="あらすじが空のまま保存された作品だけ再生成",
     )
+    parser.add_argument(
+        "--regenerate-empty-digest",
+        action="store_true",
+        help="review_digest が空／未作成の作品だけ再生成（レビューあり）",
+    )
+    parser.add_argument("--service", help="対象 service（例: ebook）。empty-digest と併用可")
+    parser.add_argument("--floor", help="対象 floor（例: photo）。empty-digest と併用可")
     parser.add_argument("--dry-run", action="store_true", help="対象 content_id を表示して終了")
     parser.add_argument("--limit", type=int, default=None, help="処理件数の上限")
     return parser.parse_args(argv)
@@ -784,6 +869,12 @@ def main(argv=None):
         all_items = fetch_age_gate_items(limit=args.limit)
     elif args.regenerate_empty_summary:
         all_items = fetch_empty_summary_items(limit=args.limit)
+    elif args.regenerate_empty_digest:
+        all_items = fetch_empty_digest_items(
+            limit=args.limit,
+            service=args.service,
+            floor=args.floor,
+        )
     else:
         all_items = fetch_recent_items()
         if args.limit is not None:

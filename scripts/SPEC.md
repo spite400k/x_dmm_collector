@@ -97,7 +97,7 @@
 | **WRITE** | `trn_dmm_score_history` — UPSERT（`content_id`, `snapshot_date`） |
 | **外部 API** | OpenAI、DMM 商品ページ（レビュー・あらすじ、Selenium） |
 
-**処理概要**: 直近作品のうち **未生成 / レビュー件数増 / score_history 未作成** だけを候補にする。`review_count == 0` かつあらすじ保存済は Selenium を起動せずスキップ。それ以外はレビュー取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。
+**処理概要**: 直近作品のうち **未生成 / review_digest 空 / レビュー件数増 / score_history 未作成** だけを候補にする。`review_count == 0` かつあらすじ保存済は Selenium を起動せずスキップ。それ以外はレビュー取得 → raw 保存 → AI 5 軸分析 → サマリー保存 → 日次スコア保存。`--regenerate-empty-digest` で digest 未埋めの作品を service/floor 指定で一括埋めできる。
 
 **`dmm_ai_review_summaries` 更新カラム**: `review_digest`, `content_score`, `emotion_score`, `attraction_score`, `genre_axis1_score`, `genre_axis2_score`, `reader_types`, `warning_points`, `review_count`, `avg_rating`, `summary_text`, `ai_model`, `prompt_version`, `updated_at`
 

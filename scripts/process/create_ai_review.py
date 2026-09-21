@@ -14,7 +14,10 @@ from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
 from openai_api.config import OPENAI_MODEL
-from openai_api.content_generator import scrape_product_details
+from openai_api.content_generator import (
+    generate_content_from_reviews,
+    scrape_product_details,
+)
 from utils.content_generator_review import (
     AGE_GATE_SYNOPSIS_MARKERS,
     create_driver,
@@ -311,6 +314,98 @@ def save_ai_summary(summary: dict):
     logging.info(f"✅ AIレビュー保存完了: {summary['content_id']}")
 
 
+def should_regenerate_auto_content(reviews) -> bool:
+    """購入者コメントがあるときだけ auto_* を後追い再生成する。"""
+    if not reviews:
+        return False
+    return any((r.get("text") or "").strip() for r in reviews)
+
+
+def _normalize_genre_list(genres) -> list:
+    if genres is None:
+        return []
+    if isinstance(genres, list):
+        out = []
+        for g in genres:
+            if isinstance(g, dict) and g.get("name"):
+                out.append(g["name"])
+            elif g is not None and str(g).strip():
+                out.append(str(g).strip())
+        return out
+    if isinstance(genres, str) and genres.strip():
+        return [genres.strip()]
+    return []
+
+
+def _actress_names_from_row(row: dict | None) -> list[str]:
+    if not row:
+        return []
+    actress = row.get("actress")
+    if isinstance(actress, list):
+        names = []
+        for entry in actress:
+            if isinstance(entry, dict) and entry.get("name"):
+                names.append(entry["name"])
+            elif isinstance(entry, str) and entry.strip():
+                names.append(entry.strip())
+        return names
+    if isinstance(actress, str) and actress.strip():
+        return [actress.strip()]
+    return []
+
+
+def update_item_auto_content(content_id: str, auto_content: dict) -> bool:
+    """trn_dmm_items の auto_* を上書きする。空結果はスキップ。"""
+    payload = {}
+    for key in ("auto_comment", "auto_summary", "auto_point"):
+        value = (auto_content.get(key) or "").strip()
+        if value:
+            payload[key] = auto_content.get(key)
+    if not payload:
+        logging.info("⏭ auto_* 再生成結果が空のため items 更新スキップ: %s", content_id)
+        return False
+
+    payload["updated_at"] = datetime.utcnow().isoformat()
+    supabase.table("trn_dmm_items").update(payload).eq(
+        "content_id", content_id
+    ).execute()
+    logging.info("✅ auto_* を購入者コメントで更新: %s keys=%s", content_id, list(payload))
+    return True
+
+
+def enrich_item_auto_content_from_reviews(
+    content_id: str,
+    reviews,
+    html_summary: str,
+    *,
+    title=None,
+    genres=None,
+    product_row: dict | None = None,
+    review_score=None,
+    review_count=None,
+) -> bool:
+    """ゲート通過時のみ generate_content_from_reviews → items UPDATE。"""
+    if not should_regenerate_auto_content(reviews):
+        logging.info("⏭ 購入者コメントなし → auto_* 再生成スキップ: %s", content_id)
+        return False
+
+    row = product_row or {}
+    auto_content = generate_content_from_reviews(
+        title=title or row.get("title") or "",
+        genres=_normalize_genre_list(genres if genres is not None else row.get("genres")),
+        category_name=row.get("category_name") or "",
+        maker=row.get("maker") or "",
+        series=row.get("series") or "",
+        release_date=str(row.get("release_date") or ""),
+        actress_names=_actress_names_from_row(row),
+        html_summary=html_summary or "",
+        reviews=reviews,
+        review_score=review_score,
+        review_count=review_count if review_count is not None else len(reviews),
+    )
+    return update_item_auto_content(content_id, auto_content)
+
+
 # =========================
 # 🎯 メイン処理
 # =========================
@@ -455,6 +550,20 @@ def process_content(
         enrich_ai_summary_for_ab(summary, insight, content_id)
         # ⑦ AI保存
         save_ai_summary(summary)
+
+        # ⑦' 購入者コメントで auto_* を後追い再生成（収集時の暫定文を上書き）
+        if should_regenerate_auto_content(reviews):
+            logging.info("🤖 購入者コメントで auto_* 再生成中...")
+            enrich_item_auto_content_from_reviews(
+                content_id,
+                reviews,
+                html_summary,
+                title=title,
+                genres=genres,
+                product_row=product_row,
+                review_score=avg_rating,
+                review_count=len(reviews),
+            )
 
         # ⑧ 週次保存
         logging.info("💾 週次スコア保存中...")

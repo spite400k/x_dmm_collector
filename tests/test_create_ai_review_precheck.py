@@ -706,6 +706,9 @@ class TestCreateAiReviewCli:
         create_ai_review.save_weekly_score = MagicMock()
         create_ai_review.build_product_context_from_row = MagicMock(return_value={})
         create_ai_review.enrich_ai_summary_for_ab = MagicMock()
+        create_ai_review.enrich_item_auto_content_from_reviews = MagicMock(
+            return_value=True
+        )
 
         create_ai_review.process_content(
             "cid1",
@@ -718,6 +721,7 @@ class TestCreateAiReviewCli:
 
         create_ai_review.generate_review_insights.assert_called_once()
         create_ai_review.save_ai_summary.assert_called_once()
+        create_ai_review.enrich_item_auto_content_from_reviews.assert_called_once()
 
     def test_filter_ai_review_candidates_empty(self, create_ai_review):
         assert create_ai_review.filter_ai_review_candidates([]) == []
@@ -727,3 +731,164 @@ class TestCreateAiReviewCli:
         with pytest.raises(SystemExit) as exc:
             create_ai_review.main(["--content-id", "missing"])
         assert exc.value.code == 0
+
+
+class TestShouldRegenerateAutoContent:
+    def test_false_when_empty(self, create_ai_review):
+        assert create_ai_review.should_regenerate_auto_content(None) is False
+        assert create_ai_review.should_regenerate_auto_content([]) is False
+        assert (
+            create_ai_review.should_regenerate_auto_content(
+                [{"text": "  ", "rating": 5}]
+            )
+            is False
+        )
+
+    def test_true_when_text_exists(self, create_ai_review):
+        assert (
+            create_ai_review.should_regenerate_auto_content(
+                [{"text": "良い", "rating": 5}]
+            )
+            is True
+        )
+
+
+class TestEnrichItemAutoContentFromReviews:
+    def test_skips_when_no_reviews(self, create_ai_review):
+        create_ai_review.generate_content_from_reviews = MagicMock()
+        create_ai_review.update_item_auto_content = MagicMock()
+
+        ok = create_ai_review.enrich_item_auto_content_from_reviews(
+            "cid",
+            [],
+            "あらすじ",
+            title="t",
+        )
+
+        assert ok is False
+        create_ai_review.generate_content_from_reviews.assert_not_called()
+        create_ai_review.update_item_auto_content.assert_not_called()
+
+    def test_calls_generate_and_update_when_reviews_exist(self, create_ai_review):
+        create_ai_review.generate_content_from_reviews = MagicMock(
+            return_value={
+                "auto_comment": "一言",
+                "auto_summary": "要約",
+                "auto_point": "・点",
+            }
+        )
+        create_ai_review.update_item_auto_content = MagicMock(return_value=True)
+
+        reviews = [{"text": "演技が良かった", "rating": 5}]
+        ok = create_ai_review.enrich_item_auto_content_from_reviews(
+            "cid",
+            reviews,
+            "あらすじ本文",
+            title="タイトル",
+            genres=["ジャンルA"],
+            product_row={"maker": "メーカー", "actress": [{"name": "女優A"}]},
+            review_score=5.0,
+            review_count=1,
+        )
+
+        assert ok is True
+        create_ai_review.generate_content_from_reviews.assert_called_once()
+        kwargs = create_ai_review.generate_content_from_reviews.call_args.kwargs
+        assert kwargs["title"] == "タイトル"
+        assert kwargs["genres"] == ["ジャンルA"]
+        assert kwargs["actress_names"] == ["女優A"]
+        assert kwargs["reviews"] == reviews
+        create_ai_review.update_item_auto_content.assert_called_once_with(
+            "cid",
+            {
+                "auto_comment": "一言",
+                "auto_summary": "要約",
+                "auto_point": "・点",
+            },
+        )
+
+    def test_process_content_skips_enrich_when_no_reviews(self, create_ai_review):
+        driver = MagicMock()
+        create_ai_review.get_saved_summary = MagicMock(return_value="既存あらすじ")
+        create_ai_review.get_saved_review_digest = MagicMock(return_value=None)
+        create_ai_review.has_score_history = MagicMock(return_value=True)
+        create_ai_review.scrape_review_comments = MagicMock(return_value=[])
+        create_ai_review.save_raw_reviews = MagicMock()
+        create_ai_review.generate_review_insights = MagicMock(
+            return_value={
+                "review_digest": "要約",
+                "content_score": 1,
+                "emotion_score": 1,
+                "attraction_score": 1,
+                "genre_axis1_score": 1,
+                "genre_axis2_score": 1,
+                "reader_types": [],
+                "warning_points": [],
+            }
+        )
+        create_ai_review.save_ai_summary = MagicMock()
+        create_ai_review.save_weekly_score = MagicMock()
+        create_ai_review.build_product_context_from_row = MagicMock(return_value={})
+        create_ai_review.enrich_ai_summary_for_ab = MagicMock()
+        enrich = MagicMock()
+        create_ai_review.enrich_item_auto_content_from_reviews = enrich
+
+        create_ai_review.process_content(
+            "cid0",
+            "https://example.com",
+            "digital",
+            "videoa",
+            driver,
+            db_review_count=0,
+        )
+
+        # レビュー0件でもあらすじ保存済なら早期 return（insight 前）
+        # ここでは saved_summary あり・reviews=[] → 「レビュー０件、かつあらすじ保存済なのでスキップ」
+        enrich.assert_not_called()
+        create_ai_review.generate_review_insights.assert_not_called()
+
+    def test_process_content_calls_enrich_when_reviews_exist(self, create_ai_review):
+        driver = MagicMock()
+        reviews = [{"text": "良い", "rating": 5}]
+        create_ai_review.get_saved_summary = MagicMock(return_value="既存あらすじ")
+        create_ai_review.get_saved_review_digest = MagicMock(return_value=None)
+        create_ai_review.has_score_history = MagicMock(return_value=True)
+        create_ai_review.scrape_review_comments = MagicMock(return_value=reviews)
+        create_ai_review.has_no_review_changed = MagicMock(return_value=True)
+        create_ai_review.save_raw_reviews = MagicMock()
+        create_ai_review.generate_review_insights = MagicMock(
+            return_value={
+                "review_digest": "新しい要約",
+                "content_score": 1,
+                "emotion_score": 1,
+                "attraction_score": 1,
+                "genre_axis1_score": 1,
+                "genre_axis2_score": 1,
+                "reader_types": [],
+                "warning_points": [],
+            }
+        )
+        create_ai_review.save_ai_summary = MagicMock()
+        create_ai_review.save_weekly_score = MagicMock()
+        create_ai_review.build_product_context_from_row = MagicMock(return_value={})
+        create_ai_review.enrich_ai_summary_for_ab = MagicMock()
+        enrich = MagicMock(return_value=True)
+        create_ai_review.enrich_item_auto_content_from_reviews = enrich
+
+        create_ai_review.process_content(
+            "cid1",
+            "https://example.com",
+            "ebook",
+            "comic",
+            driver,
+            db_review_count=3,
+            title="タイトル",
+            genres=["g"],
+            product_row={"title": "タイトル", "genres": ["g"]},
+        )
+
+        enrich.assert_called_once()
+        args, kwargs = enrich.call_args
+        assert args[0] == "cid1"
+        assert args[1] == reviews
+        assert args[2] == "既存あらすじ"

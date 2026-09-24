@@ -8,6 +8,7 @@ import requests
 from selenium.webdriver.common.by import By
 
 from openai_api.config import OPENAI_MODEL
+from openai_api.usage import log_openai_usage
 from utils.chromedriver import create_chrome_driver, quit_chrome_driver
 
 # 環境変数読み込み
@@ -195,12 +196,18 @@ def _parse_auto_content_response(content: str) -> dict:
     return data
 
 
-def _call_auto_content_openai(prompt: str) -> dict:
+def _call_auto_content_openai(
+    prompt: str,
+    *,
+    purpose: str,
+    content_id: str | None = None,
+) -> dict:
     try:
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
         )
+        log_openai_usage(response, purpose=purpose, content_id=content_id)
         return _parse_auto_content_response(response.choices[0].message.content)
     except Exception as e:
         logging.error("[OpenAI ERROR] %s", str(e))
@@ -305,7 +312,14 @@ def generate_content(item: dict) -> dict:
 ```
 上記の形式に従い、JSONとしてのみ出力してください。
 """
-    return _call_auto_content_openai(prompt)
+    content_id = item.get("content_id")
+    if not isinstance(content_id, str) or not content_id.strip():
+        content_id = None
+    return _call_auto_content_openai(
+        prompt,
+        purpose="auto_content",
+        content_id=content_id,
+    )
 
 
 def generate_content_from_reviews(
@@ -322,6 +336,7 @@ def generate_content_from_reviews(
     reviews: list | None = None,
     review_score=None,
     review_count=None,
+    content_id: str | None = None,
 ) -> dict:
     """購入者コメント抜粋を根拠に auto_* を再生成する（収集ジョブでは使わない）。"""
     excerpts = select_review_excerpts(reviews)
@@ -381,4 +396,8 @@ def generate_content_from_reviews(
 ```
 上記の形式に従い、JSONとしてのみ出力してください。
 """
-    return _call_auto_content_openai(prompt)
+    return _call_auto_content_openai(
+        prompt,
+        purpose="auto_content_from_reviews",
+        content_id=content_id,
+    )

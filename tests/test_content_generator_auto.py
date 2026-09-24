@@ -73,11 +73,15 @@ class TestGenerateContentFromReviews:
             '{"auto_comment":"余韻が残る。","auto_summary":"感想本文",'
             '"auto_point":"・ポイント"}'
         )
-        with patch.object(content_generator, "client", mock_client):
+        with (
+            patch.object(content_generator, "client", mock_client),
+            patch.object(content_generator, "log_openai_usage") as usage_mock,
+        ):
             result = content_generator.generate_content_from_reviews(
                 title="テスト",
                 html_summary="あらすじです",
                 reviews=[{"text": "演技が良かった", "rating": 5}],
+                content_id="cid-1",
             )
         assert result["auto_comment"] == "余韻が残る。"
         assert result["auto_summary"] == "感想本文"
@@ -87,3 +91,6 @@ class TestGenerateContentFromReviews:
         ]
         assert "演技が良かった" in prompt
         assert "購入者コメント" in prompt
+        usage_mock.assert_called_once()
+        assert usage_mock.call_args.kwargs["purpose"] == "auto_content_from_reviews"
+        assert usage_mock.call_args.kwargs["content_id"] == "cid-1"

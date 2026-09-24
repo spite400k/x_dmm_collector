@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -720,17 +721,24 @@ class TestCreateAiReviewCli:
         )
 
         create_ai_review.generate_review_insights.assert_called_once()
+        assert (
+            create_ai_review.generate_review_insights.call_args.kwargs["content_id"]
+            == "cid1"
+        )
         create_ai_review.save_ai_summary.assert_called_once()
         create_ai_review.enrich_item_auto_content_from_reviews.assert_called_once()
 
     def test_filter_ai_review_candidates_empty(self, create_ai_review):
         assert create_ai_review.filter_ai_review_candidates([]) == []
 
-    def test_main_content_id_missing_exits(self, create_ai_review):
+    def test_main_content_id_missing_exits(self, create_ai_review, caplog):
+        caplog.set_level(logging.INFO)
         create_ai_review.fetch_item_by_content_id = MagicMock(return_value=[])
         with pytest.raises(SystemExit) as exc:
             create_ai_review.main(["--content-id", "missing"])
         assert exc.value.code == 0
+        assert "OpenAI configured model=" in caplog.text
+        assert "default=" in caplog.text
 
 
 class TestShouldRegenerateAutoContent:
@@ -798,6 +806,7 @@ class TestEnrichItemAutoContentFromReviews:
         assert kwargs["genres"] == ["ジャンルA"]
         assert kwargs["actress_names"] == ["女優A"]
         assert kwargs["reviews"] == reviews
+        assert kwargs["content_id"] == "cid"
         create_ai_review.update_item_auto_content.assert_called_once_with(
             "cid",
             {

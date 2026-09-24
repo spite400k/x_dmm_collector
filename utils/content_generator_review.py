@@ -19,6 +19,7 @@ from openai import OpenAI
 from bs4 import BeautifulSoup
 
 from openai_api.config import OPENAI_MODEL
+from openai_api.usage import log_openai_usage
 from openai_api.content_generator import extract_synopsis_from_soup
 from utils.copy_framework_ab import (
     PORTAL_COPY_PROMPT_SECTION,
@@ -682,6 +683,7 @@ def generate_review_insights(
     genre_type: str,
     *,
     product_context: dict | None = None,
+    content_id: str | None = None,
 ) -> Dict:
 
     config = getGenreConfig(genre_type)
@@ -753,6 +755,11 @@ def generate_review_insights(
             ],
             response_format={"type": "json_object"},
             max_completion_tokens=2000,
+        )
+        log_openai_usage(
+            response,
+            purpose="review_insights",
+            content_id=content_id,
         )
 
         import json

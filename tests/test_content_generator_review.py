@@ -1,7 +1,8 @@
 import importlib
 import json
+import logging
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -56,7 +57,7 @@ def review_module():
     return load_content_generator_review_module()
 
 
-def test_generate_review_insights_uses_structured_prompt(review_module):
+def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
     ai_payload = {
         "review_digest": "要約",
         "portal_copy_beaf": "BEAFコピー",
@@ -75,9 +76,17 @@ def test_generate_review_insights_uses_structured_prompt(review_module):
     choice.message = message
     response = MagicMock()
     response.choices = [choice]
+    response.model = "gpt-5.6-luna"
+    response.usage = SimpleNamespace(
+        prompt_tokens=1200,
+        completion_tokens=800,
+        total_tokens=2000,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=100),
+    )
 
     reviews = [{"rating": 5, "text": "とても良い作品でした"}]
 
+    caplog.set_level(logging.INFO)
     with patch.object(review_module.client.chat.completions, "create", return_value=response) as create_mock:
         result = review_module.generate_review_insights(
             reviews=reviews,
@@ -91,6 +100,7 @@ def test_generate_review_insights_uses_structured_prompt(review_module):
                 "price": "¥1000",
                 "ranking_label": "該当なし",
             },
+            content_id="cid-1",
         )
 
         call_kwargs = create_mock.call_args.kwargs
@@ -111,6 +121,11 @@ def test_generate_review_insights_uses_structured_prompt(review_module):
         assert result["portal_copy_beaf"] == "BEAFコピー"
         assert result["portal_copy_aidma"] == "AIDMAコピー"
         assert "total_score" in result
+        assert (
+            "OpenAI usage purpose=review_insights content_id=cid-1 "
+            "model=gpt-5.6-luna prompt_tokens=1200 completion_tokens=800 "
+            "total_tokens=2000 cached_tokens=100"
+        ) in caplog.text
 
 
 def test_handle_safe_mode_skips_when_not_age_check(review_module):

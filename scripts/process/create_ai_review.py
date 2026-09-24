@@ -14,6 +14,7 @@ from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
 from openai_api.config import OPENAI_MODEL
+from openai_api.usage import log_configured_model
 from openai_api.content_generator import (
     generate_content_from_reviews,
     scrape_product_details,
@@ -402,6 +403,7 @@ def enrich_item_auto_content_from_reviews(
         reviews=reviews,
         review_score=review_score,
         review_count=review_count if review_count is not None else len(reviews),
+        content_id=content_id,
     )
     return update_item_auto_content(content_id, auto_content)
 
@@ -519,6 +521,7 @@ def process_content(
             review_count=len(reviews),
             genre_type=f"{service_code}_{floor_code}",
             product_context=product_context,
+            content_id=content_id,
         )
 
         if not insight:
@@ -970,6 +973,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    log_configured_model()
     logging.info("=== trn_dmm_items のAPI更新を開始 ===")
 
     if args.content_id:

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
   - OPENAI_API_KEY: AIレビュー時は必須（--raw-only 時は不要）
-  - OPENAI_MODEL: 任意（未設定時は gpt-5.4-nano）
+  - OPENAI_MODEL: 任意（未設定時は gpt-5.6-luna）
   - DMM_API_ID, DMM_AFFILIATE_ID: 任意（DMM API 利用時）
 
 実行例:
@@ -31,6 +31,7 @@ from openai import OpenAI
 import httpx
 from db.supabase_client_mesugaki import supabase
 from openai_api.config import OPENAI_MODEL
+from openai_api.usage import log_configured_model
 from utils.content_generator_review import (
     AGE_GATE_SYNOPSIS_MARKERS,
     create_driver,
@@ -311,6 +312,7 @@ def process_content(
             review_count=len(reviews),
             genre_type=f"{service_code}_{floor_code}",
             product_context=product_context,
+            content_id=content_id,
         )
 
         if not insight:
@@ -577,6 +579,7 @@ def main():
     if raw_only:
         logging.info("=== [メスガキ] 生レビュー保存のみを開始 ===")
     else:
+        log_configured_model()
         logging.info("=== [メスガキ] trn_dmm_items の AI レビュー更新を開始 ===")
         missing_env = [
             name

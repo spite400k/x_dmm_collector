@@ -84,6 +84,34 @@ class TestBuildUpdatePayload:
         )
 
 
+class TestRegenerateRowSkipSafe:
+    def test_skips_safe_when_flag_true(self, mod):
+        mod.update_items_mod.SKIP_SAFE_GENERATION = True
+        mod.update_items_mod.generate_safe_summary_point = MagicMock()
+        mod.generate_content = MagicMock(
+            return_value={
+                "auto_comment": "一言",
+                "auto_summary": "生あらすじ",
+                "auto_point": "生ポイント",
+            }
+        )
+        row = {
+            "content_id": "cid1",
+            "title": "t",
+            "auto_comment": "",
+            "auto_summary": "",
+            "auto_point": "",
+            "raw_json": {"title": "t"},
+        }
+        payload = mod.regenerate_row(row)
+        assert payload is not None
+        assert payload["auto_summary"] == "生あらすじ"
+        assert payload["auto_point"] == "生ポイント"
+        assert "safe_generated_at" not in payload
+        mod.update_items_mod.generate_safe_summary_point.assert_not_called()
+
+
+
 class TestIsBlank:
     def test_blank(self, mod):
         assert mod.is_blank(None) is True

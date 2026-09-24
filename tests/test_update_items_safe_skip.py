@@ -75,6 +75,7 @@ class TestUpdateDmmItemSafeFlag:
     def test_skips_ai_when_safe_generated_at_set(self, update_items):
         client = MagicMock()
         update_items.client = client
+        update_items.SKIP_SAFE_GENERATION = False
         update_items.upsert_actresses = MagicMock()
         table = MagicMock()
         update_items.supabase = MagicMock()
@@ -98,6 +99,31 @@ class TestUpdateDmmItemSafeFlag:
         assert "safe_generated_at" not in payload
         assert "price" in payload
         assert "campaign" in payload
+
+    def test_skip_safe_generation_flag_never_calls_ai(self, update_items):
+        client = MagicMock()
+        update_items.client = client
+        assert update_items.SKIP_SAFE_GENERATION is True
+        update_items.upsert_actresses = MagicMock()
+        table = MagicMock()
+        update_items.supabase = MagicMock()
+        update_items.supabase.table.return_value = table
+        table.update.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{"content_id": "y"}]
+        )
+
+        update_items.update_dmm_item(
+            "y",
+            self._base_item(),
+            "セックス描写あり",
+            "ポイント",
+            safe_generated_at=None,
+        )
+
+        client.chat.completions.create.assert_not_called()
+        payload = table.update.call_args[0][0]
+        assert "auto_summary" not in payload
+        assert "safe_generated_at" not in payload
 
     def test_reviews_profile_skips_price_campaign_safe_and_actress(self, update_items):
         client = MagicMock()
@@ -128,9 +154,10 @@ class TestUpdateDmmItemSafeFlag:
             "updated_at",
         }
 
-    def test_sets_safe_generated_at_on_ai_success(self, update_items):
+    def test_sets_safe_generated_at_on_ai_success_when_enabled(self, update_items):
         client = MagicMock()
         update_items.client = client
+        update_items.SKIP_SAFE_GENERATION = False
         msg = MagicMock()
         msg.content = "【あらすじ・概要】\n新あらすじ\n【おすすめポイント】\n・新ポイント"
         client.chat.completions.create.return_value = MagicMock(
@@ -157,9 +184,10 @@ class TestUpdateDmmItemSafeFlag:
         assert payload["auto_point"] == "・新ポイント"
         assert payload["safe_generated_at"]
 
-    def test_keeps_summary_on_ai_failure(self, update_items):
+    def test_keeps_summary_on_ai_failure_when_enabled(self, update_items):
         client = MagicMock()
         update_items.client = client
+        update_items.SKIP_SAFE_GENERATION = False
         client.chat.completions.create.side_effect = RuntimeError("fail")
         update_items.upsert_actresses = MagicMock()
         table = MagicMock()
@@ -180,7 +208,6 @@ class TestUpdateDmmItemSafeFlag:
         payload = table.update.call_args[0][0]
         assert "auto_summary" not in payload
         assert "safe_generated_at" not in payload
-
 
 class TestProcessBatchProgress:
     def test_logs_global_index_across_batches(self, update_items, caplog):

@@ -39,6 +39,8 @@ client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
+# True: auto_summary / auto_point の SafeSearch 向け書き換えを行わない
+SKIP_SAFE_GENERATION = True
 ITEM_SELECT = (
     "content_id, auto_summary, auto_point, safe_generated_at, "
     "service, floor, release_date"
@@ -486,7 +488,9 @@ def update_dmm_item(
             }
         )
 
-        if safe_generated_at:
+        if SKIP_SAFE_GENERATION:
+            logging.info("Safe 化スキップ設定のため Safe AI を実行しない: %s", content_id)
+        elif safe_generated_at:
             logging.info("safe_generated_at 済みのため Safe AI をスキップ: %s", content_id)
         else:
             new_summary, new_point, ai_ok = generate_safe_summary_point(

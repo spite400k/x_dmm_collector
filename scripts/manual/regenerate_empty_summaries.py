@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """auto_summary / auto_point が空の行を raw_json から再生成する。
 
-収集時と同じ generate_content → Safe 化の順で埋め、成功時は safe_generated_at を立てる。
+収集時と同じ generate_content で埋める（Safe 化はスキップ設定に従う）。
 既存の auto_comment は空のときだけ上書きする。
 
 例:
@@ -70,9 +70,9 @@ def build_update_payload(
     row: dict[str, Any],
     ai_content: dict[str, Any],
     *,
-    safe_summary: str,
-    safe_point: str,
-    safe_ok: bool,
+    safe_summary: str = "",
+    safe_point: str = "",
+    safe_ok: bool = False,
 ) -> dict[str, Any] | None:
     """更新ペイロードを組む。埋められる項目が無ければ None。"""
     payload: dict[str, Any] = {
@@ -80,6 +80,7 @@ def build_update_payload(
     }
     has_fill = False
 
+    # Safe 成功時のみ Soft 文を優先。それ以外（スキップ含む）は generate_content 結果を使う
     new_summary = safe_summary if safe_ok else (ai_content.get("auto_summary") or "")
     new_point = safe_point if safe_ok else (ai_content.get("auto_point") or "")
 
@@ -117,15 +118,24 @@ def regenerate_row(row: dict[str, Any]) -> dict[str, Any] | None:
         logging.warning("generate_content が空: %s", row.get("content_id"))
         return None
 
-    title = row.get("title") or raw.get("title") or ""
-    safe_summary, safe_point, safe_ok = update_items_mod.generate_safe_summary_point(
-        title, summary_in, point_in
-    )
-    if not safe_ok:
-        logging.warning(
-            "Safe 化失敗のため generate_content 結果をそのまま保存候補: %s",
+    safe_summary = ""
+    safe_point = ""
+    safe_ok = False
+    if getattr(update_items_mod, "SKIP_SAFE_GENERATION", False):
+        logging.info(
+            "Safe 化スキップ設定のため generate_content 結果をそのまま使用: %s",
             row.get("content_id"),
         )
+    else:
+        title = row.get("title") or raw.get("title") or ""
+        safe_summary, safe_point, safe_ok = update_items_mod.generate_safe_summary_point(
+            title, summary_in, point_in
+        )
+        if not safe_ok:
+            logging.warning(
+                "Safe 化失敗のため generate_content 結果をそのまま保存候補: %s",
+                row.get("content_id"),
+            )
 
     return build_update_payload(
         row,

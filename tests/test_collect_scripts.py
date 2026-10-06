@@ -19,8 +19,14 @@ SAMPLE_ITEM = {
 def load_collect_module(name: str):
     module_name = f"scripts.collect.{name}"
     if module_name in sys.modules:
-        return importlib.reload(sys.modules[module_name])
-    return importlib.import_module(module_name)
+        mod = importlib.reload(sys.modules[module_name])
+    else:
+        mod = importlib.import_module(module_name)
+    # test_supabase_client の再ロード等で supabase3 が None のままだと
+    # mesugaki の supabase3.table(...) が落ちるため、テスト用に保証する
+    if name == "mesugaki" and getattr(mod, "supabase3", None) is None:
+        mod.supabase3 = MagicMock(name="supabase3")
+    return mod
 
 
 @pytest.fixture(params=["default", "mesugaki"])
@@ -86,6 +92,22 @@ class TestCollectMain:
 
     def test_main_exits_1_on_item_errors(self, collect_mod):
         assert self._run_main(collect_mod, run_error=True) == [1]
+
+    def test_main_exits_1_when_supabase3_missing(self):
+        mod = load_collect_module("mesugaki")
+        exits: list[int] = []
+
+        def fake_exit(code: int) -> None:
+            exits.append(code)
+            raise SystemExit(code)
+
+        with patch.object(mod.sys, "exit", side_effect=fake_exit):
+            with patch.object(mod, "setup_logger"):
+                with patch.object(mod, "fetch_items_merged_sorts", return_value=[SAMPLE_ITEM]):
+                    with patch.object(mod, "supabase3", None):
+                        with pytest.raises(SystemExit):
+                            mod.main()
+        assert exits == [1]
 
     def test_main_process_one_registers_item(self):
         mod = load_collect_module("default")

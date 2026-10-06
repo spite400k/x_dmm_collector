@@ -5,13 +5,32 @@ from __future__ import annotations
 import atexit
 import os
 import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
 
+DEFAULT_HEARTBEAT_INTERVAL = 30.0
+DEFAULT_STALE_AFTER = 600.0  # 生存 PID でも heartbeat がこの秒数古いと stale
+HEARTBEAT_INTERVAL_ENV = "X_DMM_LOCK_HEARTBEAT_INTERVAL"
+STALE_AFTER_ENV = "X_DMM_LOCK_STALE_AFTER"
+
 
 class RunLockError(RuntimeError):
     """別プロセスが既にロックを保持している。"""
+
+
+def heartbeat_settings() -> tuple[float, float]:
+    """(heartbeat_interval, stale_after) 秒。"""
+    interval = float(
+        os.environ.get(HEARTBEAT_INTERVAL_ENV, str(DEFAULT_HEARTBEAT_INTERVAL))
+    )
+    stale_after = float(os.environ.get(STALE_AFTER_ENV, str(DEFAULT_STALE_AFTER)))
+    if interval <= 0:
+        interval = DEFAULT_HEARTBEAT_INTERVAL
+    if stale_after <= 0:
+        stale_after = DEFAULT_STALE_AFTER
+    return interval, stale_after
 
 
 def pid_alive(pid: int) -> bool:
@@ -55,16 +74,62 @@ def read_lock_holder(path: Path) -> str:
         return "(unreadable)"
 
 
-def clear_stale_lock(path: Path) -> bool:
-    """ホルダ PID が死んでいればロックファイルを削除する。削除したら True。"""
+def parse_lock_record(text: str) -> tuple[int | None, float | None]:
+    """ロック1行から (pid, heartbeat_epoch) を返す。hb 無しの旧形式は heartbeat=None。"""
+    raw = (text or "").strip()
+    if not raw:
+        return None, None
+    line = raw.splitlines()[0].strip()
+    parts = line.split()
+    try:
+        pid = int(parts[0])
+    except (ValueError, IndexError):
+        return None, None
+    heartbeat: float | None = None
+    for part in parts[1:]:
+        if part.startswith("hb="):
+            try:
+                heartbeat = float(part[3:])
+            except ValueError:
+                heartbeat = None
+            break
+    return pid, heartbeat
+
+
+def clear_stale_lock(
+    path: Path,
+    *,
+    now: float | None = None,
+    stale_after: float | None = None,
+) -> bool:
+    """ホルダ PID が死んでいる、または heartbeat が古い場合にロックを削除する。"""
     if not path.exists():
         return False
     holder = read_lock_holder(path)
-    try:
-        pid = int(holder.split()[0])
-    except (ValueError, IndexError):
+    pid, heartbeat = parse_lock_record(holder)
+    if pid is None:
         return False
-    if pid_alive(pid):
+
+    should_clear = False
+    if not pid_alive(pid):
+        should_clear = True
+    else:
+        if stale_after is None:
+            _, stale_after = heartbeat_settings()
+        clock = time.time() if now is None else now
+        if heartbeat is not None:
+            if clock - heartbeat > stale_after:
+                should_clear = True
+        else:
+            # 旧形式（hb 無し）: ファイル mtime が古ければ固着とみなす
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                return False
+            if clock - mtime > stale_after:
+                should_clear = True
+
+    if not should_clear:
         return False
     try:
         path.unlink(missing_ok=True)
@@ -112,12 +177,54 @@ def wait_until_locks_free(
 
 
 class RunLock:
-    """O_EXCL による排他ロック（クラッシュ後は stale PID 判定で回収）。"""
+    """O_EXCL による排他ロック（クラッシュ後は stale PID / 古い heartbeat で回収）。"""
 
     def __init__(self, path: Path):
         self.path = path
         self._fh = None
         self._held = False
+        self._started = ""
+        self._stop_heartbeat = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+
+    def _format_holder(self) -> str:
+        return f"{os.getpid()} {self._started} hb={time.time():.0f}\n"
+
+    def _write_holder(self) -> None:
+        if self._fh is None:
+            return
+        content = self._format_holder()
+        self._fh.seek(0)
+        self._fh.write(content)
+        self._fh.truncate()
+        self._fh.flush()
+
+    def _heartbeat_loop(self, interval: float) -> None:
+        while not self._stop_heartbeat.wait(interval):
+            if not self._held:
+                break
+            try:
+                self._write_holder()
+            except OSError:
+                break
+
+    def _start_heartbeat(self) -> None:
+        interval, _ = heartbeat_settings()
+        self._stop_heartbeat.clear()
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            args=(interval,),
+            name=f"run-lock-hb:{self.path.name}",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def _stop_heartbeat_thread(self) -> None:
+        self._stop_heartbeat.set()
+        thread = self._heartbeat_thread
+        self._heartbeat_thread = None
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2)
 
     def acquire(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,15 +240,17 @@ class RunLock:
             ) from exc
 
         self._fh = os.fdopen(fd, "w+", encoding="utf-8")
-        self._fh.write(f"{os.getpid()} {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        self._fh.flush()
+        self._started = time.strftime("%Y-%m-%d %H:%M:%S")
+        self._write_holder()
         self._held = True
+        self._start_heartbeat()
         atexit.register(self.release)
 
     def release(self) -> None:
         if not self._held:
             return
         self._held = False
+        self._stop_heartbeat_thread()
         try:
             if self._fh is not None:
                 self._fh.close()

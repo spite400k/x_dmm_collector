@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -82,8 +83,44 @@ PEER_WAIT_LOG_INTERVAL = 600.0
 PEER_WAIT_TIMEOUT_ENV = "X_DMM_PEER_WAIT_TIMEOUT"
 PEER_WAIT_POLL_ENV = "X_DMM_PEER_WAIT_POLL"
 PROCESS_STAGGER_ENV = "X_DMM_PROCESS_STAGGER_SECONDS"
+# 失敗時に親ログへ出す子出力の上限（AIレビュー等の巨大ログで固まるのを防ぐ）
+FAILURE_LOG_MAX_CHARS = 50_000
 
 logger = logging.getLogger(__name__)
+
+
+def kill_process_tree(pid: int | None) -> None:
+    """子プロセスとその子孫を強制終了する（Windows は taskkill /T）。"""
+    if pid is None or pid <= 0:
+        return
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if result.returncode not in (0, 128):
+                # 128: プロセスが見つからない
+                logger.warning(
+                    "taskkill が非ゼロ終了 (pid=%s, code=%s): %s",
+                    pid,
+                    result.returncode,
+                    (result.stderr or result.stdout or "").strip()[:500],
+                )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            logger.warning("taskkill 失敗 (pid=%s): %s → Popen.kill にフォールバック", pid, exc)
+        return
+
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError as exc:
+            logger.warning("プロセスツリー終了に失敗 (pid=%s): %s", pid, exc)
 
 
 def pipeline_lock_path(phase: str) -> Path:
@@ -254,13 +291,17 @@ def wait_for_script_process(
     assert proc.stdout is not None
 
     def _reader() -> None:
-        for line in proc.stdout:
-            chunks.append(line)
-            log_file.write(line)
-            log_file.flush()
-            if echo:
-                sys.stdout.write(line)
-                sys.stdout.flush()
+        try:
+            for line in proc.stdout:
+                chunks.append(line)
+                log_file.write(line)
+                log_file.flush()
+                if echo:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+        except (OSError, ValueError):
+            # タイムアウト後に pipe が閉じられた場合など
+            return
 
     reader = threading.Thread(target=_reader, name="run-script-stdout", daemon=True)
     reader.start()
@@ -272,24 +313,39 @@ def wait_for_script_process(
             timeout_sec,
             proc.pid,
         )
-        proc.kill()
+        # Chrome 等の孫プロセスごと落とす（パイプ掴みっぱなしのデッドロック防止）
+        kill_process_tree(proc.pid)
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        # stdout.close() を wait 前に呼ぶと reader とデッドロックしやすいので、先に wait
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            logger.warning("強制終了後もプロセスが残っています (pid=%s)", proc.pid)
         try:
             if proc.stdout is not None:
                 proc.stdout.close()
         except OSError:
-            pass
-        try:
-            proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
             pass
         returncode = 124
     reader.join(timeout=5)
     return "".join(chunks), returncode
 
 
+def truncate_child_output_for_log(output: str, max_chars: int = FAILURE_LOG_MAX_CHARS) -> str:
+    """親ログへ出す子出力を末尾優先で切り詰める。"""
+    body = output.rstrip()
+    if len(body) <= max_chars:
+        return body
+    omitted = len(body) - max_chars
+    return f"...({omitted} 文字省略)...\n{body[-max_chars:]}"
+
+
 def log_child_output_on_failure(script_path: str, output: str) -> None:
     """失敗時に子プロセス出力を親ロガーへ出す（ファイル専用実行時の調査用）。"""
-    body = output.rstrip()
+    body = truncate_child_output_for_log(output)
     if not body:
         logger.error("子プロセス出力なし: %s", script_path)
         return
@@ -399,6 +455,8 @@ def run_script(
             encoding="utf-8",
             errors="replace",
             bufsize=1,
+            # Unix: タイムアウト時に killpg(子) で孫ごと落とせるよう別 PG にする
+            start_new_session=(sys.platform != "win32"),
         )
         timeout_sec = script_timeout_sec(entry)
         if timeout_sec is not None:

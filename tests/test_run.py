@@ -63,6 +63,15 @@ def test_log_child_output_on_failure_with_body():
         assert "boom" in args[2]
 
 
+def test_log_child_output_on_failure_truncates():
+    huge = "line\n" * 20000
+    with patch.object(run_mod.logger, "error") as err:
+        run_mod.log_child_output_on_failure("scripts/big.py", huge)
+        logged = err.call_args[0][2]
+        assert "省略" in logged
+        assert len(logged) < len(huge)
+
+
 def test_run_script_dumps_output_on_failure(tmp_path):
     entry = {"path": "scripts/process/create_actress_review.py", "log": str(tmp_path / "t.log")}
     fake_stdout = io.StringIO("SupabaseException: supabase_url is required\n")

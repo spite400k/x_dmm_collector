@@ -10,6 +10,8 @@ if str(ROOT) not in sys.path:
 # GHA 等で .env / secrets 未設定でも db.supabase_client を import できるようにする
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key-for-pytest")
+os.environ.setdefault("SUPABASE_URL3", "https://test3.supabase.co")
+os.environ.setdefault("SUPABASE_KEY3", "test-key3-for-pytest")
 os.environ.setdefault("OPENAI_API_KEY", "test-key-for-pytest")
 
 # import 時の create_client / httpx 生成を抑える（テスト方針: 実接続しない）

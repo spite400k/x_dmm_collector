@@ -353,24 +353,54 @@ class TestGetTachiyomiGaps:
 
 
 class TestRunLockGaps:
-    def test_pid_alive_windows_getexitcode_fails(self, monkeypatch):
+    @staticmethod
+    def _patch_windows_kernel32(monkeypatch, *, open_handle, get_exit_code_ok, exit_code_value=259):
+        """Linux CI でも ctypes.windll が無いため、fake windll を差し込む。"""
         import ctypes
 
         monkeypatch.setattr("utils.run_lock.sys.platform", "win32")
-        handle = MagicMock()
+        closed = []
 
         class FakeKernel32:
             def OpenProcess(self, *a, **k):
-                return handle
+                return open_handle
 
             def GetExitCodeProcess(self, h, ref):
-                return 0
+                ref._obj.value = exit_code_value
+                return get_exit_code_ok
 
             def CloseHandle(self, h):
-                pass
+                closed.append(h)
 
-        monkeypatch.setattr(ctypes.windll, "kernel32", FakeKernel32())
+        fake_windll = MagicMock()
+        fake_windll.kernel32 = FakeKernel32()
+        monkeypatch.setattr(ctypes, "windll", fake_windll, raising=False)
+        return closed
+
+    def test_pid_alive_windows_open_fails(self, monkeypatch):
+        self._patch_windows_kernel32(monkeypatch, open_handle=0, get_exit_code_ok=1)
         assert pid_alive(12345) is False
+
+    def test_pid_alive_windows_getexitcode_fails(self, monkeypatch):
+        closed = self._patch_windows_kernel32(
+            monkeypatch, open_handle=1, get_exit_code_ok=0
+        )
+        assert pid_alive(12345) is False
+        assert closed == [1]
+
+    def test_pid_alive_windows_still_active(self, monkeypatch):
+        closed = self._patch_windows_kernel32(
+            monkeypatch, open_handle=1, get_exit_code_ok=1, exit_code_value=259
+        )
+        assert pid_alive(12345) is True
+        assert closed == [1]
+
+    def test_pid_alive_windows_exited(self, monkeypatch):
+        closed = self._patch_windows_kernel32(
+            monkeypatch, open_handle=1, get_exit_code_ok=1, exit_code_value=0
+        )
+        assert pid_alive(12345) is False
+        assert closed == [1]
 
     def test_pid_alive_non_windows_dead(self, monkeypatch):
         monkeypatch.setattr("utils.run_lock.sys.platform", "linux")
@@ -719,10 +749,12 @@ class TestRunGaps:
         log_path = tmp_path / "out.log"
         with run_mod.RotatingLogFile(log_path) as log_file:
             with patch.object(run_mod.logger, "error"):
-                out, code = run_mod.wait_for_script_process(
-                    proc, log_file, echo=False, timeout_sec=1
-                )
+                with patch.object(run_mod, "kill_process_tree") as kill_tree:
+                    out, code = run_mod.wait_for_script_process(
+                        proc, log_file, echo=False, timeout_sec=1
+                    )
         assert code == 124
+        kill_tree.assert_called_once_with(999)
         proc.kill.assert_called_once()
         assert "still running" in out
 
@@ -738,9 +770,11 @@ class TestRunGaps:
         log_path = tmp_path / "out_echo.log"
         with run_mod.RotatingLogFile(log_path) as log_file:
             with patch.object(run_mod.logger, "error"):
-                out, code = run_mod.wait_for_script_process(
-                    proc, log_file, echo=True, timeout_sec=1
-                )
+                with patch.object(run_mod.logger, "warning"):
+                    with patch.object(run_mod, "kill_process_tree"):
+                        out, code = run_mod.wait_for_script_process(
+                            proc, log_file, echo=True, timeout_sec=1
+                        )
         assert code == 124
         assert "echoed line" in out
         captured = capsys.readouterr()
@@ -764,12 +798,120 @@ class TestRunGaps:
         log_path = tmp_path / "out_none.log"
         with run_mod.RotatingLogFile(log_path) as log_file:
             with patch.object(run_mod.logger, "error"):
-                out, code = run_mod.wait_for_script_process(
-                    proc, log_file, echo=False, timeout_sec=1
-                )
+                with patch.object(run_mod, "kill_process_tree"):
+                    out, code = run_mod.wait_for_script_process(
+                        proc, log_file, echo=False, timeout_sec=1
+                    )
         assert code == 124
         assert "partial" in out
         proc.kill.assert_called_once()
+
+    def test_kill_process_tree_win32_taskkill(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "win32")
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            return MagicMock(returncode=0, stderr="", stdout="")
+
+        monkeypatch.setattr(run_mod.subprocess, "run", fake_run)
+        run_mod.kill_process_tree(4242)
+        assert calls == [["taskkill", "/F", "/T", "/PID", "4242"]]
+
+    def test_kill_process_tree_win32_nonzero_warns(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "win32")
+
+        def fake_run(cmd, **kwargs):
+            return MagicMock(returncode=1, stderr="Access denied", stdout="")
+
+        monkeypatch.setattr(run_mod.subprocess, "run", fake_run)
+        with patch.object(run_mod.logger, "warning") as warn:
+            run_mod.kill_process_tree(99)
+        warn.assert_called()
+        assert "非ゼロ" in warn.call_args[0][0]
+
+    def test_kill_process_tree_win32_fallback_on_error(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "win32")
+
+        def fake_run(*a, **k):
+            raise OSError("no taskkill")
+
+        monkeypatch.setattr(run_mod.subprocess, "run", fake_run)
+        with patch.object(run_mod.logger, "warning") as warn:
+            run_mod.kill_process_tree(7)
+        warn.assert_called()
+
+    def test_kill_process_tree_unix_killpg(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "linux")
+        killed = []
+
+        def fake_killpg(pid, sig):
+            killed.append((pid, sig))
+
+        monkeypatch.setattr(run_mod.os, "killpg", fake_killpg, raising=False)
+        monkeypatch.setattr(run_mod.signal, "SIGKILL", 9, raising=False)
+        run_mod.kill_process_tree(55)
+        assert killed == [(55, 9)]
+
+    def test_kill_process_tree_unix_fallback_to_kill(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "linux")
+        killed = []
+
+        def fake_killpg(pid, sig):
+            raise OSError("no pg")
+
+        def fake_kill(pid, sig):
+            killed.append((pid, sig))
+
+        monkeypatch.setattr(run_mod.os, "killpg", fake_killpg, raising=False)
+        monkeypatch.setattr(run_mod.os, "kill", fake_kill)
+        monkeypatch.setattr(run_mod.signal, "SIGKILL", 9, raising=False)
+        run_mod.kill_process_tree(66)
+        assert killed == [(66, 9)]
+
+    def test_kill_process_tree_unix_both_fail(self, monkeypatch):
+        monkeypatch.setattr(run_mod.sys, "platform", "linux")
+
+        def boom(*a, **k):
+            raise OSError("denied")
+
+        monkeypatch.setattr(run_mod.os, "killpg", boom, raising=False)
+        monkeypatch.setattr(run_mod.os, "kill", boom)
+        monkeypatch.setattr(run_mod.signal, "SIGKILL", 9, raising=False)
+        with patch.object(run_mod.logger, "warning") as warn:
+            run_mod.kill_process_tree(77)
+        warn.assert_called()
+
+    def test_kill_process_tree_ignores_invalid_pid(self):
+        run_mod.kill_process_tree(None)
+        run_mod.kill_process_tree(0)
+        run_mod.kill_process_tree(-1)
+
+    def test_truncate_child_output_for_log(self):
+        assert run_mod.truncate_child_output_for_log("abc") == "abc"
+        long = "x" * 100
+        out = run_mod.truncate_child_output_for_log(long, max_chars=10)
+        assert out.endswith("x" * 10)
+        assert "省略" in out
+
+    def test_wait_for_script_process_timeout_kill_oserror(self, tmp_path: Path):
+        proc = MagicMock()
+        proc.pid = 1003
+        proc.stdout = io.StringIO("partial\n")
+        proc.kill.side_effect = OSError("already dead")
+        proc.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="python", timeout=1),
+            0,
+        ]
+        log_path = tmp_path / "out_kill_err.log"
+        with run_mod.RotatingLogFile(log_path) as log_file:
+            with patch.object(run_mod.logger, "error"):
+                with patch.object(run_mod, "kill_process_tree"):
+                    out, code = run_mod.wait_for_script_process(
+                        proc, log_file, echo=False, timeout_sec=1
+                    )
+        assert code == 124
+        assert "partial" in out
 
     def test_run_script_uses_timeout_sec(self, tmp_path: Path):
         entry = {

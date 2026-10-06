@@ -182,8 +182,12 @@ python run.py --phase all --continue-on-error
 | `X_DMM_PEER_WAIT_TIMEOUT` | `129600`（36 時間） | 相手ジョブ待ちの上限（秒）。超過で exit 2 |
 | `X_DMM_PEER_WAIT_POLL` | `30` | ポーリング間隔（秒） |
 | `X_DMM_PROCESS_STAGGER_SECONDS` | （有効） | `0` にすると収集待ち後の 1h / 2h ずらしを無効化 |
+| `X_DMM_LOCK_HEARTBEAT_INTERVAL` | `30` | ロックファイルの heartbeat 更新間隔（秒） |
+| `X_DMM_LOCK_STALE_AFTER` | `600`（10 分） | heartbeat がこれより古いロックは PID 生存でも回収 |
 
 緊急時のみ `--no-lock`（相手待ちもスキップ。二重起動の恐れあり）。
+
+`timeout_sec` 超過時は子プロセスをプロセスツリーごと強制終了し、親はロックを解放して終了する。ロック保持プロセスが固まった場合も、heartbeat 失効で他ジョブが回収できる。
 
 ### 典型スケジュール（タスクスケジューラ）
 

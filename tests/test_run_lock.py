@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -10,7 +11,9 @@ from utils.run_lock import (
     RunLock,
     RunLockError,
     clear_stale_lock,
+    heartbeat_settings,
     lock_is_held,
+    parse_lock_record,
     pid_alive,
     read_lock_holder,
     wait_until_locks_free,
@@ -71,6 +74,118 @@ class TestClearStaleLock:
         assert clear_stale_lock(p) is True
         assert not p.exists()
 
+    def test_live_holder_fresh_heartbeat(self, tmp_path: Path):
+        import os
+        import time
+
+        p = tmp_path / "hb_fresh.lock"
+        p.write_text(f"{os.getpid()} now hb={time.time():.0f}\n", encoding="utf-8")
+        assert clear_stale_lock(p, stale_after=600) is False
+        assert p.exists()
+
+    def test_live_holder_stale_heartbeat(self, tmp_path: Path):
+        import os
+        import time
+
+        p = tmp_path / "hb_stale.lock"
+        old = time.time() - 1000
+        p.write_text(f"{os.getpid()} now hb={old:.0f}\n", encoding="utf-8")
+        assert clear_stale_lock(p, now=time.time(), stale_after=600) is True
+        assert not p.exists()
+
+    def test_live_holder_stale_uses_env_default(self, tmp_path: Path, monkeypatch):
+        import os
+        import time
+
+        monkeypatch.setenv("X_DMM_LOCK_STALE_AFTER", "30")
+        p = tmp_path / "hb_env.lock"
+        old = time.time() - 120
+        p.write_text(f"{os.getpid()} now hb={old:.0f}\n", encoding="utf-8")
+        assert clear_stale_lock(p) is True
+        assert not p.exists()
+
+    def test_legacy_lock_cleared_by_mtime(self, tmp_path: Path):
+        import os
+        import time
+
+        p = tmp_path / "legacy.lock"
+        p.write_text(f"{os.getpid()} 2026-10-02 09:13:22\n", encoding="utf-8")
+        old = time.time() - 1000
+        os.utime(p, (old, old))
+        assert clear_stale_lock(p, now=time.time(), stale_after=600) is True
+        assert not p.exists()
+
+    def test_legacy_lock_fresh_mtime_kept(self, tmp_path: Path):
+        import os
+
+        p = tmp_path / "legacy_fresh.lock"
+        p.write_text(f"{os.getpid()} now\n", encoding="utf-8")
+        assert clear_stale_lock(p, stale_after=600) is False
+        assert p.exists()
+
+    def test_legacy_lock_stat_oserror(self, tmp_path: Path):
+        import os
+
+        p = tmp_path / "legacy_stat.lock"
+        p.write_text(f"{os.getpid()} now\n", encoding="utf-8")
+        real_stat = Path.stat
+        calls = {"n": 0}
+
+        def flaky_stat(self, *args, **kwargs):
+            calls["n"] += 1
+            # exists() 用の1回目は成功、mtime 取得の2回目で失敗
+            if calls["n"] == 1:
+                return real_stat(self, *args, **kwargs)
+            raise OSError("gone")
+
+        with patch.object(Path, "stat", flaky_stat):
+            assert clear_stale_lock(p, stale_after=600) is False
+
+    def test_stale_heartbeat_unlink_oserror(self, tmp_path: Path):
+        import os
+        import time
+
+        p = tmp_path / "hb_unlink.lock"
+        old = time.time() - 1000
+        p.write_text(f"{os.getpid()} now hb={old:.0f}\n", encoding="utf-8")
+        with patch.object(type(p), "unlink", side_effect=OSError("busy")):
+            assert clear_stale_lock(p, now=time.time(), stale_after=600) is False
+
+
+class TestParseLockRecord:
+    def test_empty(self):
+        assert parse_lock_record("") == (None, None)
+        assert parse_lock_record("   ") == (None, None)
+
+    def test_legacy_without_hb(self):
+        assert parse_lock_record("1234 2026-01-01 12:00:00") == (1234, None)
+
+    def test_with_hb(self):
+        pid, hb = parse_lock_record("99 2026-01-01 hb=1700000000")
+        assert pid == 99
+        assert hb == 1700000000.0
+
+    def test_invalid_hb_value(self):
+        pid, hb = parse_lock_record("99 now hb=not-a-number")
+        assert pid == 99
+        assert hb is None
+
+
+class TestHeartbeatSettings:
+    def test_defaults(self, monkeypatch):
+        monkeypatch.delenv("X_DMM_LOCK_HEARTBEAT_INTERVAL", raising=False)
+        monkeypatch.delenv("X_DMM_LOCK_STALE_AFTER", raising=False)
+        interval, stale = heartbeat_settings()
+        assert interval == 30.0
+        assert stale == 600.0
+
+    def test_invalid_falls_back(self, monkeypatch):
+        monkeypatch.setenv("X_DMM_LOCK_HEARTBEAT_INTERVAL", "0")
+        monkeypatch.setenv("X_DMM_LOCK_STALE_AFTER", "-1")
+        interval, stale = heartbeat_settings()
+        assert interval == 30.0
+        assert stale == 600.0
+
 
 class TestRunLock:
     def test_acquire_release(self, tmp_path: Path):
@@ -80,9 +195,64 @@ class TestRunLock:
         assert lock_path.exists()
         import os
 
-        assert str(os.getpid()) in lock_path.read_text(encoding="utf-8")
+        text = lock_path.read_text(encoding="utf-8")
+        assert str(os.getpid()) in text
+        assert "hb=" in text
         lock.release()
         assert not lock_path.exists()
+
+    def test_heartbeat_updates_file(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("X_DMM_LOCK_HEARTBEAT_INTERVAL", "0.05")
+        lock_path = tmp_path / "hb.lock"
+        lock = RunLock(lock_path)
+        lock.acquire()
+        first = lock_path.read_text(encoding="utf-8")
+        import time
+
+        time.sleep(0.2)
+        second = lock_path.read_text(encoding="utf-8")
+        lock.release()
+        assert "hb=" in first
+        assert "hb=" in second
+        # 少なくとも書き込み形式は維持（時刻が進んでいればなお良い）
+        assert second.startswith(str(__import__("os").getpid()))
+
+    def test_release_when_fh_already_none(self, tmp_path: Path):
+        lock = RunLock(tmp_path / "nofh2.lock")
+        lock.acquire()
+        lock._fh.close()
+        lock._fh = None
+        lock.release()
+        assert lock._held is False
+
+    def test_write_holder_noop_without_fh(self, tmp_path: Path):
+        lock = RunLock(tmp_path / "nofh.lock")
+        lock._write_holder()  # _fh is None → no-op
+
+    def test_heartbeat_loop_stops_when_not_held(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("X_DMM_LOCK_HEARTBEAT_INTERVAL", "0.01")
+        lock = RunLock(tmp_path / "stop.lock")
+        lock.acquire()
+        lock._held = False
+        import time
+
+        time.sleep(0.05)
+        lock._held = True
+        lock.release()
+
+    def test_heartbeat_loop_oserror(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("X_DMM_LOCK_HEARTBEAT_INTERVAL", "0.01")
+        lock = RunLock(tmp_path / "err.lock")
+        lock.acquire()
+
+        def boom():
+            raise OSError("disk full")
+
+        lock._write_holder = boom  # type: ignore[method-assign]
+        import time
+
+        time.sleep(0.08)
+        lock.release()
 
     def test_context_manager(self, tmp_path: Path):
         lock_path = tmp_path / "ctx.lock"

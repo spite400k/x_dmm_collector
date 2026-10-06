@@ -47,6 +47,9 @@ def main():
             )
             logging.info("データ取得完了")
 
+            if supabase3 is None:
+                raise RuntimeError("SUPABASE_URL3 / SUPABASE_KEY3 が未設定です")
+
             items = filter_unregistered_items(
                 top_items,
                 exists_by_content_id=supabase_exists_checker(supabase3.table("trn_dmm_items")),

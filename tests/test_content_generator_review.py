@@ -107,6 +107,9 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         assert call_kwargs["response_format"] == {"type": "json_object"}
         messages = call_kwargs["messages"]
         assert messages[0]["content"] == review_module.REVIEW_INSIGHTS_SYSTEM_PROMPT
+        system_content = messages[0]["content"]
+        assert "件数が少ないため" in system_content
+        assert "レビュー件数が少ない場合は過信しない" not in system_content
         user_content = messages[1]["content"]
         assert "あらすじテキスト" in user_content
         assert "とても良い作品でした" in user_content
@@ -116,7 +119,7 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         assert '"reader_types": ["...", "..."]' in user_content
         assert "portal_copy_beaf" in user_content
         assert "portal_copy_aidma" in user_content
-        assert "BEAF" in messages[0]["content"]
+        assert "BEAF" in system_content
         assert "review_digest" in result
         assert result["portal_copy_beaf"] == "BEAFコピー"
         assert result["portal_copy_aidma"] == "AIDMAコピー"

@@ -12,6 +12,19 @@ def ab_module():
     return load_copy_framework_ab()
 
 
+def test_portal_copy_prompt_section_includes_only_assigned_framework(ab_module):
+    beaf = ab_module.portal_copy_prompt_section("beaf")
+    aidma = ab_module.portal_copy_prompt_section("aidma")
+    assert "portal_copy_beaf" in beaf
+    assert "portal_copy_aidma" not in beaf
+    assert "portal_copy_aidma" in aidma
+    assert "portal_copy_beaf" not in aidma
+    framework, field = ab_module.assigned_portal_copy_field("cid-1")
+    assert field == (
+        "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
+    )
+
+
 def test_assign_copy_framework_is_stable(ab_module):
     assert ab_module.assign_copy_framework("abc123") == ab_module.assign_copy_framework("abc123")
     assert ab_module.assign_copy_framework("abc123") in ("beaf", "aidma")

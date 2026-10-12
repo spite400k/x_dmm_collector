@@ -5,26 +5,44 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Mapping
 
-PROMPT_VERSION = "v4_beaf_aidma_ab"
+PROMPT_VERSION = "v5_assigned_portal"
 
-PORTAL_COPY_PROMPT_SECTION = """
-【FANZA Portal 向けコピー（A/B テスト用・両方必須）】
-あらすじ・レビュー・作品情報のみを根拠に、次の2形式を**両方**生成する。
 
-■ portal_copy_beaf（BEAF法: Benefit→Evidence→Advantage→Feature）
-・280〜380文字
-・便益（誰向け・何が得か）→ 根拠（レビュー傾向・具体魅力）→ 差別化 → スペック（価格・出演・ジャンル）
-・比較検討向きの説明的トーン
-
+def portal_copy_prompt_section(framework: str) -> str:
+    """割当済みの Portal コピーだけを書く指示。"""
+    if framework == "aidma":
+        body = """
 ■ portal_copy_aidma（AIDMA法: Attention→Interest→Desire→Memory→Action）
 ・280〜380文字
 ・冒頭フック → 興味 → 欲求 → 覚えやすい一言 → FANZA公式で確認を促すCTA
 ・ランキング・発見・クリック向きトーン
+""".strip()
+        field_name = "portal_copy_aidma"
+    else:
+        body = """
+■ portal_copy_beaf（BEAF法: Benefit→Evidence→Advantage→Feature）
+・280〜380文字
+・便益（誰向け・何が得か）→ 根拠（レビュー傾向・具体魅力）→ 差別化 → スペック（価格・出演・ジャンル）
+・比較検討向きの説明的トーン
+""".strip()
+        field_name = "portal_copy_beaf"
+    return f"""
+【FANZA Portal 向けコピー】
+あらすじ・レビュー・作品情報のみを根拠に、{field_name} だけを生成する。
+
+{body}
 
 【Portal コピー共通禁止】
 ・過度に露骨な描写、創作・推測、レビューにない事実の追加
 ・「本作」「この作品」などのテンプレ導入、SEOキーワード羅列
-"""
+""".strip()
+
+
+def assigned_portal_copy_field(content_id: str | None) -> tuple[str, str]:
+    """content_id の割当と、生成する JSON フィールド名。"""
+    framework = assign_copy_framework((content_id or "").strip())
+    field = "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
+    return framework, field
 
 
 def assign_copy_framework(content_id: str) -> str:

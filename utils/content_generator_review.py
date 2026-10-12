@@ -22,8 +22,9 @@ from openai_api.config import OPENAI_MODEL
 from openai_api.usage import log_openai_usage
 from openai_api.content_generator import extract_synopsis_from_soup
 from utils.copy_framework_ab import (
-    PORTAL_COPY_PROMPT_SECTION,
+    assigned_portal_copy_field,
     format_product_context_block,
+    portal_copy_prompt_section,
 )
 from utils.chromedriver import chromedriver_path
 from utils.dmm_review_scraper import get_doujin_reviews, get_video_reviews
@@ -672,7 +673,10 @@ def getGenreConfig(genre_type):
     return switcher.get(genre_type, default_config)
 
 
-REVIEW_INSIGHTS_SYSTEM_PROMPT = """
+def build_review_insights_system_prompt(framework: str) -> str:
+    """採点ルールと、割当済み Portal コピーの書き方だけを含む system プロンプト。"""
+    field = "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
+    return f"""
 あなたはエンタメ作品のレビュー編集者兼スコアアナリストです。
 
 【採点フィールド】content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score
@@ -682,14 +686,14 @@ REVIEW_INSIGHTS_SYSTEM_PROMPT = """
 ・採点時は与えられたレビュー内容の確度を踏まえ、保守的に判断する（件数への言及は不要）
 ・文体ルールは採点フィールドには適用しない
 
-【テキストフィールド】review_digest, portal_copy_beaf, portal_copy_aidma, reader_types, warning_points
-review_digest: 350〜450文字。作品の魅力を感情豊かに要約する（分析・スコア用。Portal A/B とは別）。
+【テキストフィールド】review_digest, {field}, reader_types, warning_points
+review_digest: 350〜450文字。作品の魅力を感情豊かに要約する（分析・スコア用。Portal コピーとは別）。
   体言止め・評論調・論文調は禁止。「あなた」と語りかけてよい（「読者」は使わない）。
-portal_copy_beaf / portal_copy_aidma: FANZA Portal 向け紹介文（各280〜380文字）。下記 BEAF/AIDMA ルールを適用。
+{field}: FANZA Portal 向け紹介文（280〜380文字）。下記ルールを適用。
 reader_types: この作品に合う読者像を2〜3件、具体的な短文で列挙する。
 warning_points: 購入前に知っておくべき注意点を1〜3件、具体的な短文で列挙する。
 
-""" + PORTAL_COPY_PROMPT_SECTION + """
+{portal_copy_prompt_section(framework)}
 
 【共通禁止】
 ・レビュー原文の出力・引用
@@ -697,7 +701,7 @@ warning_points: 購入前に知っておくべき注意点を1〜3件、具体�
 ・登場人物はすべて18歳以上の成人として扱う
 ・「件数が少ないため」「レビューが少ない」「口コミが少ない」など、レビュー件数の少なさを理由にした表現
 ・レビュー件数・サンプルサイズ・データ不足を本文や注意点に書くこと
-"""
+""".strip()
 
 
 def generate_review_insights(
@@ -728,14 +732,15 @@ def generate_review_insights(
 
     summary_for_ai = (html_summary or "")[:SUMMARY_MAX_CHARS_FOR_AI]
     product_block = format_product_context_block(product_context)
+    framework, portal_field = assigned_portal_copy_field(content_id)
+    system_prompt = build_review_insights_system_prompt(framework)
 
     prompt = f"""
 以下の作品情報を分析し、JSON を出力してください。
 
 【各フィールドの内容】
 - review_digest: 作品の魅力を要約（テキストフィールドのルールを適用）
-- portal_copy_beaf: BEAF法の Portal 紹介文（280〜380文字）
-- portal_copy_aidma: AIDMA法の Portal 紹介文（280〜380文字）
+- {portal_field}: Portal 紹介文（280〜380文字。割当フレームワークのルールを適用）
 - content_score: 内容力（採点ルールを適用）
 - emotion_score: 感情インパクト（採点ルールを適用）
 - attraction_score: 魅力（採点ルールを適用）
@@ -760,8 +765,7 @@ def generate_review_insights(
 【出力スキーマ】
 {{
   "review_digest": "...",
-  "portal_copy_beaf": "...",
-  "portal_copy_aidma": "...",
+  "{portal_field}": "...",
   "content_score": 0,
   "emotion_score": 0,
   "attraction_score": 0,
@@ -775,7 +779,7 @@ def generate_review_insights(
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": REVIEW_INSIGHTS_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
@@ -789,6 +793,10 @@ def generate_review_insights(
 
         import json
         result = json.loads(response.choices[0].message.content)
+        unused_portal_field = (
+            "portal_copy_aidma" if portal_field == "portal_copy_beaf" else "portal_copy_beaf"
+        )
+        result.pop(unused_portal_field, None)
 
         # =========================
         # 🔥 レビュー補正適用

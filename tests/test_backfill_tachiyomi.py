@@ -82,31 +82,30 @@ class TestInsertSetsPageCount:
         }
 
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={"auto_comment": "", "auto_summary": "", "auto_point": ""},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=lambda builder: builder().execute(),
-            ):
-                from db.trn_dmm_items_repository import _insert_dmm_item
+            from db.trn_dmm_items_repository import _insert_dmm_item
 
-                _insert_dmm_item(
-                    item,
-                    ["a.webp", "b.webp"],
-                    None,
-                    "FANZA",
-                    "ebook",
-                    "comic",
-                    supabase_client=client,
-                    upload_local_image_to_s3_fn=upload,
-                    coerce_empty_image_urls=True,
-                )
+            _insert_dmm_item(
+                item,
+                ["a.webp", "b.webp"],
+                None,
+                "FANZA",
+                "ebook",
+                "comic",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=upload,
+                coerce_empty_image_urls=True,
+            )
 
         insert_call = client.table.return_value.insert
         payload = insert_call.call_args[0][0]
         assert payload["tachiyomi_page_count"] == 2
         assert payload["tachiyomi_url"] == "https://example.com/t"
+        assert payload["auto_comment"] == ""
+        assert payload["auto_summary"] == ""
+        assert payload["auto_point"] == ""
 
     def test_insert_page_count_zero_on_empty_paths(self):
         client = MagicMock()
@@ -129,26 +128,22 @@ class TestInsertSetsPageCount:
         }
 
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=lambda builder: builder().execute(),
-            ):
-                from db.trn_dmm_items_repository import _insert_dmm_item
+            from db.trn_dmm_items_repository import _insert_dmm_item
 
-                _insert_dmm_item(
-                    item,
-                    [],
-                    None,
-                    "FANZA",
-                    "ebook",
-                    "novel",
-                    supabase_client=client,
-                    upload_local_image_to_s3_fn=MagicMock(),
-                    coerce_empty_image_urls=True,
-                )
+            _insert_dmm_item(
+                item,
+                [],
+                None,
+                "FANZA",
+                "ebook",
+                "novel",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=MagicMock(),
+                coerce_empty_image_urls=True,
+            )
 
         payload = client.table.return_value.insert.call_args[0][0]
         assert payload["tachiyomi_page_count"] == 0
@@ -174,26 +169,22 @@ class TestInsertSetsPageCount:
         }
 
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=lambda builder: builder().execute(),
-            ):
-                from db.trn_dmm_items_repository import _insert_dmm_item
+            from db.trn_dmm_items_repository import _insert_dmm_item
 
-                _insert_dmm_item(
-                    item,
-                    [],
-                    None,
-                    "FANZA",
-                    "digital",
-                    "videoa",
-                    supabase_client=client,
-                    upload_local_image_to_s3_fn=MagicMock(),
-                    coerce_empty_image_urls=True,
-                )
+            _insert_dmm_item(
+                item,
+                [],
+                None,
+                "FANZA",
+                "digital",
+                "videoa",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=MagicMock(),
+                coerce_empty_image_urls=True,
+            )
 
         payload = client.table.return_value.insert.call_args[0][0]
         assert payload["tachiyomi_page_count"] is None
@@ -214,26 +205,22 @@ class TestInsertSetsPageCount:
             "sampleImageURL": {},
         }
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=OSError(10053, "aborted"),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=OSError(10053, "aborted"),
-            ):
-                from db.trn_dmm_items_repository import _insert_dmm_item
+            from db.trn_dmm_items_repository import _insert_dmm_item
 
-                ok = _insert_dmm_item(
-                    item,
-                    [],
-                    None,
-                    "FANZA",
-                    "ebook",
-                    "comic",
-                    supabase_client=client,
-                    upload_local_image_to_s3_fn=MagicMock(),
-                    coerce_empty_image_urls=True,
-                )
+            ok = _insert_dmm_item(
+                item,
+                [],
+                None,
+                "FANZA",
+                "ebook",
+                "comic",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=MagicMock(),
+                coerce_empty_image_urls=True,
+            )
         assert ok is False
 
     def test_insert_returns_true_when_content_id_missing(self):
@@ -298,27 +285,23 @@ class TestInsertSetsPageCount:
             "sampleImageURL": {},
         }
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=lambda builder: builder().execute(),
-            ):
-                with patch("utils.supabase_retry.time.sleep"):
-                    from db.trn_dmm_items_repository import _insert_dmm_item
+            with patch("utils.supabase_retry.time.sleep"):
+                from db.trn_dmm_items_repository import _insert_dmm_item
 
-                    ok = _insert_dmm_item(
-                        item,
-                        ["a.webp"],
-                        None,
-                        "FANZA",
-                        "ebook",
-                        "comic",
-                        supabase_client=client,
-                        upload_local_image_to_s3_fn=upload,
-                        coerce_empty_image_urls=True,
-                    )
+                ok = _insert_dmm_item(
+                    item,
+                    ["a.webp"],
+                    None,
+                    "FANZA",
+                    "ebook",
+                    "comic",
+                    supabase_client=client,
+                    upload_local_image_to_s3_fn=upload,
+                    coerce_empty_image_urls=True,
+                )
         assert ok is True
         assert upload.call_count == 2
 

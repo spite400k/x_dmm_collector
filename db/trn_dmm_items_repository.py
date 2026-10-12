@@ -4,7 +4,6 @@ from db.storageS3 import (
 )
 from db.supabase_client import supabase, supabase3
 import logging
-from openai_api.content_generator import generate_content
 import re
 import traceback
 from typing import Callable, Optional
@@ -106,8 +105,11 @@ def _insert_dmm_item(
         genre_names = [g["name"] for g in genres_raw]
         genre_ids = [g["id"] for g in genres_raw]
 
-        # --- OpenAIで文章生成 ---
-        ai_content = generate_content(item) or {}
+        # 長文（auto_*）は収集では作らない。create_ai_review が購入者コメント付きで1回生成する。
+        logging.info(
+            "収集時の AI 長文生成はスキップ: %s",
+            content_id,
+        )
 
         price = parse_price(item.get("prices", {}).get("price"))
         list_price = parse_price(item.get("prices", {}).get("list_price"))
@@ -158,9 +160,9 @@ def _insert_dmm_item(
             "tachiyomi_page_count": resolve_tachiyomi_page_count(
                 tachiyomi_url, len(uploaded_paths)
             ),
-            "auto_comment": ai_content.get("auto_comment", ""),
-            "auto_summary": ai_content.get("auto_summary", ""),
-            "auto_point": ai_content.get("auto_point", ""),
+            "auto_comment": "",
+            "auto_summary": "",
+            "auto_point": "",
             "raw_json": item,
         }
 

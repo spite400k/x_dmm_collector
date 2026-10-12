@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """auto_summary / auto_point が空の行を raw_json から再生成する。
 
-収集時と同じ generate_content で埋める（Safe 化はスキップ設定に従う）。
+空行は generate_content で埋める（収集 INSERT では生成しない。Safe 化はスキップ設定に従う）。
 既存の auto_comment は空のときだけ上書きする。
 
 例:

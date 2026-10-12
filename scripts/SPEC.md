@@ -32,9 +32,9 @@
 | **READ** | `trn_dmm_items` — `content_id` 重複チェック |
 | **WRITE** | `trn_dmm_items` — 新規 INSERT（未登録 `content_id` のみ） |
 | **Storage** | S3 — 立ち読み画像アップロード |
-| **外部 API** | DMM Affiliate API `ItemList`、OpenAI（`generate_content`）、DMM 商品ページ（Selenium） |
+| **外部 API** | DMM Affiliate API `ItemList`、DMM 商品ページ（Selenium。立ち読み画像） |
 
-**処理概要**: 複数 sort で DMM 商品を取得し、未登録作品を `trn_dmm_items` に登録。立ち読み画像・AI 生成文（`auto_comment`, `auto_summary`, `auto_point`）を付与。
+**処理概要**: 複数 sort で DMM 商品を取得し、未登録作品を `trn_dmm_items` に登録。立ち読み画像を付与する。`auto_comment` / `auto_summary` / `auto_point` は空で INSERT し、長文は `create_ai_review` が購入者コメント付きの作品に対して生成する。
 
 **主な INSERT カラム**: `content_id`, `title`, `item_url`, `service`, `floor`, 画像 URL, 価格, ジャンル, 出演者, `auto_*`, `raw_json` 等
 
@@ -47,7 +47,7 @@
 | **READ** | `trn_dmm_items`（`supabase3`）— 重複チェック |
 | **WRITE** | `trn_dmm_items`（`supabase3`）— INSERT |
 | **Storage** | S3（bucket3） |
-| **外部 API** | DMM `ItemList`（`keyword=メスガキ`）、OpenAI、Selenium |
+| **外部 API** | DMM `ItemList`（`keyword=メスガキ`）、Selenium |
 
 **処理概要**: メスガキキーワードで絞った作品を `supabase3` に登録。
 

@@ -554,7 +554,7 @@ def process_content(
         # ⑦ AI保存
         save_ai_summary(summary)
 
-        # ⑦' 購入者コメントで auto_* を後追い再生成（収集時の暫定文を上書き）
+        # ⑦' 購入者コメントがある作品だけ auto_* を生成する（収集時は空のまま）
         if should_regenerate_auto_content(reviews):
             logging.info("🤖 購入者コメントで auto_* 再生成中...")
             enrich_item_auto_content_from_reviews(

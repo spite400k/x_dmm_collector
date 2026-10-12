@@ -467,26 +467,22 @@ class TestTrnDmmItemsRepositoryGaps:
             "sampleImageURL": {},
         }
         with patch(
-            "db.trn_dmm_items_repository.generate_content",
-            return_value={"auto_comment": "", "auto_summary": "", "auto_point": ""},
+            "db.trn_dmm_items_repository.execute_with_retry",
+            side_effect=lambda builder: builder().execute(),
         ):
-            with patch(
-                "db.trn_dmm_items_repository.execute_with_retry",
-                side_effect=lambda builder: builder().execute(),
-            ):
-                from db.trn_dmm_items_repository import _insert_dmm_item
+            from db.trn_dmm_items_repository import _insert_dmm_item
 
-                ok = _insert_dmm_item(
-                    item,
-                    ["a.webp", "b.webp"],
-                    None,
-                    "FANZA",
-                    "ebook",
-                    "comic",
-                    supabase_client=client,
-                    upload_local_image_to_s3_fn=upload,
-                    coerce_empty_image_urls=False,
-                )
+            ok = _insert_dmm_item(
+                item,
+                ["a.webp", "b.webp"],
+                None,
+                "FANZA",
+                "ebook",
+                "comic",
+                supabase_client=client,
+                upload_local_image_to_s3_fn=upload,
+                coerce_empty_image_urls=False,
+            )
         assert ok is True
         payload = client.table.return_value.insert.call_args[0][0]
         assert payload["image_large_url"] is None or "large" not in str(payload)

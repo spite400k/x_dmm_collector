@@ -90,13 +90,12 @@ def should_skip_selenium_precheck(
 ) -> bool:
     """update_items 反映後の DB レビュー件数を見て Selenium を省略できるか判定する。
 
-    review_count == 0 かつあらすじ保存済みなら、ページを開いても最終的にスキップされるため
-    Chrome 起動前に打ち切る。件数が増えた日は review_count > 0 になるので再取得する。
-    review_count > 0 かつ score_history 未作成の場合は必ずスクレイプする。
+    review_count == 0 はコメントが付くまで AI レビューを作らないため、Chrome を起動しない。
+    review_count > 0 はあらすじやスコアの有無に関わらずページを開く。
     """
-    if normalize_review_count(db_review_count) > 0 and not has_score_history:
-        return False
-    return normalize_review_count(db_review_count) == 0 and bool(has_saved_summary)
+    if normalize_review_count(db_review_count) == 0:
+        return True
+    return False
 
 
 def has_score_history(content_id: str) -> bool:
@@ -125,21 +124,21 @@ def needs_ai_review_refresh(
 ) -> bool:
     """DB 上で再処理が必要そうな作品か。
 
+    - review_count == 0 → コメントが付くまで生成しない
     - 有効な AI あらすじが無い → 初回生成
     - review_digest が空 → 要埋め
-    - review_count == 0 かつあらすじ済 → 変更見込みなし
     - レビューありで score_history 未作成 → 要処理
     - items.review_count が summaries.review_count より大きい → レビュー増の可能性
     """
     saved = usable_saved_summary(saved_summary_text)
     db_count = normalize_review_count(row.get("review_count"))
     saved_count = normalize_review_count(saved_review_count)
-    if not saved:
-        return True
-    if db_count > 0 and not review_digest_nonempty(saved_review_digest):
-        return True
     if db_count == 0:
         return False
+    if not saved:
+        return True
+    if not review_digest_nonempty(saved_review_digest):
+        return True
     if not has_score:
         return True
     return db_count > saved_count
@@ -433,7 +432,7 @@ def process_content(
         has_score_history=has_score_history(content_id),
     ):
         logging.info(
-            "⏭ DBレビュー0件かつあらすじ保存済 → Seleniumスキップ: %s (review_count=%s)",
+            "⏭ DBレビュー0件 → Seleniumスキップ: %s (review_count=%s)",
             content_id,
             db_review_count,
         )
@@ -445,9 +444,9 @@ def process_content(
         # ① レビュー取得
         logging.info("🤖 レビュー取得中...")
         reviews = scrape_review_comments(product_url, driver, service_code, floor_code)
-        if not reviews:
-            logging.info("⚠ レビューなしでもあらすじとAI分析は行う: %s", content_id)
-            # return  # レビューなしでもあらすじとAI分析は行うため、ここではreturnしない
+        if not should_regenerate_auto_content(reviews):
+            logging.info("購入者コメントなし → AIレビューをスキップ: %s", content_id)
+            return
 
         # ② 変更チェック（誤あらすじは未保存扱いなので再生成する）
         # review_digest が空のときはレビュー増減がなくても AI 再生成する
@@ -469,9 +468,6 @@ def process_content(
         if saved_summary:
             logging.info("既存あらすじ使用")
             html_summary = saved_summary
-            if len(reviews) == 0:
-                logging.info("レビュー０件、かつあらすじ保存済なのでスキップ")
-                return
         else:
             logging.info("初回あらすじ取得")
             if service_code == "doujin" and floor_code == "digital_doujin":
@@ -602,7 +598,7 @@ def _process_item_with_retry(
         has_score_history=has_score_history(content_id),
     ):
         logging.info(
-            "⏭ DBレビュー0件かつあらすじ保存済 → Seleniumスキップ: %s (review_count=%s)",
+            "⏭ DBレビュー0件 → Seleniumスキップ: %s (review_count=%s)",
             content_id,
             db_review_count,
         )

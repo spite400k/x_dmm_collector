@@ -57,18 +57,18 @@ class TestShouldSkipSeleniumPrecheck:
             is True
         )
 
-    def test_zero_without_summary_does_not_skip(self, create_ai_review):
+    def test_zero_without_summary_skips(self, create_ai_review):
         assert (
             create_ai_review.should_skip_selenium_precheck(
                 0, has_saved_summary=False
             )
-            is False
+            is True
         )
         assert (
             create_ai_review.should_skip_selenium_precheck(
                 0, has_saved_summary=""
             )
-            is False
+            is True
         )
 
     def test_positive_count_does_not_skip(self, create_ai_review):
@@ -139,14 +139,13 @@ class TestProcessContentPrecheck:
         )
 
         create_ai_review.scrape_review_comments.assert_called_once()
+        create_ai_review.generate_review_insights.assert_not_called()
         driver.quit.assert_not_called()
 
-    def test_opens_chrome_when_zero_but_no_summary(self, create_ai_review):
+    def test_skips_chrome_when_zero_and_no_summary(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
-        create_ai_review.save_raw_reviews = MagicMock()
-        create_ai_review.scrape_product_summary = MagicMock(return_value="初回あらすじ")
         create_ai_review.generate_review_insights = MagicMock(return_value=None)
 
         create_ai_review.process_content(
@@ -158,8 +157,8 @@ class TestProcessContentPrecheck:
             db_review_count=0,
         )
 
-        create_ai_review.scrape_review_comments.assert_called_once()
-        driver.quit.assert_not_called()
+        create_ai_review.scrape_review_comments.assert_not_called()
+        create_ai_review.generate_review_insights.assert_not_called()
 
 
 AGE_GATE_SUMMARY = (
@@ -169,15 +168,12 @@ AGE_GATE_SUMMARY = (
 
 
 class TestProcessContentAgeGate:
-    def test_opens_chrome_when_age_gate_summary_and_review_zero(self, create_ai_review):
+    def test_skips_when_age_gate_summary_and_review_zero(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=AGE_GATE_SUMMARY)
         driver = MagicMock()
         create_ai_review.scrape_review_comments = MagicMock(return_value=[])
-        create_ai_review.save_raw_reviews = MagicMock()
-        create_ai_review.scrape_product_summary = MagicMock(
-            return_value="作品固有のあらすじを40文字以上で書いた本文です。"
-        )
-        create_ai_review.generate_review_insights = MagicMock(return_value=None)
+        create_ai_review.scrape_product_summary = MagicMock()
+        create_ai_review.generate_review_insights = MagicMock()
 
         create_ai_review.process_content(
             "pai436",
@@ -188,13 +184,16 @@ class TestProcessContentAgeGate:
             db_review_count=0,
         )
 
-        create_ai_review.scrape_product_summary.assert_called_once()
-        driver.quit.assert_not_called()
+        create_ai_review.scrape_review_comments.assert_not_called()
+        create_ai_review.scrape_product_summary.assert_not_called()
+        create_ai_review.generate_review_insights.assert_not_called()
 
     def test_uses_auto_summary_when_scrape_empty(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=AGE_GATE_SUMMARY)
         driver = MagicMock()
-        create_ai_review.scrape_review_comments = MagicMock(return_value=[])
+        create_ai_review.scrape_review_comments = MagicMock(
+            return_value=[{"rating": 5, "text": "良い"}]
+        )
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
         create_ai_review.generate_review_insights = MagicMock(return_value=None)
@@ -216,7 +215,9 @@ class TestProcessContentAgeGate:
     def test_uses_title_and_genres_when_auto_summary_empty(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
-        create_ai_review.scrape_review_comments = MagicMock(return_value=[])
+        create_ai_review.scrape_review_comments = MagicMock(
+            return_value=[{"rating": 4, "text": "雰囲気が良い"}]
+        )
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
         create_ai_review.generate_review_insights = MagicMock(return_value=None)
@@ -239,7 +240,9 @@ class TestProcessContentAgeGate:
     def test_skips_ai_when_no_synopsis(self, create_ai_review):
         create_ai_review.get_saved_summary = MagicMock(return_value=None)
         driver = MagicMock()
-        create_ai_review.scrape_review_comments = MagicMock(return_value=[])
+        create_ai_review.scrape_review_comments = MagicMock(
+            return_value=[{"rating": 3, "text": "普通"}]
+        )
         create_ai_review.save_raw_reviews = MagicMock()
         create_ai_review.scrape_product_summary = MagicMock(return_value="")
         create_ai_review.generate_review_insights = MagicMock()
@@ -432,7 +435,7 @@ class TestCreateAiReviewCli:
             mock_date.today.return_value = date(2026, 8, 19)
             with patch.object(create_ai_review.supabase, "table", return_value=table):
                 rows = create_ai_review.fetch_recent_items()
-        assert [row["content_id"] for row in rows] == ["old-reviewed", "old-no-review"]
+        assert [row["content_id"] for row in rows] == ["old-reviewed"]
 
     def test_fetch_recent_items_drops_unchanged_zero_review(self, create_ai_review):
         from datetime import date
@@ -549,7 +552,7 @@ class TestCreateAiReviewCli:
     def test_needs_ai_review_refresh_matrix(self, create_ai_review):
         row0 = {"content_id": "a", "review_count": 0}
         row3 = {"content_id": "b", "review_count": 3}
-        assert create_ai_review.needs_ai_review_refresh(
+        assert not create_ai_review.needs_ai_review_refresh(
             row0, saved_summary_text=None, saved_review_count=0, has_score=False
         )
         assert not create_ai_review.needs_ai_review_refresh(

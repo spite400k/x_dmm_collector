@@ -243,10 +243,9 @@ def process_content(
         reviews = scrape_review_comments(
             product_url, driver, service_code, floor_code
         )
-        if not reviews:
-            logging.info(
-                "⚠ レビューなしでもあらすじとAI分析は行う: %s", content_id
-            )
+        if not any((r.get("text") or "").strip() for r in (reviews or [])):
+            logging.info("購入者コメントなし → AIレビューをスキップ: %s", content_id)
+            return
 
         saved_summary = usable_saved_summary(get_saved_summary(content_id))
         if len(reviews) > 0 and saved_summary and has_no_review_changed(content_id, reviews):
@@ -260,9 +259,6 @@ def process_content(
         if saved_summary:
             logging.info("既存あらすじ使用")
             html_summary = saved_summary
-            if len(reviews) == 0:
-                logging.info("レビュー０件、かつあらすじ保存済なのでスキップ")
-                return
         else:
             logging.info("初回あらすじ取得")
             if service_code == "doujin" and floor_code == "digital_doujin":

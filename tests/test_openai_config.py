@@ -16,6 +16,7 @@ def test_openai_model_default():
     with patch.dict(os.environ, env, clear=True):
         with patch("dotenv.load_dotenv", lambda *a, **k: None):
             mod = _reload_openai_config()
+            assert mod.DEFAULT_OPENAI_MODEL == "gpt-6-luna"
             assert mod.OPENAI_MODEL == mod.DEFAULT_OPENAI_MODEL
 
 

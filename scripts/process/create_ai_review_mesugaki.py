@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
   - OPENAI_API_KEY: AIレビュー時は必須（--raw-only 時は不要）
-  - OPENAI_MODEL: 任意（未設定時は gpt-5.6-luna）
+  - OPENAI_MODEL: 任意（未設定時は gpt-6-luna）
   - DMM_API_ID, DMM_AFFILIATE_ID: 任意（DMM API 利用時）
 
 実行例:

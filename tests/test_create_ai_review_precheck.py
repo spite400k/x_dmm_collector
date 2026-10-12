@@ -488,6 +488,62 @@ class TestCreateAiReviewCli:
                 rows = create_ai_review.fetch_recent_items()
         assert [row["content_id"] for row in rows] == ["new-reviews"]
 
+    def test_fetch_recent_items_updates_score_without_full_regen(self, create_ai_review):
+        from datetime import date
+
+        table = MagicMock()
+        table.select.return_value = table
+        table.eq.return_value = table
+        table.gte.return_value = table
+        table.order.return_value = table
+        table.range.return_value = table
+        table.in_.return_value = table
+        table.execute.side_effect = [
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "bump",
+                        "release_date": "2026-08-01",
+                        "review_count": 12,
+                        "review_average": 4.2,
+                    }
+                ]
+            ),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(data=[]),
+            MagicMock(
+                data=[
+                    {
+                        "content_id": "bump",
+                        "summary_text": "既存あらすじ",
+                        "review_count": 10,
+                        "review_digest": "要約あり",
+                        "content_score": 80,
+                        "emotion_score": 70,
+                        "attraction_score": 60,
+                        "genre_axis1_score": 75,
+                        "genre_axis2_score": 65,
+                        "avg_rating": 4.0,
+                    }
+                ]
+            ),
+            MagicMock(data=[{"content_id": "bump"}]),
+        ]
+        with patch("scripts.process.create_ai_review.date") as mock_date:
+            mock_date.today.return_value = date(2026, 8, 19)
+            with patch.object(create_ai_review.supabase, "table", return_value=table):
+                with patch.object(create_ai_review, "save_weekly_score") as save_score:
+                    rows = create_ai_review.fetch_recent_items()
+        assert rows == []
+        save_score.assert_called_once()
+        summary = save_score.call_args.args[0]
+        assert summary["content_id"] == "bump"
+        assert summary["review_count"] == 12
+        assert summary["avg_rating"] == 4.2
+        assert summary["content_score"] == 80
+
     def test_prioritize_reviewed_items(self, create_ai_review):
         rows = create_ai_review.prioritize_reviewed_items(
             [
@@ -572,6 +628,41 @@ class TestCreateAiReviewCli:
             row3,
             saved_summary_text="あらすじ",
             saved_review_count=1,
+            has_score=True,
+            saved_review_digest="要約あり",
+        )
+        assert not create_ai_review.needs_ai_review_refresh(
+            {"content_id": "small", "review_count": 12},
+            saved_summary_text="あらすじ",
+            saved_review_count=10,
+            has_score=True,
+            saved_review_digest="要約あり",
+        )
+        assert create_ai_review.needs_ai_review_refresh(
+            {"content_id": "delta", "review_count": 15},
+            saved_summary_text="あらすじ",
+            saved_review_count=10,
+            has_score=True,
+            saved_review_digest="要約あり",
+        )
+        assert create_ai_review.needs_ai_review_refresh(
+            {"content_id": "double", "review_count": 8},
+            saved_summary_text="あらすじ",
+            saved_review_count=4,
+            has_score=True,
+            saved_review_digest="要約あり",
+        )
+        assert create_ai_review.needs_score_only_refresh(
+            {"content_id": "small", "review_count": 12},
+            saved_summary_text="あらすじ",
+            saved_review_count=10,
+            has_score=True,
+            saved_review_digest="要約あり",
+        )
+        assert not create_ai_review.needs_score_only_refresh(
+            {"content_id": "delta", "review_count": 15},
+            saved_summary_text="あらすじ",
+            saved_review_count=10,
             has_score=True,
             saved_review_digest="要約あり",
         )

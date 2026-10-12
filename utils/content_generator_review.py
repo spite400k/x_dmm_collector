@@ -518,6 +518,29 @@ def calculate_total_score(scores: Dict) -> float:
     )
     return round(base_total, 1)
 
+# 全文再生成は、保存件数から 5 件以上、または 2 倍以上増えたときだけ行う
+REVIEW_REGEN_MIN_DELTA = 5
+
+
+def review_count_warrants_regeneration(saved_count, current_count) -> bool:
+    """保存済み件数に対し、AI 全文を作り直すだけの増加か。"""
+    try:
+        saved = int(saved_count or 0)
+    except (TypeError, ValueError):
+        saved = 0
+    try:
+        current = int(current_count or 0)
+    except (TypeError, ValueError):
+        current = 0
+    if current <= saved:
+        return False
+    if saved <= 0:
+        return True
+    if current - saved >= REVIEW_REGEN_MIN_DELTA:
+        return True
+    return current >= saved * 2
+
+
 def adjust_score(ai_score, review_avg, review_count):
     if review_avg is None:
         return ai_score

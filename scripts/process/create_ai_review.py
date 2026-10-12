@@ -29,6 +29,7 @@ from utils.content_generator_review import (
     generate_review_insights,
     usable_saved_summary,
     build_fallback_synopsis,
+    review_count_warrants_regeneration,
 )
 from utils.copy_framework_ab import (
     build_product_context_from_row,
@@ -128,7 +129,7 @@ def needs_ai_review_refresh(
     - 有効な AI あらすじが無い → 初回生成
     - review_digest が空 → 要埋め
     - レビューありで score_history 未作成 → 要処理
-    - items.review_count が summaries.review_count より大きい → レビュー増の可能性
+    - 件数が 5 件以上、または保存件数の 2 倍以上 → 全文再生成
     """
     saved = usable_saved_summary(saved_summary_text)
     db_count = normalize_review_count(row.get("review_count"))
@@ -141,7 +142,7 @@ def needs_ai_review_refresh(
         return True
     if not has_score:
         return True
-    return db_count > saved_count
+    return review_count_warrants_regeneration(saved_count, db_count)
 
 
 def _chunked(values: list[str], size: int = 50):
@@ -150,12 +151,16 @@ def _chunked(values: list[str], size: int = 50):
 
 
 def fetch_summary_states(content_ids: list[str]) -> dict[str, dict]:
-    """content_id → {summary_text, review_count, review_digest}。"""
+    """content_id → あらすじ・件数・digest・軸スコア。"""
     states: dict[str, dict] = {}
     for chunk in _chunked(content_ids):
         response = (
             supabase.table("dmm_ai_review_summaries")
-            .select("content_id, summary_text, review_count, review_digest")
+            .select(
+                "content_id, summary_text, review_count, review_digest, avg_rating, "
+                "content_score, emotion_score, attraction_score, "
+                "genre_axis1_score, genre_axis2_score"
+            )
             .in_("content_id", chunk)
             .execute()
         )
@@ -178,31 +183,100 @@ def fetch_score_history_ids(content_ids: list[str]) -> set[str]:
     return found
 
 
-def filter_ai_review_candidates(items: list[dict]) -> list[dict]:
-    """直近作品から、変更・未生成の見込みがあるものだけ残す。"""
+def needs_score_only_refresh(
+    row: dict,
+    *,
+    saved_summary_text,
+    saved_review_count,
+    has_score: bool,
+    saved_review_digest=None,
+) -> bool:
+    """全文再生成には足りない件数増。軸スコアは据え置き、final_score だけ更新する。"""
+    db_count = normalize_review_count(row.get("review_count"))
+    saved_count = normalize_review_count(saved_review_count)
+    if db_count <= saved_count:
+        return False
+    return not needs_ai_review_refresh(
+        row,
+        saved_summary_text=saved_summary_text,
+        saved_review_count=saved_review_count,
+        has_score=has_score,
+        saved_review_digest=saved_review_digest,
+    )
+
+
+def split_ai_review_items(
+    items: list[dict],
+) -> tuple[list[dict], list[dict], dict[str, dict]]:
+    """全文再生成候補と、点数だけ更新する候補に分ける。"""
     if not items:
-        return []
+        return [], [], {}
     content_ids = [row["content_id"] for row in items]
     summaries = fetch_summary_states(content_ids)
     scored = fetch_score_history_ids(content_ids)
-    kept: list[dict] = []
+    full: list[dict] = []
+    score_only: list[dict] = []
     for row in items:
         cid = row["content_id"]
         meta = summaries.get(cid) or {}
-        if needs_ai_review_refresh(
-            row,
+        kwargs = dict(
             saved_summary_text=meta.get("summary_text"),
             saved_review_count=meta.get("review_count"),
             has_score=cid in scored,
             saved_review_digest=meta.get("review_digest"),
-        ):
-            kept.append(row)
+        )
+        if needs_ai_review_refresh(row, **kwargs):
+            full.append(row)
+        elif needs_score_only_refresh(row, **kwargs):
+            score_only.append(row)
     logging.info(
-        "AIレビュー候補を絞り込み: %s → %s 件（未生成 / digest空 / レビュー増 / スコア未作成）",
+        "AIレビュー候補を絞り込み: %s → 全文 %s 件 / 点数のみ %s 件",
         len(items),
-        len(kept),
+        len(full),
+        len(score_only),
     )
-    return kept
+    return full, score_only, summaries
+
+
+def _coerce_rating(primary, fallback) -> float:
+    for value in (primary, fallback):
+        if value is None or value == "":
+            continue
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def refresh_score_only_items(items: list[dict], summaries: dict[str, dict]) -> None:
+    """OpenAI を呼ばず、保存済み軸スコアと最新件数で final_score を更新する。"""
+    for row in items:
+        cid = row["content_id"]
+        meta = summaries.get(cid) or {}
+        summary = {
+            "content_id": cid,
+            "content_score": meta.get("content_score") or 0,
+            "emotion_score": meta.get("emotion_score") or 0,
+            "attraction_score": meta.get("attraction_score") or 0,
+            "genre_axis1_score": meta.get("genre_axis1_score") or 0,
+            "genre_axis2_score": meta.get("genre_axis2_score") or 0,
+            "review_count": normalize_review_count(row.get("review_count")),
+            "avg_rating": _coerce_rating(row.get("review_average"), meta.get("avg_rating")),
+        }
+        logging.info(
+            "点数のみ更新: %s review_count %s → %s（全文再生成なし）",
+            cid,
+            normalize_review_count(meta.get("review_count")),
+            summary["review_count"],
+        )
+        save_weekly_score(summary)
+
+
+def filter_ai_review_candidates(items: list[dict]) -> list[dict]:
+    """直近作品から、全文再生成が必要なものだけ残す。"""
+    full, _, _ = split_ai_review_items(items)
+    return full
 
 
 # 既存のあらすじ取得
@@ -713,8 +787,8 @@ def save_weekly_score(summary: dict):
 # バッチ処理・メイン
 # ----------------------------------------------------
 ITEM_SELECT = (
-    "content_id, item_url, service, floor, review_count, release_date, auto_summary, "
-    "title, genres, price, actress, series, maker"
+    "content_id, item_url, service, floor, review_count, review_average, release_date, "
+    "auto_summary, title, genres, price, actress, series, maker"
 )
 
 
@@ -866,7 +940,7 @@ def prioritize_reviewed_items(items: list[dict]) -> list[dict]:
     return sorted(items, key=sort_key)
 
 
-def fetch_recent_items() -> list[dict]:
+def fetch_recent_items(*, sync_scores: bool = True) -> list[dict]:
     all_items = []
     page = 1000
     today = date.today()
@@ -907,7 +981,10 @@ def fetch_recent_items() -> list[dict]:
             all_items.extend(data)
             start += page
         logging.info("取得済み件数: %s 件", len(all_items))
-    return prioritize_reviewed_items(filter_ai_review_candidates(all_items))
+    full, score_only, summaries = split_ai_review_items(all_items)
+    if sync_scores:
+        refresh_score_only_items(score_only, summaries)
+    return prioritize_reviewed_items(full)
 
 
 def process_batch(batch_items, batch_index, total):
@@ -985,7 +1062,7 @@ def main(argv=None):
             floor=args.floor,
         )
     else:
-        all_items = fetch_recent_items()
+        all_items = fetch_recent_items(sync_scores=not args.dry_run)
         if args.limit is not None:
             all_items = all_items[: args.limit]
 

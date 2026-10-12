@@ -43,6 +43,7 @@ from utils.content_generator_review import (
     generate_review_insights,
     usable_saved_summary,
     build_fallback_synopsis,
+    review_count_warrants_regeneration,
 )
 from utils.copy_framework_ab import build_product_context_from_row, enrich_ai_summary_for_ab
 from selenium.common.exceptions import InvalidSessionIdException
@@ -75,17 +76,23 @@ SLEEP_BETWEEN_BATCH = 5
 
 
 def get_saved_summary(content_id):
+    return get_saved_ai_state(content_id).get("summary_text")
+
+
+def get_saved_ai_state(content_id) -> dict:
     result = execute_with_retry(
         lambda: supabase.table("dmm_ai_review_summaries")
-        .select("summary_text")
+        .select(
+            "summary_text, review_count, review_digest, avg_rating, "
+            "content_score, emotion_score, attraction_score, "
+            "genre_axis1_score, genre_axis2_score"
+        )
         .eq("content_id", content_id)
         .limit(1)
     )
-
     if result.data:
-        return result.data[0].get("summary_text")
-
-    return None
+        return result.data[0]
+    return {}
 
 
 def has_no_review_changed(content_id: str, new_reviews: list):
@@ -247,7 +254,47 @@ def process_content(
             logging.info("購入者コメントなし → AIレビューをスキップ: %s", content_id)
             return
 
-        saved_summary = usable_saved_summary(get_saved_summary(content_id))
+        saved_state = get_saved_ai_state(content_id)
+        saved_summary = usable_saved_summary(saved_state.get("summary_text"))
+        saved_count = int(saved_state.get("review_count") or 0)
+        current_count = len(reviews)
+        digest = str(saved_state.get("review_digest") or "").strip()
+        if (
+            saved_summary
+            and digest
+            and current_count > saved_count
+            and not review_count_warrants_regeneration(saved_count, current_count)
+        ):
+            ratings = []
+            for review in reviews:
+                try:
+                    ratings.append(float(review.get("rating")))
+                except (TypeError, ValueError):
+                    continue
+            avg_rating = (
+                round(sum(ratings) / len(ratings), 2)
+                if ratings
+                else float(saved_state.get("avg_rating") or 0)
+            )
+            summary = {
+                "content_id": content_id,
+                "content_score": saved_state.get("content_score") or 0,
+                "emotion_score": saved_state.get("emotion_score") or 0,
+                "attraction_score": saved_state.get("attraction_score") or 0,
+                "genre_axis1_score": saved_state.get("genre_axis1_score") or 0,
+                "genre_axis2_score": saved_state.get("genre_axis2_score") or 0,
+                "review_count": current_count,
+                "avg_rating": avg_rating,
+            }
+            logging.info(
+                "点数のみ更新: %s review_count %s → %s（全文再生成なし）",
+                content_id,
+                saved_count,
+                current_count,
+            )
+            save_weekly_score(summary)
+            return
+
         if len(reviews) > 0 and saved_summary and has_no_review_changed(content_id, reviews):
             logging.info("レビュー変更なし → スキップ")
             return

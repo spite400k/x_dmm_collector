@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
 """
-from datetime import date, timedelta
+from datetime import date
 import os
 from urllib.parse import urlparse
 from psycopg2.extras import RealDictCursor
@@ -22,7 +22,11 @@ from openai import OpenAI
 from db.postgres_connect import connect_from_env
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
-from utils.weekly_ranking_selection import fetch_weekly_ranking_rows
+from utils.weekly_ranking_selection import (
+    completed_iso_year_week,
+    fetch_weekly_ranking_rows,
+    previous_completed_iso_year_week,
+)
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
 
@@ -65,18 +69,11 @@ def get_connection():
 # ユーティリティ関数
 # ----------------------------------------------------
 def get_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    iso = target_date.isocalendar()
-    return iso.year, iso.week
+    return completed_iso_year_week(target_date)
 
 
 def get_previous_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    prev_date = target_date - timedelta(days=7)
-    iso = prev_date.isocalendar()
-    return iso.year, iso.week
+    return previous_completed_iso_year_week(target_date)
 
 
 def generate_ai_summary(service, floor, year, week, rows):

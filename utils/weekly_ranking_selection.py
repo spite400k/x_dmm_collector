@@ -10,6 +10,31 @@ RANKING_TOTAL = 20
 RANKING_MAX_RELEASED_BEFORE_FUTURE = 19
 RANKING_MAX_FUTURE = 1
 
+
+def _last_completed_sunday(target_date: date) -> date:
+    """進行中の週を除き、直前に終わった週の日曜を返す。
+
+    週は日曜に終わる。当日が日曜でもその週はまだ終わっていないものとして、
+    さらに前の日曜を返す。
+    """
+    days_since_week_end = target_date.isoweekday() % 7 or 7
+    return target_date - timedelta(days=days_since_week_end)
+
+
+def completed_iso_year_week(target_date: date | None = None) -> tuple[int, int]:
+    """ランキングに付ける年・週。進行中の週ではなく、終わった ISO 週。"""
+    target_date = target_date or date.today()
+    iso = _last_completed_sunday(target_date).isocalendar()
+    return iso.year, iso.week
+
+
+def previous_completed_iso_year_week(target_date: date | None = None) -> tuple[int, int]:
+    """終わった週のさらに前週。順位差の比較先。"""
+    target_date = target_date or date.today()
+    prev = _last_completed_sunday(target_date) - timedelta(days=7)
+    iso = prev.isocalendar()
+    return iso.year, iso.week
+
 _RELEASED_BASE_SQL = """
     SELECT
         c.content_id,

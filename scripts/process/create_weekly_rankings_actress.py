@@ -12,6 +12,10 @@ from openai import OpenAI
 from psycopg2.extras import RealDictCursor
 
 from db.postgres_connect import connect_from_env
+from utils.weekly_ranking_selection import (
+    completed_iso_year_week,
+    previous_completed_iso_year_week,
+)
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
@@ -32,18 +36,11 @@ def get_connection():
 
 
 def get_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    iso = target_date.isocalendar()
-    return iso.year, iso.week
+    return completed_iso_year_week(target_date)
 
 
 def get_previous_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    prev_date = target_date - timedelta(days=7)
-    iso = prev_date.isocalendar()
-    return iso.year, iso.week
+    return previous_completed_iso_year_week(target_date)
 
 
 def build_slug(year: int, week: int) -> str:

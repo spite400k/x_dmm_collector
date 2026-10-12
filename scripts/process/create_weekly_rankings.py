@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from datetime import date, timedelta
+from datetime import date
 import os
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -10,7 +10,11 @@ import logging
 from db.postgres_connect import connect_from_env
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
-from utils.weekly_ranking_selection import fetch_weekly_ranking_rows
+from utils.weekly_ranking_selection import (
+    completed_iso_year_week,
+    fetch_weekly_ranking_rows,
+    previous_completed_iso_year_week,
+)
 from openai import OpenAI  # ← ★追加
 
 load_dotenv()
@@ -36,18 +40,11 @@ def get_connection():
 # ユーティリティ関数
 #----------------------------------------------------
 def get_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    iso = target_date.isocalendar()
-    return iso.year, iso.week
+    return completed_iso_year_week(target_date)
 
-# 前週の年と週番号を取得
+# 比較対象（終わった週のさらに前週）
 def get_previous_year_week(target_date=None):
-    if target_date is None:
-        target_date = date.today()
-    prev_date = target_date - timedelta(days=7)
-    iso = prev_date.isocalendar()
-    return iso.year, iso.week
+    return previous_completed_iso_year_week(target_date)
 
 def generate_ai_summary(service, floor, year, week, rows):
     try:

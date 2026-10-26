@@ -251,6 +251,28 @@ python run.py --phase all --continue-on-error
 
 `.env` や OS 環境変数（`DMM_API_ID`、`SUPABASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL` 等）は bat では設定せず、実行環境側で用意する。
 
+### AI プロバイダ（OpenAI / Anthropic）
+
+作品レビュー・Safe 化・週次総評などの LLM 呼び出しは `openai_api/client.py` 経由。プロバイダは環境変数で切り替える。
+
+| 変数 | 説明 |
+|------|------|
+| `AI_PROVIDER` | `openai`（既定）または `anthropic`（`claude` も可） |
+| `OPENAI_API_KEY` | OpenAI 利用時に必須 |
+| `ANTHROPIC_API_KEY` | Anthropic 利用時に必須 |
+| `OPENAI_MODEL` / `AI_MODEL` | モデル名。`AI_MODEL` 優先。未設定時は OpenAI=`gpt-6-luna`、Anthropic=`claude-sonnet-4-5` |
+
+```bash
+# OpenAI（既定）
+export OPENAI_API_KEY=sk-...
+export OPENAI_MODEL=gpt-4.1-mini
+
+# Anthropic Claude
+export AI_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+export AI_MODEL=claude-sonnet-4-5
+```
+
 ---
 
 ## 旧 main_*.py との対応

@@ -18,3 +18,4 @@ dmm_samples/
 dmm_tachiyomi/
 temp/
 data/temp/
+.coverage

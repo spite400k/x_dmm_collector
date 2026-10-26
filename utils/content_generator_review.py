@@ -14,10 +14,9 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import InvalidSessionIdException, WebDriverException
-from openai import OpenAI
-
 from bs4 import BeautifulSoup
 
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from openai_api.usage import log_openai_usage
 from openai_api.content_generator import extract_synopsis_from_soup
@@ -30,7 +29,7 @@ from utils.chromedriver import chromedriver_path
 from utils.dmm_review_scraper import get_doujin_reviews, get_video_reviews
 from utils.screenshot import save_debug_files
 
-client = OpenAI()
+client = get_client()
 
 SUMMARY_MAX_CHARS_FOR_AI = 4000
 AGE_GATE_SYNOPSIS_MARKERS = (

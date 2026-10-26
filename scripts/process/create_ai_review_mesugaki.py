@@ -10,8 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
   - MESUGAKI_DB_PASSWORD: 必須（メスガキ DB の postgres パスワード）
   - MESUGAKI_DB_HOST: 任意（省略時は MESUGAKI_SUPABASE_URL から db.{ref}.supabase.co を生成）
   - MESUGAKI_DB_NAME / MESUGAKI_DB_USER / MESUGAKI_DB_PORT: 任意
-  - OPENAI_API_KEY: AIレビュー時は必須（--raw-only 時は不要）
-  - OPENAI_MODEL: 任意（未設定時は gpt-6-luna）
+  - OPENAI_API_KEY: AIレビュー時は必須（OpenAI 利用時。--raw-only 時は不要）
+  - ANTHROPIC_API_KEY: AIレビュー時は必須（AI_PROVIDER=anthropic のとき）
+  - AI_PROVIDER: 任意（openai / anthropic。未設定時は openai）
+  - OPENAI_MODEL または AI_MODEL: 任意（未設定時はプロバイダ既定）
   - DMM_API_ID, DMM_AFFILIATE_ID: 任意（DMM API 利用時）
 
 実行例:
@@ -26,11 +28,9 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 
-from openai import OpenAI
-
 import httpx
 from db.supabase_client_mesugaki import supabase
-from openai_api.config import OPENAI_MODEL
+from openai_api.config import OPENAI_MODEL, get_llm_api_key, llm_api_key_env_name
 from openai_api.usage import log_configured_model
 from utils.content_generator_review import (
     AGE_GATE_SYNOPSIS_MARKERS,
@@ -64,8 +64,6 @@ setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
@@ -626,7 +624,7 @@ def main():
         logging.info("=== [メスガキ] trn_dmm_items の AI レビュー更新を開始 ===")
         missing_env = [
             name
-            for name, val in (("OPENAI_API_KEY", OPENAI_API_KEY),)
+            for name, val in ((llm_api_key_env_name(), get_llm_api_key()),)
             if not val
         ]
         if missing_env:

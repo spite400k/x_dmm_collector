@@ -12,16 +12,15 @@ import logging
 from datetime import datetime
 
 import httpx
-from openai import OpenAI
 from db.supabase_client import supabase
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 from utils.supabase_retry import execute_with_retry
 
 setup_logger()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = get_client()
 
 BATCH_SIZE = 1000
 SLEEP_TIME = 1

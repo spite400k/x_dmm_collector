@@ -831,7 +831,7 @@ class TestCreateAiReviewCli:
         with pytest.raises(SystemExit) as exc:
             create_ai_review.main(["--content-id", "missing"])
         assert exc.value.code == 0
-        assert "OpenAI configured model=" in caplog.text
+        assert "LLM configured provider=" in caplog.text
         assert "default=" in caplog.text
 
 

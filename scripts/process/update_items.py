@@ -9,9 +9,9 @@ import time
 import logging
 from datetime import date, datetime, timezone
 import requests
-from openai import OpenAI  # ← ★追加
 
 from db.supabase_client import supabase
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from pykakasi import kakasi
 from utils.update_items_selection import (
@@ -34,8 +34,7 @@ setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ★追加
-client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
+client = get_client()
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5

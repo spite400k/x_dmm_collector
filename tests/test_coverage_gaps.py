@@ -909,6 +909,25 @@ class TestRunGaps:
         assert code == 124
         assert "partial" in out
 
+    def test_wait_for_script_process_reader_oserror(self, tmp_path: Path):
+        """タイムアウト後の pipe close などで reader が OSError になっても落ちない。"""
+
+        class BoomStdout:
+            def __iter__(self):
+                raise OSError("pipe closed")
+
+        proc = MagicMock()
+        proc.pid = 1004
+        proc.stdout = BoomStdout()
+        proc.wait.return_value = 0
+        log_path = tmp_path / "out_reader_err.log"
+        with run_mod.RotatingLogFile(log_path) as log_file:
+            out, code = run_mod.wait_for_script_process(
+                proc, log_file, echo=False, timeout_sec=5
+            )
+        assert code == 0
+        assert out == ""
+
     def test_run_script_uses_timeout_sec(self, tmp_path: Path):
         entry = {
             "path": "scripts/process/create_ai_review.py",

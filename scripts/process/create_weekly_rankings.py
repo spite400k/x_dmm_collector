@@ -8,6 +8,7 @@ from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import logging
 from db.postgres_connect import connect_from_env
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 from utils.weekly_ranking_selection import (
@@ -15,12 +16,10 @@ from utils.weekly_ranking_selection import (
     fetch_weekly_ranking_rows,
     previous_completed_iso_year_week,
 )
-from openai import OpenAI  # ← ★追加
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ★追加
-client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
+client = get_client()
 
 #----------------------------------------------------
 # 有効なバッチ

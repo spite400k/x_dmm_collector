@@ -17,9 +17,8 @@ from urllib.parse import urlparse
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import logging
-from openai import OpenAI
-
 from db.postgres_connect import connect_from_env
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 from utils.weekly_ranking_selection import (
@@ -32,8 +31,7 @@ DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = get_client()
 
 # ----------------------------------------------------
 # 設定

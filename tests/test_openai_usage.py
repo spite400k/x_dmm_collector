@@ -1,7 +1,10 @@
 """openai_api.usage のトークンログ。"""
 
+import importlib
 import logging
+import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from openai_api.usage import (
     _as_int,
@@ -95,5 +98,30 @@ class TestLogOpenaiUsage:
 def test_log_configured_model(caplog):
     caplog.set_level(logging.INFO)
     log_configured_model()
-    assert "OpenAI configured model=" in caplog.text
+    assert "LLM configured provider=" in caplog.text
+    assert "model=" in caplog.text
     assert "default=" in caplog.text
+
+
+def test_log_configured_model_anthropic_default(caplog):
+    caplog.set_level(logging.INFO)
+    try:
+        with patch.dict("os.environ", {"AI_PROVIDER": "anthropic"}, clear=False):
+            sys.modules.pop("openai_api.config", None)
+            sys.modules.pop("openai_api.usage", None)
+            import openai_api.config  # noqa: F401
+
+            importlib.reload(sys.modules["openai_api.config"])
+            usage = importlib.import_module("openai_api.usage")
+            usage = importlib.reload(usage)
+            usage.log_configured_model()
+        assert "provider=anthropic" in caplog.text
+        assert "claude-sonnet-4-5" in caplog.text
+    finally:
+        # 他テストが openai_api.config のプロバイダ状態に依存しないよう戻す
+        sys.modules.pop("openai_api.config", None)
+        sys.modules.pop("openai_api.usage", None)
+        import openai_api.config  # noqa: F401
+
+        importlib.reload(sys.modules["openai_api.config"])
+        importlib.reload(importlib.import_module("openai_api.usage"))

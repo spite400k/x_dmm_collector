@@ -8,7 +8,6 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from psycopg2.extras import RealDictCursor
 
 from db.postgres_connect import connect_from_env
@@ -16,13 +15,13 @@ from utils.weekly_ranking_selection import (
     completed_iso_year_week,
     previous_completed_iso_year_week,
 )
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = get_client()
 
 setup_logger()
 

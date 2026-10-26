@@ -18,10 +18,10 @@ import logging
 from typing import Any
 from datetime import date, datetime, timezone
 import requests
-from openai import OpenAI  # ← ★追加
 
 from db.supabase_client_mesugaki import supabase
-from openai_api.config import OPENAI_MODEL
+from openai_api.client import get_client
+from openai_api.config import OPENAI_MODEL, get_llm_api_key, llm_api_key_env_name
 from pykakasi import kakasi
 from utils.update_items_selection import (
     UPDATE_PROFILE_FULL,
@@ -43,8 +43,7 @@ setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ★追加
-client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
+client = get_client()
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5
@@ -626,7 +625,7 @@ def main(argv=None, *, today: date | None = None, now: datetime | None = None):
         for name, val in (
             ("DMM_API_ID", DMM_API_ID),
             ("DMM_AFFILIATE_ID", DMM_AFFILIATE_ID),
-            ("OPENAI_API_KEY", OPENAI_API_KEY),
+            (llm_api_key_env_name(), get_llm_api_key()),
         )
         if not val
     ]

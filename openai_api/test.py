@@ -1,9 +1,9 @@
 import os
 import json
 import logging
-from openai import OpenAI
 from dotenv import load_dotenv
 
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.logger import setup_logger
 
@@ -11,7 +11,7 @@ setup_logger()
 
 # 環境変数読み込み
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = get_client()
 
 # --- generate_content関数 ---
 def generate_content(item: dict) -> dict:

@@ -1,8 +1,13 @@
-"""OpenAI chat completion のトークン使用量ログ。"""
+"""LLM chat completion のトークン使用量ログ。"""
 import logging
 from typing import Any
 
-from openai_api.config import DEFAULT_OPENAI_MODEL, OPENAI_MODEL
+from openai_api.config import (
+    AI_PROVIDER,
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    OPENAI_MODEL,
+)
 
 
 def _get(obj: Any, name: str, default=None):
@@ -38,11 +43,17 @@ def _fmt(value: int | None) -> int | str:
 
 
 def log_configured_model() -> None:
-    """ジョブ開始時に、実際に使うモデルと既定値を1行出す。"""
+    """ジョブ開始時に、実際に使うプロバイダ・モデルと既定値を1行出す。"""
+    default = (
+        DEFAULT_ANTHROPIC_MODEL
+        if AI_PROVIDER == "anthropic"
+        else DEFAULT_OPENAI_MODEL
+    )
     logging.info(
-        "OpenAI configured model=%s default=%s",
+        "LLM configured provider=%s model=%s default=%s",
+        AI_PROVIDER,
         OPENAI_MODEL,
-        DEFAULT_OPENAI_MODEL,
+        default,
     )
 
 

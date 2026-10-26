@@ -1,19 +1,19 @@
 import os
 import logging
 import json
-from openai import OpenAI
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
 from selenium.webdriver.common.by import By
 
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from openai_api.usage import log_openai_usage
 from utils.chromedriver import create_chrome_driver, quit_chrome_driver
 
 # 環境変数読み込み
 load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = get_client()
 
 def get_page_source_with_age_verification(url: str) -> str:
     driver = create_chrome_driver(page_load_timeout=60)

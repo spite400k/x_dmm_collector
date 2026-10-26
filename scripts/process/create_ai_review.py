@@ -10,8 +10,6 @@ import sys
 import time
 import logging
 from datetime import date, datetime, timedelta
-from openai import OpenAI  # ← ★追加
-
 from db.supabase_client import supabase
 from openai_api.config import OPENAI_MODEL
 from openai_api.usage import log_configured_model
@@ -62,8 +60,6 @@ setup_logger()
 
 DMM_API_ID = os.getenv("DMM_API_ID")
 DMM_AFFILIATE_ID = os.getenv("DMM_AFFILIATE_ID")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # ★追加
-client = OpenAI(api_key=OPENAI_API_KEY)       # ★追加
 
 BATCH_SIZE = 100
 SLEEP_BETWEEN_BATCH = 5

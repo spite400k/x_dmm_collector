@@ -12,13 +12,12 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from openai import OpenAI
-
+from openai_api.client import get_client
 from openai_api.config import OPENAI_MODEL
 from utils.chromedriver import chromedriver_path
 from utils.screenshot import save_debug_files
 
-client = OpenAI()
+client = get_client()
 
 
 # =========================

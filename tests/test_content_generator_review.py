@@ -106,15 +106,13 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         call_kwargs = create_mock.call_args.kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
         messages = call_kwargs["messages"]
-        framework, portal_field = review_module.assigned_portal_copy_field("cid-1")
-        unused_field = (
-            "portal_copy_aidma" if portal_field == "portal_copy_beaf" else "portal_copy_beaf"
-        )
         assert messages[0]["content"] == review_module.build_review_insights_system_prompt(
-            framework
+            "aidma"
         )
         system_content = messages[0]["content"]
         assert "件数が少ないため" in system_content
+        assert "AIDMA" in system_content
+        assert "portal_copy_beaf" not in system_content
         assert "レビュー件数が少ない場合は過信しない" not in system_content
         user_content = messages[1]["content"]
         assert "あらすじテキスト" in user_content
@@ -123,12 +121,12 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         assert "タイプ1" not in user_content
         assert "ワーニング1" not in user_content
         assert '"reader_types": ["...", "..."]' in user_content
-        assert portal_field in user_content
-        assert unused_field not in user_content
-        assert unused_field not in system_content
+        assert "portal_copy_aidma" in user_content
+        assert "AIDMA法" in user_content
+        assert "portal_copy_beaf" not in user_content
         assert "review_digest" in result
-        assert result[portal_field] == ai_payload[portal_field]
-        assert unused_field not in result
+        assert result["portal_copy_aidma"] == "AIDMAコピー"
+        assert "portal_copy_beaf" not in result
         assert "total_score" in result
         assert (
             "OpenAI usage purpose=review_insights content_id=cid-1 "

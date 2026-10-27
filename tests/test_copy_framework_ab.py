@@ -12,39 +12,31 @@ def ab_module():
     return load_copy_framework_ab()
 
 
-def test_portal_copy_prompt_section_includes_only_assigned_framework(ab_module):
-    beaf = ab_module.portal_copy_prompt_section("beaf")
-    aidma = ab_module.portal_copy_prompt_section("aidma")
-    assert "portal_copy_beaf" in beaf
-    assert "portal_copy_aidma" not in beaf
-    assert "portal_copy_aidma" in aidma
-    assert "portal_copy_beaf" not in aidma
-    framework, field = ab_module.assigned_portal_copy_field("cid-1")
-    assert field == (
-        "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
-    )
+def test_portal_copy_prompt_section_is_always_aidma(ab_module):
+    for framework in ("beaf", "aidma"):
+        text = ab_module.portal_copy_prompt_section(framework)
+        assert "portal_copy_aidma" in text
+        assert "AIDMA" in text
+        assert "portal_copy_beaf" not in text
+        assert "BEAF" not in text
+    assigned, field = ab_module.assigned_portal_copy_field("cid-1")
+    assert assigned == "aidma"
+    assert field == "portal_copy_aidma"
 
 
-def test_assign_copy_framework_is_stable(ab_module):
-    assert ab_module.assign_copy_framework("abc123") == ab_module.assign_copy_framework("abc123")
-    assert ab_module.assign_copy_framework("abc123") in ("beaf", "aidma")
+def test_assign_copy_framework_is_always_aidma(ab_module):
+    assert ab_module.assign_copy_framework("abc123") == "aidma"
+    assert ab_module.assign_copy_framework("other-id") == "aidma"
 
 
-def test_pick_portal_copy_prefers_assigned_variant(ab_module):
-    content_id = "cid001"
-    framework = ab_module.assign_copy_framework(content_id)
-    beaf = "BEAF本文"
-    aidma = "AIDMA本文"
+def test_pick_portal_copy_prefers_aidma(ab_module):
     insight = {
-        "portal_copy_beaf": beaf,
-        "portal_copy_aidma": aidma,
+        "portal_copy_beaf": "BEAF本文",
+        "portal_copy_aidma": "AIDMA本文",
     }
-    picked_framework, picked_copy = ab_module.pick_portal_copy(insight, content_id)
-    assert picked_framework == framework
-    if framework == "beaf":
-        assert picked_copy == beaf
-    else:
-        assert picked_copy == aidma
+    picked_framework, picked_copy = ab_module.pick_portal_copy(insight, "cid001")
+    assert picked_framework == "aidma"
+    assert picked_copy == "AIDMA本文"
 
 
 def test_pick_portal_copy_falls_back_when_assigned_empty(ab_module):
@@ -57,11 +49,20 @@ def test_pick_portal_copy_falls_back_when_assigned_empty(ab_module):
     assert copy == "AIDMAのみ"
 
 
-def test_pick_portal_copy_uses_review_digest_when_portal_copies_missing(ab_module):
-    insight = {"review_digest": "分析要約"}
+def test_pick_portal_copy_ignores_beaf_and_uses_review_digest(ab_module):
+    insight = {
+        "portal_copy_beaf": "BEAF本文",
+        "review_digest": "分析要約",
+    }
     framework, copy = ab_module.pick_portal_copy(insight, "cid003")
-    assert framework in ("beaf", "aidma")
+    assert framework == "aidma"
     assert copy == "分析要約"
+
+
+def test_pick_portal_copy_returns_empty_when_texts_missing(ab_module):
+    framework, copy = ab_module.pick_portal_copy({}, "cid003b")
+    assert framework == "aidma"
+    assert copy == ""
 
 
 def test_enrich_ai_summary_for_ab(ab_module):
@@ -75,8 +76,8 @@ def test_enrich_ai_summary_for_ab(ab_module):
     enriched = ab_module.enrich_ai_summary_for_ab(summary, insight, content_id)
     assert enriched["portal_copy_beaf"] == "BEAF"
     assert enriched["portal_copy_aidma"] == "AIDMA"
-    assert enriched["copy_framework"] in ("beaf", "aidma")
-    assert enriched["portal_copy"] in ("BEAF", "AIDMA")
+    assert enriched["copy_framework"] == "aidma"
+    assert enriched["portal_copy"] == "AIDMA"
     assert enriched["prompt_version"] == ab_module.PROMPT_VERSION
 
 

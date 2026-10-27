@@ -672,9 +672,10 @@ def getGenreConfig(genre_type):
     return switcher.get(genre_type, default_config)
 
 
-def build_review_insights_system_prompt(framework: str) -> str:
-    """採点ルールと、割当済み Portal コピーの書き方だけを含む system プロンプト。"""
-    field = "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
+def build_review_insights_system_prompt(framework: str = "aidma") -> str:
+    """採点ルールと AIDMA の Portal コピーの書き方を含む system プロンプト。"""
+    del framework
+    field = "portal_copy_aidma"
     return f"""
 あなたはエンタメ作品のレビュー編集者兼スコアアナリストです。
 
@@ -686,13 +687,14 @@ def build_review_insights_system_prompt(framework: str) -> str:
 ・文体ルールは採点フィールドには適用しない
 
 【テキストフィールド】review_digest, {field}, reader_types, warning_points
-review_digest: 350〜450文字。作品の魅力を感情豊かに要約する（分析・スコア用。Portal コピーとは別）。
+review_digest: 350〜450文字。AIDMA法（Attention→Interest→Desire→Memory→Action）で作品の魅力を要約する（分析・スコア用。Portal コピーとは別）。
+  冒頭フック → 興味 → 欲求 → 覚えやすい一言 → 次に取る行動。
   体言止め・評論調・論文調は禁止。「あなた」と語りかけてよい（「読者」は使わない）。
-{field}: FANZA Portal 向け紹介文（280〜380文字）。下記ルールを適用。
+{field}: FANZA Portal 向け紹介文（280〜380文字）。下記 AIDMA ルールを適用。
 reader_types: この作品に合う読者像を2〜3件、具体的な短文で列挙する。
 warning_points: 購入前に知っておくべき注意点を1〜3件、具体的な短文で列挙する。
 
-{portal_copy_prompt_section(framework)}
+{portal_copy_prompt_section()}
 
 【共通禁止】
 ・レビュー原文の出力・引用
@@ -738,8 +740,8 @@ def generate_review_insights(
 以下の作品情報を分析し、JSON を出力してください。
 
 【各フィールドの内容】
-- review_digest: 作品の魅力を要約（テキストフィールドのルールを適用）
-- {portal_field}: Portal 紹介文（280〜380文字。割当フレームワークのルールを適用）
+- review_digest: AIDMA法で作品の魅力を要約（テキストフィールドのルールを適用）
+- {portal_field}: Portal 紹介文（280〜380文字。AIDMA法のルールを適用）
 - content_score: 内容力（採点ルールを適用）
 - emotion_score: 感情インパクト（採点ルールを適用）
 - attraction_score: 魅力（採点ルールを適用）
@@ -792,10 +794,7 @@ def generate_review_insights(
 
         import json
         result = json.loads(response.choices[0].message.content)
-        unused_portal_field = (
-            "portal_copy_aidma" if portal_field == "portal_copy_beaf" else "portal_copy_beaf"
-        )
-        result.pop(unused_portal_field, None)
+        result.pop("portal_copy_beaf", None)
 
         # =========================
         # 🔥 レビュー補正適用

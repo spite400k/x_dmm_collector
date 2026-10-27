@@ -1,31 +1,22 @@
-"""FANZA Portal 向け BEAF / AIDMA コピーの A/B テスト支援。"""
+"""FANZA Portal 向けコピー。紹介文は AIDMA に統一する。"""
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any, Mapping
 
-PROMPT_VERSION = "v5_assigned_portal"
+PROMPT_VERSION = "v6_aidma_only"
 
 
-def portal_copy_prompt_section(framework: str) -> str:
-    """割当済みの Portal コピーだけを書く指示。"""
-    if framework == "aidma":
-        body = """
+def portal_copy_prompt_section(framework: str = "aidma") -> str:
+    """Portal コピーは常に AIDMA で書く。framework は呼び出し互換のため残す。"""
+    del framework
+    field_name = "portal_copy_aidma"
+    body = """
 ■ portal_copy_aidma（AIDMA法: Attention→Interest→Desire→Memory→Action）
 ・280〜380文字
 ・冒頭フック → 興味 → 欲求 → 覚えやすい一言 → FANZA公式で確認を促すCTA
 ・ランキング・発見・クリック向きトーン
 """.strip()
-        field_name = "portal_copy_aidma"
-    else:
-        body = """
-■ portal_copy_beaf（BEAF法: Benefit→Evidence→Advantage→Feature）
-・280〜380文字
-・便益（誰向け・何が得か）→ 根拠（レビュー傾向・具体魅力）→ 差別化 → スペック（価格・出演・ジャンル）
-・比較検討向きの説明的トーン
-""".strip()
-        field_name = "portal_copy_beaf"
     return f"""
 【FANZA Portal 向けコピー】
 あらすじ・レビュー・作品情報のみを根拠に、{field_name} だけを生成する。
@@ -39,16 +30,15 @@ def portal_copy_prompt_section(framework: str) -> str:
 
 
 def assigned_portal_copy_field(content_id: str | None) -> tuple[str, str]:
-    """content_id の割当と、生成する JSON フィールド名。"""
-    framework = assign_copy_framework((content_id or "").strip())
-    field = "portal_copy_beaf" if framework == "beaf" else "portal_copy_aidma"
-    return framework, field
+    """生成する Portal コピー。常に AIDMA。"""
+    del content_id
+    return "aidma", "portal_copy_aidma"
 
 
 def assign_copy_framework(content_id: str) -> str:
-    """content_id から安定した 50/50 割当（beaf / aidma）。"""
-    digest = hashlib.md5(content_id.encode("utf-8")).hexdigest()
-    return "beaf" if int(digest, 16) % 2 == 0 else "aidma"
+    """掲載フレームワーク。常に aidma。content_id は呼び出し互換のため残す。"""
+    del content_id
+    return "aidma"
 
 
 def _format_product_context(product: Mapping[str, Any] | None) -> str:
@@ -109,23 +99,13 @@ def format_product_context_block(product: Mapping[str, Any] | None) -> str:
 
 
 def pick_portal_copy(insight: Mapping[str, Any], content_id: str) -> tuple[str, str]:
-    """割当フレームワークと掲載用コピー（portal_copy）を返す。"""
-    beaf = (insight.get("portal_copy_beaf") or "").strip()
+    """掲載用コピーは常に AIDMA。本文が無ければ review_digest。"""
+    del content_id
     aidma = (insight.get("portal_copy_aidma") or "").strip()
-    framework = assign_copy_framework(content_id)
-
-    if not beaf and not aidma:
-        fallback = (insight.get("review_digest") or "").strip()
-        return framework, fallback
-
-    if framework == "beaf":
-        if beaf:
-            return "beaf", beaf
-        return "aidma", aidma
-
     if aidma:
         return "aidma", aidma
-    return "beaf", beaf
+    fallback = (insight.get("review_digest") or "").strip()
+    return "aidma", fallback
 
 
 def build_product_context_from_row(

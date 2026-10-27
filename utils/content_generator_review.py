@@ -782,7 +782,8 @@ def generate_review_insights(
                 {"role": "user", "content": prompt}
             ],
             response_format={"type": "json_object"},
-            max_completion_tokens=2000,
+            # Claude は OpenAI より冗長になりやすく、2000 だと JSON が途中切れする
+            max_completion_tokens=4096,
         )
         log_openai_usage(
             response,
@@ -791,7 +792,17 @@ def generate_review_insights(
         )
 
         import json
-        result = json.loads(response.choices[0].message.content)
+        raw = response.choices[0].message.content or ""
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logging.warning(
+                "[AI Error] JSON parse failed content_id=%s err=%s preview=%r",
+                content_id,
+                e,
+                raw[:240],
+            )
+            raise
         unused_portal_field = (
             "portal_copy_aidma" if portal_field == "portal_copy_beaf" else "portal_copy_beaf"
         )

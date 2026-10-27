@@ -681,18 +681,20 @@ def build_review_insights_system_prompt(framework: str = "aidma") -> str:
 
 【採点フィールド】content_score, emotion_score, attraction_score, genre_axis1_score, genre_axis2_score
 ・各項目100点満点の整数（0〜100）のみ出力
-・あらすじとレビューの内容のみを根拠に、客観的かつ厳しめに採点
-・市場平均は75点前後を基準とする
-・採点時は与えられたレビュー内容の確度を踏まえ、保守的に判断する（件数への言及は不要）
+・あらすじとレビューの内容のみを根拠に、魅力が伝わるよう採点する
+・レビューで繰り返し好評な点は、その強さを点数に反映する
+・複数レビューで共通する明確な不満があるときだけ、その分を控えめに反映する（件数への言及は不要）
+・市場平均や減点を前提にしない
 ・文体ルールは採点フィールドには適用しない
 
 【テキストフィールド】review_digest, {field}, reader_types, warning_points
 review_digest: 350〜450文字。AIDMA法（Attention→Interest→Desire→Memory→Action）で作品の魅力を要約する（分析・スコア用。Portal コピーとは別）。
   冒頭フック → 興味 → 欲求 → 覚えやすい一言 → 次に取る行動。
+  好評点を先に書き、欠点の列挙で締めない。
   体言止め・評論調・論文調は禁止。「あなた」と語りかけてよい（「読者」は使わない）。
 {field}: FANZA Portal 向け紹介文（280〜380文字）。下記 AIDMA ルールを適用。
 reader_types: この作品に合う読者像を2〜3件、具体的な短文で列挙する。
-warning_points: 購入前に知っておくべき注意点を1〜3件、具体的な短文で列挙する。
+warning_points: 購入判断に必要な具体的な条件だけ。レビューに明確な不満や前提があるときのみ0〜2件。なければ空配列。軽い好みの差や、レビューにない欠点は書かない。
 
 {portal_copy_prompt_section()}
 
@@ -748,7 +750,7 @@ def generate_review_insights(
 - genre_axis1_score: {axis1}（{score_type}型のジャンル特性を反映して採点）
 - genre_axis2_score: {axis2}（{score_type}型のジャンル特性を反映して採点）
 - reader_types: この作品に合う読者像を2〜3件（テキストフィールドのルールを適用）
-- warning_points: 購入前の注意点を1〜3件（テキストフィールドのルールを適用）
+- warning_points: レビューに明確な注意点があるときだけ0〜2件。なければ空配列（テキストフィールドのルールを適用）
 
 【作品メタ（Portal コピー用）】
 {product_block}
@@ -773,7 +775,7 @@ def generate_review_insights(
   "genre_axis1_score": 0,
   "genre_axis2_score": 0,
   "reader_types": ["...", "..."],
-  "warning_points": ["..."]
+  "warning_points": []
 }}
 """
     try:

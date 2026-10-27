@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-PROMPT_VERSION = "v6_aidma_only"
+PROMPT_VERSION = "v7_favorable_review"
 
 
 def portal_copy_prompt_section(framework: str = "aidma") -> str:

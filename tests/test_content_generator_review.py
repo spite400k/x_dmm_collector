@@ -112,6 +112,10 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         system_content = messages[0]["content"]
         assert "件数が少ないため" in system_content
         assert "AIDMA" in system_content
+        assert "厳しめ" not in system_content
+        assert "75点" not in system_content
+        assert "1〜3件" not in system_content
+        assert "なければ空配列" in system_content
         assert "portal_copy_beaf" not in system_content
         assert "レビュー件数が少ない場合は過信しない" not in system_content
         user_content = messages[1]["content"]
@@ -123,6 +127,8 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         assert '"reader_types": ["...", "..."]' in user_content
         assert "portal_copy_aidma" in user_content
         assert "AIDMA法" in user_content
+        assert "なければ空配列" in user_content
+        assert '"warning_points": []' in user_content
         assert "portal_copy_beaf" not in user_content
         assert "review_digest" in result
         assert result["portal_copy_aidma"] == "AIDMAコピー"

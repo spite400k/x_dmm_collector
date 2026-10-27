@@ -180,15 +180,27 @@ def _build_cast_info(actress_names, director_names) -> str:
     return cast_info
 
 
-def _parse_auto_content_response(content: str) -> dict:
-    content = (content or "").strip()
-    if "```" in content:
-        json_str = content.split("```")[1]
-        if json_str.startswith("json"):
-            json_str = json_str[4:].strip()
-    else:
-        json_str = content
+def _extract_json_object(content: str) -> str:
+    """fence / 前後説明文があっても最初の JSON オブジェクトを取り出す。"""
+    text = (content or "").strip()
+    if not text:
+        return ""
+    if "```" in text:
+        fenced = text.split("```", 2)[1]
+        if fenced.startswith("json"):
+            fenced = fenced[4:]
+        text = fenced.strip()
+    if text.startswith("{") and text.endswith("}"):
+        return text
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        return text[start : end + 1]
+    return text
 
+
+def _parse_auto_content_response(content: str) -> dict:
+    json_str = _extract_json_object(content)
     data = json.loads(json_str)
     for key in ["auto_comment", "auto_summary", "auto_point"]:
         if key in data and isinstance(data[key], str):
@@ -205,10 +217,19 @@ def _call_auto_content_openai(
     try:
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Respond with a single valid JSON object only.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_completion_tokens=4096,
         )
         log_openai_usage(response, purpose=purpose, content_id=content_id)
-        return _parse_auto_content_response(response.choices[0].message.content)
+        raw = response.choices[0].message.content or ""
+        return _parse_auto_content_response(raw)
     except Exception as e:
         logging.error("[OpenAI ERROR] %s", str(e))
         return dict(_EMPTY_AUTO_CONTENT)

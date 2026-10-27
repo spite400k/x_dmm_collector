@@ -117,15 +117,24 @@ def _create_openai(
 
 
 def _anthropic_text(response: Any) -> str:
+    content = getattr(response, "content", None)
+    # SDK 以外の経路やモックで str が来る場合、文字単位ループを防ぐ
+    if isinstance(content, str):
+        return content
     parts: list[str] = []
-    for block in getattr(response, "content", None) or []:
+    for block in content or []:
+        if isinstance(block, str):
+            if block:
+                parts.append(block)
+            continue
         block_type = getattr(block, "type", None)
         if block_type is None and isinstance(block, dict):
             block_type = block.get("type")
-            text = block.get("text", "")
+            text = block.get("text", "") or ""
         else:
             text = getattr(block, "text", "") or ""
-        if block_type == "text" and text:
+        # text ブロック優先。type 未設定でも text があれば拾う
+        if text and block_type in (None, "text"):
             parts.append(text)
     return "".join(parts)
 

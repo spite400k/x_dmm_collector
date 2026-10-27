@@ -56,6 +56,20 @@ class TestSelectReviewExcerpts:
         assert len(excerpts[0]["text"]) == 250
 
 
+class TestExtractJsonObject:
+    def test_plain_and_fenced_and_prefixed(self, content_generator):
+        assert content_generator._extract_json_object('{"a":1}') == '{"a":1}'
+        assert (
+            content_generator._extract_json_object('```json\n{"a": 2}\n```')
+            == '{"a": 2}'
+        )
+        assert (
+            content_generator._extract_json_object('結果:\n{"a": 3}\n以上')
+            == '{"a": 3}'
+        )
+        assert content_generator._extract_json_object("   ") == ""
+
+
 class TestGenerateContentFromReviews:
     def test_returns_empty_without_excerpts(self, content_generator):
         result = content_generator.generate_content_from_reviews(reviews=[])
@@ -86,9 +100,11 @@ class TestGenerateContentFromReviews:
         assert result["auto_comment"] == "余韻が残る。"
         assert result["auto_summary"] == "感想本文"
         mock_client.chat.completions.create.assert_called_once()
-        prompt = mock_client.chat.completions.create.call_args.kwargs["messages"][0][
-            "content"
-        ]
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+        messages = call_kwargs["messages"]
+        assert messages[0]["role"] == "system"
+        prompt = messages[1]["content"]
         assert "演技が良かった" in prompt
         assert "購入者コメント" in prompt
         usage_mock.assert_called_once()

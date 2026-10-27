@@ -43,6 +43,22 @@ def anthropic_client_mod():
     mod.reset_clients()
 
 
+class TestAnthropicTextExtraction:
+    def test_string_content(self, openai_client_mod):
+        response = SimpleNamespace(content='{"ok":true}')
+        assert openai_client_mod._anthropic_text(response) == '{"ok":true}'
+
+    def test_string_blocks_in_list(self, openai_client_mod):
+        response = SimpleNamespace(content=["hello", "", " ", "world"])
+        assert openai_client_mod._anthropic_text(response) == "hello world"
+
+    def test_typeless_block_with_text(self, openai_client_mod):
+        response = SimpleNamespace(
+            content=[SimpleNamespace(type=None, text="plain")]
+        )
+        assert openai_client_mod._anthropic_text(response) == "plain"
+
+
 class TestStripJsonFence:
     def test_plain_json(self, openai_client_mod):
         assert openai_client_mod._strip_json_fence('{"a":1}') == '{"a":1}'

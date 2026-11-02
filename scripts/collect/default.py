@@ -17,7 +17,7 @@ from scripts.collect._filter import (
 
 setup_logger()
 
-hits_per_request = 100
+hits_per_request = 20
 COLLECT_SORTS = ("rank", "date", "review")
 
 

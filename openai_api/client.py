@@ -33,6 +33,13 @@ def _strip_json_fence(text: str) -> str:
     return json_str.strip()
 
 
+def _as_stop_reason(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
 def _openai_shaped_response(
     *,
     model: str | None,
@@ -41,6 +48,7 @@ def _openai_shaped_response(
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
     cached_tokens: int | None = None,
+    stop_reason: str | None = None,
 ) -> SimpleNamespace:
     usage = SimpleNamespace(
         prompt_tokens=prompt_tokens,
@@ -50,7 +58,12 @@ def _openai_shaped_response(
     )
     message = SimpleNamespace(content=content)
     choice = SimpleNamespace(message=message)
-    return SimpleNamespace(model=model, usage=usage, choices=[choice])
+    return SimpleNamespace(
+        model=model,
+        usage=usage,
+        choices=[choice],
+        stop_reason=stop_reason,
+    )
 
 
 def _split_system_messages(
@@ -175,6 +188,7 @@ def _create_anthropic(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         cached_tokens=cached_tokens,
+        stop_reason=_as_stop_reason(getattr(response, "stop_reason", None)),
     )
 
 

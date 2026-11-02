@@ -137,6 +137,9 @@ MAX_REVIEW_EXCERPTS = 8
 REVIEW_TEXT_TRUNCATE = 250
 
 _EMPTY_AUTO_CONTENT = {"auto_comment": "", "auto_summary": "", "auto_point": ""}
+_AUTO_CONTENT_MAX_TOKENS = 8192
+_AUTO_CONTENT_ATTEMPTS = 2
+_SNIPPET_CHARS = 200
 
 _AUTO_CONTENT_STYLE_BLOCK = """
 ### 🎯 出力項目
@@ -180,20 +183,50 @@ def _build_cast_info(actress_names, director_names) -> str:
     return cast_info
 
 
-def _parse_auto_content_response(content: str) -> dict:
-    content = (content or "").strip()
-    if "```" in content:
-        json_str = content.split("```")[1]
-        if json_str.startswith("json"):
-            json_str = json_str[4:].strip()
-    else:
-        json_str = content
+def _extract_json_object(content: str | None) -> str:
+    """説明文やコードフェンスを除き、最初の JSON オブジェクトを取り出す。"""
+    text = (content or "").strip()
+    if "```" in text:
+        fenced = text.split("```", 2)[1]
+        if fenced.lstrip().startswith("json"):
+            fenced = fenced.lstrip()[4:]
+        fenced = fenced.strip()
+        if fenced:
+            text = fenced
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        return text
+    return text[start : end + 1]
 
-    data = json.loads(json_str)
+
+def _parse_auto_content_response(content: str) -> dict:
+    data = json.loads(_extract_json_object(content))
+    if not isinstance(data, dict):
+        raise ValueError("auto content JSON is not an object")
     for key in ["auto_comment", "auto_summary", "auto_point"]:
         if key in data and isinstance(data[key], str):
             data[key] = data[key].replace("\\n", "\n")
     return data
+
+
+def _response_stop_reason(response) -> str:
+    if response is None:
+        return "-"
+    reason = getattr(response, "stop_reason", None)
+    if isinstance(reason, str) and reason.strip():
+        return reason.strip()
+    choices = getattr(response, "choices", None) or []
+    if choices:
+        finish = getattr(choices[0], "finish_reason", None)
+        if isinstance(finish, str) and finish.strip():
+            return finish.strip()
+    return "-"
+
+
+def _content_snippet(content) -> str:
+    text = content if isinstance(content, str) else ""
+    return text.replace("\n", "\\n")[:_SNIPPET_CHARS]
 
 
 def _call_auto_content_openai(
@@ -202,16 +235,41 @@ def _call_auto_content_openai(
     purpose: str,
     content_id: str | None = None,
 ) -> dict:
-    try:
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        log_openai_usage(response, purpose=purpose, content_id=content_id)
-        return _parse_auto_content_response(response.choices[0].message.content)
-    except Exception as e:
-        logging.error("[OpenAI ERROR] %s", str(e))
-        return dict(_EMPTY_AUTO_CONTENT)
+    last_error: Exception | None = None
+    for attempt in range(1, _AUTO_CONTENT_ATTEMPTS + 1):
+        response = None
+        content = ""
+        try:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=_AUTO_CONTENT_MAX_TOKENS,
+                response_format={"type": "json_object"},
+            )
+            log_openai_usage(response, purpose=purpose, content_id=content_id)
+            content = response.choices[0].message.content
+            return _parse_auto_content_response(content)
+        except Exception as e:
+            last_error = e
+            logging.warning(
+                "[OpenAI ERROR] purpose=%s content_id=%s attempt=%s/%s "
+                "stop_reason=%s error=%s snippet=%r",
+                purpose,
+                content_id or "-",
+                attempt,
+                _AUTO_CONTENT_ATTEMPTS,
+                _response_stop_reason(response),
+                e,
+                _content_snippet(content),
+            )
+    logging.error(
+        "[OpenAI ERROR] purpose=%s content_id=%s gave up after %s attempts: %s",
+        purpose,
+        content_id or "-",
+        _AUTO_CONTENT_ATTEMPTS,
+        last_error,
+    )
+    return dict(_EMPTY_AUTO_CONTENT)
 
 
 def select_review_excerpts(

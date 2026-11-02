@@ -164,6 +164,7 @@ class TestAnthropicCreate:
         assert result.usage.completion_tokens == 5
         assert result.usage.total_tokens == 15
         assert result.usage.prompt_tokens_details.cached_tokens == 2
+        assert result.stop_reason is None
 
     def test_empty_messages_gets_placeholder_and_default_max_tokens(
         self, anthropic_client_mod
@@ -202,6 +203,7 @@ class TestAnthropicCreate:
         assert result.model == "explicit-model"
         assert result.usage.total_tokens is None
         assert result.choices[0].message.content == ""
+        assert result.stop_reason is None
 
     def test_skips_non_text_and_empty_blocks(self, anthropic_client_mod):
         mock_sdk = MagicMock()
@@ -221,6 +223,34 @@ class TestAnthropicCreate:
                 messages=[{"role": "user", "content": "x"}],
             )
         assert result.choices[0].message.content == "kept"
+
+    def test_copies_stop_reason(self, anthropic_client_mod):
+        mock_sdk = MagicMock()
+
+        def _response(reason):
+            return SimpleNamespace(
+                model="claude-test",
+                content=[{"type": "text", "text": "x"}],
+                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+                stop_reason=reason,
+            )
+
+        mock_sdk.messages.create.side_effect = [
+            _response("end_turn"),
+            _response("  "),
+            _response(12),
+        ]
+        with patch.object(
+            anthropic_client_mod, "_get_anthropic_client", return_value=mock_sdk
+        ):
+            client = anthropic_client_mod.get_client()
+            reasons = [
+                client.chat.completions.create(
+                    messages=[{"role": "user", "content": "x"}]
+                ).stop_reason
+                for _ in range(3)
+            ]
+        assert reasons == ["end_turn", None, None]
 
 
 class TestLazyClients:

@@ -67,6 +67,9 @@ def test_generate_actress_ai_profile_success(review_module):
         messages = call_kwargs["messages"]
         assert messages[0]["role"] == "system"
         assert messages[0]["content"] == review_module.ACTRESS_SYSTEM_PROMPT
+        assert "執筆原則（意見 × ユーザーファースト）" in messages[0]["content"]
+        assert "誰に」「何が」「どう刺さるか" in messages[0]["content"]
+        assert "知れて嬉しい具体情報か" in messages[0]["content"]
         assert "名前: テスト" in messages[1]["content"]
         assert "SEO" not in messages[1]["content"]
 

@@ -27,8 +27,8 @@ from utils.weekly_ranking_selection import (
     previous_completed_iso_year_week,
 )
 
-# メスガキは候補が少ないため、通常（90日）より長い発売日窓を使う
-MESUGAKI_RANKING_RELEASE_WINDOW_DAYS = 180
+# メスガキは候補が少ないため、発売日下限なし（配信済み全件）を対象にする
+MESUGAKI_RANKING_RELEASE_WINDOW_DAYS = 0
 
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
 

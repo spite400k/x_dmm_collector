@@ -35,7 +35,7 @@ def previous_completed_iso_year_week(target_date: date | None = None) -> tuple[i
     iso = prev.isocalendar()
     return iso.year, iso.week
 
-_RELEASED_BASE_SQL = """
+_RELEASED_SELECT_SQL = """
     SELECT
         c.content_id,
         c.title,
@@ -52,7 +52,6 @@ _RELEASED_BASE_SQL = """
     ) s ON true
     WHERE c.service = %s
       AND c.floor = %s
-      AND c.release_date::date >= %s::date
       AND c.release_date::date <= %s::date
       AND s.final_score > 0
       AND s.review_count > 0
@@ -102,13 +101,17 @@ def _fetch_released_rows(
     cur,
     service: str,
     floor: str,
-    release_min: str,
     release_max: str,
     limit: int,
     exclude_ids: set[str],
+    *,
+    release_min: str | None = None,
 ) -> list[dict[str, Any]]:
-    sql = _RELEASED_BASE_SQL
-    params: list[Any] = [service, floor, release_min, release_max]
+    sql = _RELEASED_SELECT_SQL
+    params: list[Any] = [service, floor, release_max]
+    if release_min is not None:
+        sql += " AND c.release_date::date >= %s::date"
+        params.append(release_min)
     if exclude_ids:
         sql += " AND NOT (c.content_id = ANY(%s))"
         params.append(list(exclude_ids))
@@ -149,24 +152,34 @@ def fetch_weekly_ranking_rows(
     today: date | None = None,
     release_window_days: int | None = None,
 ) -> list[dict[str, Any]]:
-    """配信済み（評価あり）を優先し、未来作品は最大1件だけ追加する。"""
+    """配信済み（評価あり）を優先し、未来作品は最大1件だけ追加する。
+
+    release_window_days:
+      - None: RANKING_RELEASE_WINDOW_DAYS を使用
+      - 0 以下: 発売日下限なし（配信済み全件を対象）
+      - 正の整数: 直近 N 日
+    """
     today = today or date.today()
     window_days = (
         RANKING_RELEASE_WINDOW_DAYS
         if release_window_days is None
         else release_window_days
     )
-    release_min = (today - timedelta(days=window_days)).isoformat()
     release_max = today.isoformat()
+    release_min = (
+        None
+        if window_days <= 0
+        else (today - timedelta(days=window_days)).isoformat()
+    )
 
     released_primary = _fetch_released_rows(
         cur,
         service,
         floor,
-        release_min,
         release_max,
         RANKING_MAX_RELEASED_BEFORE_FUTURE,
         exclude_ids=set(),
+        release_min=release_min,
     )
     selected_ids = {row["content_id"] for row in released_primary}
 
@@ -180,10 +193,10 @@ def fetch_weekly_ranking_rows(
             cur,
             service,
             floor,
-            release_min,
             release_max,
             remaining,
             exclude_ids=selected_ids,
+            release_min=release_min,
         )
         rows.extend(backfill)
 

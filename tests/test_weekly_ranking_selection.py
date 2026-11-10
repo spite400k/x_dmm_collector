@@ -71,7 +71,7 @@ def test_fetch_weekly_ranking_rows_uses_custom_release_window(monkeypatch):
 
     captured = {}
 
-    def _fake_released(cur, service, floor, release_min, release_max, limit, exclude_ids):
+    def _fake_released(cur, service, floor, release_max, limit, exclude_ids, release_min=None):
         captured["release_min"] = release_min
         captured["release_max"] = release_max
         return []
@@ -91,6 +91,33 @@ def test_fetch_weekly_ranking_rows_uses_custom_release_window(monkeypatch):
     )
     assert captured["release_max"] == "2026-11-11"
     assert captured["release_min"] == "2026-05-15"
+
+
+def test_fetch_weekly_ranking_rows_all_releases_when_window_non_positive(monkeypatch):
+    from utils import weekly_ranking_selection as mod
+
+    captured = {}
+
+    def _fake_released(cur, service, floor, release_max, limit, exclude_ids, release_min=None):
+        captured["release_min"] = release_min
+        captured["release_max"] = release_max
+        return []
+
+    monkeypatch.setattr(mod, "_fetch_released_rows", _fake_released)
+    monkeypatch.setattr(mod, "_fetch_future_row", lambda *a, **k: None)
+
+    class _Cur:
+        pass
+
+    mod.fetch_weekly_ranking_rows(
+        _Cur(),
+        "doujin",
+        "digital_doujin",
+        today=date(2026, 11, 11),
+        release_window_days=0,
+    )
+    assert captured["release_max"] == "2026-11-11"
+    assert captured["release_min"] is None
 
 
 def test_completed_iso_year_week_uses_finished_week_not_the_week_just_started():

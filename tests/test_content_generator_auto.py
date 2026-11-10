@@ -93,6 +93,10 @@ class TestGenerateContentFromReviews:
         ]
         assert "演技が良かった" in prompt
         assert "購入者コメント" in prompt
+        assert "執筆原則（意見 × ユーザーファースト）" in prompt
+        assert "誰に」「何が」「どう刺さるか" in prompt
+        assert "読者が知れて嬉しい具体情報か" in prompt
+        assert "自我アピールは禁止" in prompt
         usage_mock.assert_called_once()
         assert usage_mock.call_args.kwargs["purpose"] == "auto_content_from_reviews"
         assert usage_mock.call_args.kwargs["content_id"] == "cid-1"

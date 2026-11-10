@@ -118,6 +118,10 @@ def test_generate_review_insights_uses_structured_prompt(review_module, caplog):
         assert "なければ空配列" in system_content
         assert "portal_copy_beaf" not in system_content
         assert "レビュー件数が少ない場合は過信しない" not in system_content
+        assert "執筆原則（意見 × ユーザーファースト）" in system_content
+        assert "誰に」「何が」「どう刺さるか" in system_content
+        assert "読者が知れて嬉しい具体情報か" in system_content
+        assert "自我アピールは禁止" in system_content
         user_content = messages[1]["content"]
         assert "あらすじテキスト" in user_content
         assert "とても良い作品でした" in user_content

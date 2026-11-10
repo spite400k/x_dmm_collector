@@ -164,13 +164,85 @@ def test_fetch_items_merged_sorts_dedupes():
         api,
         "fetch_items",
         side_effect=[
-            [a],
-            [a, b],
-            [],
+            ([a], 1),
+            ([a, b], 2),
+            ([], 0),
         ],
     ):
         merged = api.fetch_items_merged_sorts("s", "sv", "f", supabase_client=client)
     assert [x["content_id"] for x in merged] == ["same", "other"]
+
+
+def test_fetch_items_return_raw_count():
+    item = {
+        "content_id": "cid1",
+        "sampleImageURL": {"sample_l": {"image": ["https://img"]}},
+    }
+    client = MagicMock()
+    client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[]
+    )
+    with patch.object(api, "_request_item_list", return_value=_ok_payload([item])):
+        filtered, raw_count = api.fetch_items(
+            "s", "sv", "f", supabase_client=client, return_raw_count=True
+        )
+    assert len(filtered) == 1
+    assert raw_count == 1
+
+
+def test_fetch_items_merged_sorts_pages_advances_offset():
+    client = MagicMock()
+    seen_offsets = []
+
+    def _fake_fetch_items(**kwargs):
+        seen_offsets.append((kwargs["sort"], kwargs["offset"]))
+        item = {
+            "content_id": f"{kwargs['sort']}-{kwargs['offset']}",
+            "sampleImageURL": {"sample_l": {"image": ["https://img"]}},
+        }
+        # raw_count == hits なので次ページへ進む
+        return [item], kwargs["hits"]
+
+    with patch.object(api, "fetch_items", side_effect=_fake_fetch_items):
+        merged = api.fetch_items_merged_sorts(
+            "s",
+            "sv",
+            "f",
+            hits=10,
+            offset=1,
+            pages=3,
+            sorts=("rank",),
+            supabase_client=client,
+        )
+    assert seen_offsets == [("rank", 1), ("rank", 11), ("rank", 21)]
+    assert [x["content_id"] for x in merged] == ["rank-1", "rank-11", "rank-21"]
+
+
+def test_fetch_items_merged_sorts_stops_when_raw_count_short():
+    client = MagicMock()
+    calls = []
+
+    def _fake_fetch_items(**kwargs):
+        calls.append(kwargs["offset"])
+        item = {
+            "content_id": f"id-{kwargs['offset']}",
+            "sampleImageURL": {"sample_l": {"image": ["https://img"]}},
+        }
+        # 1ページ目で hits 未満 → 2ページ目以降は呼ばない
+        return [item], 1
+
+    with patch.object(api, "fetch_items", side_effect=_fake_fetch_items):
+        merged = api.fetch_items_merged_sorts(
+            "s",
+            "sv",
+            "f",
+            hits=10,
+            pages=3,
+            sorts=("date",),
+            supabase_client=client,
+        )
+    assert calls == [1]
+    assert [x["content_id"] for x in merged] == ["id-1"]
 
 
 def test_fetch_items_search_keyword_logs_and_returns_items():

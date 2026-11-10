@@ -66,6 +66,33 @@ def test_ranking_constants():
     assert RANKING_RELEASE_WINDOW_DAYS == 90
 
 
+def test_fetch_weekly_ranking_rows_uses_custom_release_window(monkeypatch):
+    from utils import weekly_ranking_selection as mod
+
+    captured = {}
+
+    def _fake_released(cur, service, floor, release_min, release_max, limit, exclude_ids):
+        captured["release_min"] = release_min
+        captured["release_max"] = release_max
+        return []
+
+    monkeypatch.setattr(mod, "_fetch_released_rows", _fake_released)
+    monkeypatch.setattr(mod, "_fetch_future_row", lambda *a, **k: None)
+
+    class _Cur:
+        pass
+
+    mod.fetch_weekly_ranking_rows(
+        _Cur(),
+        "ebook",
+        "comic",
+        today=date(2026, 11, 11),
+        release_window_days=180,
+    )
+    assert captured["release_max"] == "2026-11-11"
+    assert captured["release_min"] == "2026-05-15"
+
+
 def test_completed_iso_year_week_uses_finished_week_not_the_week_just_started():
     # 2026-10-12 は月曜。10月3週（ISO 42週）に入った直後なので、終わった 41週を返す。
     assert completed_iso_year_week(date(2026, 10, 12)) == (2026, 41)

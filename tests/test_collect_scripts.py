@@ -163,3 +163,5 @@ class TestCollectMain:
                                 mod.main()
         assert fetch_mock.call_args.kwargs["keyword"] == "メスガキ"
         assert fetch_mock.call_args.kwargs["supabase_client"] is mod.supabase3
+        assert fetch_mock.call_args.kwargs["hits"] == 100
+        assert fetch_mock.call_args.kwargs["pages"] == 3

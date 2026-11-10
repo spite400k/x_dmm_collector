@@ -71,6 +71,7 @@ def fetch_items(
     min_sample_count=10,
     supabase_client=None,
     keyword=None,
+    return_raw_count=False,
 ):
     client = default_supabase_client if supabase_client is None else supabase_client
 
@@ -91,6 +92,7 @@ def fetch_items(
 
     result = _request_item_list(params)
     items = result["result"]["items"]
+    raw_count = len(items)
 
     filtered_items = []
     for item in items:
@@ -114,6 +116,8 @@ def fetch_items(
             filtered_items.append(item)
 
     logging.info("サンプル画像 %d 枚以上のアイテム件数: %d", min_sample_count, len(filtered_items))
+    if return_raw_count:
+        return filtered_items, raw_count
     return filtered_items
 
 def fetch_items_merged_sorts(
@@ -126,30 +130,38 @@ def fetch_items_merged_sorts(
     min_sample_count=10,
     supabase_client=None,
     keyword=None,
+    pages=1,
 ):
     merged = []
     seen = set()
+    page_count = max(1, int(pages))
     for sort_key in sorts:
-        batch = fetch_items(
-            site=site,
-            service=service,
-            floor=floor,
-            hits=hits,
-            offset=offset,
-            sort=sort_key,
-            min_sample_count=min_sample_count,
-            supabase_client=supabase_client,
-            keyword=keyword,
-        )
-        for item in batch:
-            cid = item.get("content_id")
-            if not cid or cid in seen:
-                continue
-            seen.add(cid)
-            merged.append(item)
+        for page in range(page_count):
+            page_offset = offset + page * hits
+            batch, raw_count = fetch_items(
+                site=site,
+                service=service,
+                floor=floor,
+                hits=hits,
+                offset=page_offset,
+                sort=sort_key,
+                min_sample_count=min_sample_count,
+                supabase_client=supabase_client,
+                keyword=keyword,
+                return_raw_count=True,
+            )
+            for item in batch:
+                cid = item.get("content_id")
+                if not cid or cid in seen:
+                    continue
+                seen.add(cid)
+                merged.append(item)
+            if raw_count < hits:
+                break
     logging.info(
-        "統合取得完了 sorts=%s → %d 件（重複除去後）",
+        "統合取得完了 sorts=%s pages=%s → %d 件（重複除去後）",
         sorts,
+        page_count,
         len(merged),
     )
     return merged

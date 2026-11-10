@@ -16,7 +16,8 @@ from scripts.collect._filter import (
 
 setup_logger()
 
-hits_per_request = 30
+hits_per_request = 100
+COLLECT_PAGES = 3
 
 
 def main():
@@ -44,6 +45,7 @@ def main():
                 min_sample_count=10,
                 supabase_client=supabase3,
                 keyword="メスガキ",
+                pages=COLLECT_PAGES,
             )
             logging.info("データ取得完了")
 

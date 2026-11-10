@@ -27,6 +27,9 @@ from utils.weekly_ranking_selection import (
     previous_completed_iso_year_week,
 )
 
+# メスガキは候補が少ないため、通常（90日）より長い発売日窓を使う
+MESUGAKI_RANKING_RELEASE_WINDOW_DAYS = 180
+
 DEFAULT_MESUGAKI_SUPABASE_URL = "https://xootrpeprhlgzajbcnus.supabase.co"
 
 load_dotenv()
@@ -167,7 +170,12 @@ def generate_weekly_ranking(conn, service, floor):
             if snapshot_date is None:
                 snapshot_date = date.today()
 
-            rows = fetch_weekly_ranking_rows(cur, service, floor)
+            rows = fetch_weekly_ranking_rows(
+                cur,
+                service,
+                floor,
+                release_window_days=MESUGAKI_RANKING_RELEASE_WINDOW_DAYS,
+            )
 
             if not rows:
                 logging.warning(f"No ranking data for {service}/{floor}")

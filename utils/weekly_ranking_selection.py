@@ -147,10 +147,16 @@ def fetch_weekly_ranking_rows(
     floor: str,
     *,
     today: date | None = None,
+    release_window_days: int | None = None,
 ) -> list[dict[str, Any]]:
     """配信済み（評価あり）を優先し、未来作品は最大1件だけ追加する。"""
     today = today or date.today()
-    release_min = (today - timedelta(days=RANKING_RELEASE_WINDOW_DAYS)).isoformat()
+    window_days = (
+        RANKING_RELEASE_WINDOW_DAYS
+        if release_window_days is None
+        else release_window_days
+    )
+    release_min = (today - timedelta(days=window_days)).isoformat()
     release_max = today.isoformat()
 
     released_primary = _fetch_released_rows(

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 実行例:
   python scripts/process/create_ai_review_mesugaki.py --raw-only   # 生レビュー保存のみ
+  python scripts/process/create_ai_review_mesugaki.py --service doujin --floor digital_doujin --unscored-only
 """
 import argparse
 import hashlib
@@ -27,6 +28,7 @@ import os
 import sys
 import time
 from datetime import date, datetime, timedelta
+from typing import Any
 
 import httpx
 from db.supabase_client_mesugaki import supabase
@@ -514,11 +516,74 @@ def process_batch(batch_items, batch_index, total, raw_only: bool = False):
     logging.info("=== ✅ バッチ %s 完了 ===", batch_index)
 
 
-def fetch_all_items():
+def resolve_targets(
+    service: str | None = None,
+    floor: str | None = None,
+) -> list[dict[str, str]]:
+    selected = targets
+    if service:
+        selected = [t for t in selected if t["service"] == service]
+    if floor:
+        selected = [t for t in selected if t["floor"] == floor]
+    if (service or floor) and not selected:
+        raise ValueError(
+            f"指定の service/floor に一致する対象がありません: service={service!r} floor={floor!r}"
+        )
+    return selected
+
+
+def latest_score_is_valid(row: dict[str, Any] | None) -> bool:
+    if not row:
+        return False
+    try:
+        score = float(row.get("final_score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    try:
+        review_count = int(row.get("review_count") or 0)
+    except (TypeError, ValueError):
+        review_count = 0
+    return score > 0 and review_count > 0
+
+
+def filter_unscored_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """最新 score_history が無い、または score/review が無効な作品だけ残す。"""
+    if not items:
+        return []
+
+    unscored: list[dict[str, Any]] = []
+    chunk_size = 50
+    for i in range(0, len(items), chunk_size):
+        chunk = items[i : i + chunk_size]
+        ids = [row["content_id"] for row in chunk]
+        response = execute_with_retry(
+            lambda ids=ids: supabase.table("trn_dmm_score_history")
+            .select("content_id, final_score, review_count, snapshot_date")
+            .in_("content_id", ids)
+            .order("snapshot_date", desc=True)
+        )
+        latest_by_id: dict[str, dict[str, Any]] = {}
+        for hist in response.data or []:
+            cid = hist.get("content_id")
+            if cid and cid not in latest_by_id:
+                latest_by_id[cid] = hist
+        for row in chunk:
+            if not latest_score_is_valid(latest_by_id.get(row["content_id"])):
+                unscored.append(row)
+
+    logging.info("未スコア絞り込み: %s → %s 件", len(items), len(unscored))
+    return unscored
+
+
+def fetch_all_items(
+    service: str | None = None,
+    floor: str | None = None,
+):
     all_items = []
     limit = 1000
+    selected_targets = resolve_targets(service=service, floor=floor)
 
-    for target in targets:
+    for target in selected_targets:
         start = 0
         while True:
             response = execute_with_retry(
@@ -614,6 +679,21 @@ def main():
     )
     parser.add_argument("--dry-run", action="store_true", help="対象 content_id を表示して終了")
     parser.add_argument("--limit", type=int, default=None, help="処理件数の上限")
+    parser.add_argument(
+        "--service",
+        default=None,
+        help="対象 service のみ（例: doujin）",
+    )
+    parser.add_argument(
+        "--floor",
+        default=None,
+        help="対象 floor のみ（例: digital_doujin）",
+    )
+    parser.add_argument(
+        "--unscored-only",
+        action="store_true",
+        help="最新 score_history が無い、または score/review が無効な作品だけ処理",
+    )
     args = parser.parse_args()
     raw_only = args.raw_only
 
@@ -635,9 +715,14 @@ def main():
         if args.regenerate_age_gate:
             all_items = fetch_age_gate_items(limit=args.limit)
         else:
-            all_items = fetch_all_items()
+            all_items = fetch_all_items(service=args.service, floor=args.floor)
+            if args.unscored_only:
+                all_items = filter_unscored_items(all_items)
             if args.limit is not None:
                 all_items = all_items[: args.limit]
+    except ValueError as exc:
+        logging.error("%s", exc)
+        sys.exit(2)
     except httpx.ConnectError as exc:
         logging.error(
             "Supabase への接続に失敗しました。ネットワーク/DNS を確認してください: %s",

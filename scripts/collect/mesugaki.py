@@ -16,8 +16,8 @@ from scripts.collect._filter import (
 
 setup_logger()
 
-hits_per_request = 100
-COLLECT_PAGES = 3
+hits_per_request = 30
+COLLECT_PAGES = 1
 
 
 def main():

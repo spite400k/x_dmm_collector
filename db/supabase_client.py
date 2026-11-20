@@ -29,6 +29,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY
 supabase: Client = _create_supabase(SUPABASE_URL, SUPABASE_KEY)
 
 SUPABASE_URL3 = os.getenv("SUPABASE_URL3")
-SUPABASE_KEY3 = os.getenv("SUPABASE_KEY3")
+# service_role キーがあれば優先（anon だと INSERT が permission denied になる）
+SUPABASE_KEY3 = os.getenv("SUPABASE_SERVICE_ROLE_KEY3") or os.getenv("SUPABASE_KEY3")
 
 supabase3: Client | None = _create_optional_supabase(SUPABASE_URL3, SUPABASE_KEY3)

@@ -48,6 +48,7 @@ def test_module_loads_without_secondary_credentials():
                         "SUPABASE_SERVICE_ROLE_KEY": "",
                         "SUPABASE_URL3": "",
                         "SUPABASE_KEY3": "",
+                        "SUPABASE_SERVICE_ROLE_KEY3": "",
                     }
                 )
                 assert mod.supabase is fake_client
@@ -68,8 +69,30 @@ def test_module_creates_supabase3_when_configured():
                         "SUPABASE_SERVICE_ROLE_KEY": "",
                         "SUPABASE_URL3": "https://third.supabase.co",
                         "SUPABASE_KEY3": "third-key",
+                        "SUPABASE_SERVICE_ROLE_KEY3": "",
                     }
                 )
                 assert mod.supabase is clients[0]
                 assert mod.supabase3 is clients[1]
                 assert create_mock.call_count == 2
+                assert create_mock.call_args_list[1].args[1] == "third-key"
+
+
+def test_module_prefers_service_role_key3_over_key3():
+    clients = [MagicMock(name="p"), MagicMock(name="s3")]
+
+    with patch("db.supabase_http.create_supabase_httpx_client", return_value=MagicMock()):
+        with patch("supabase.create_client", side_effect=clients) as create_mock:
+            with patch("supabase.lib.client_options.SyncClientOptions"):
+                mod = _reload_supabase_client(
+                    {
+                        "SUPABASE_URL": "https://primary.supabase.co",
+                        "SUPABASE_KEY": "primary-key",
+                        "SUPABASE_SERVICE_ROLE_KEY": "",
+                        "SUPABASE_URL3": "https://third.supabase.co",
+                        "SUPABASE_KEY3": "anon-key3",
+                        "SUPABASE_SERVICE_ROLE_KEY3": "service-role-key3",
+                    }
+                )
+                assert mod.supabase3 is clients[1]
+                assert create_mock.call_args_list[1].args[1] == "service-role-key3"
